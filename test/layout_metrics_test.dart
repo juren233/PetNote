@@ -21,8 +21,12 @@ void main() {
     expect(layout.panelHeight, 66);
     expect(layout.outerMargin.left, 32);
     expect(layout.outerMargin.right, 32);
-    expect(layout.outerMargin.bottom, 14);
+    expect(layout.outerMargin.bottom, 17);
     expect(layout.innerPadding.top, 8);
     expect(layout.innerPadding.bottom, 8);
+  });
+
+  test('dock blur sigma stays at the softer tuned value', () {
+    expect(dockBlurSigma, 6);
   });
 }

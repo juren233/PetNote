@@ -37,13 +37,13 @@ class ChecklistPage extends StatelessWidget {
           title: '今日照护概况',
           subtitle: '关键节点和日常待办都被整理在这里，先把最重要的事情完成掉。',
           child: MetricOverview(
-            metrics: [
+              metrics: [
               MetricItem(
-                label: '今日待办',
-                value: '${today.items.length}',
-                background: const Color(0xFFEAF0FF),
-                foreground: const Color(0xFF335FCA),
-              ),
+                  label: '今日待办',
+                  value: '${today.items.length}',
+                  background: const Color(0xFFEAF0FF),
+                  foreground: const Color(0xFF335FCA),
+                ),
               MetricItem(
                 label: '即将到期',
                 value: '${upcoming.items.length}',
@@ -179,7 +179,7 @@ class PetsPage extends StatelessWidget {
                   curve: Curves.easeOutCubic,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: selected ? const Color(0xFF14161C) : const Color(0xF4FFFFFF),
+                    color: selected ? const Color(0xFFF2A65A) : const Color(0xF4FFFFFF),
                     borderRadius: BorderRadius.circular(26),
                     boxShadow: selected
                         ? const [

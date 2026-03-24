@@ -297,7 +297,7 @@ class HyperSegmentedControl extends StatelessWidget {
                     curve: Curves.easeOutCubic,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
                     decoration: BoxDecoration(
-                      color: selectedKey == item.key ? _pageText : const Color(0xFFF4F5F8),
+                      color: selectedKey == item.key ? const Color(0xFFF2A65A) : const Color(0xFFF4F5F8),
                       borderRadius: BorderRadius.circular(999),
                       boxShadow: selectedKey == item.key
                           ? const [

@@ -5,7 +5,8 @@ const double _pageTopSpacing = 8;
 const double _pageBottomReserve = 122;
 const double _dockShellBaseHeight = 66;
 const double _dockPanelBaseHeight = 66;
-const double _dockBottomSpacing = 14;
+const double _dockBottomSpacing = 17;
+const double dockBlurSigma = 6;
 
 EdgeInsets pageContentPaddingForInsets(EdgeInsets insets) {
   return EdgeInsets.fromLTRB(

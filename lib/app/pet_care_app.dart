@@ -7,15 +7,25 @@ class PetCareApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF5B8CFF);
+    const accent = Color(0xFFF2A65A);
+    const accentDeep = Color(0xFFD9822B);
+    const accentSoft = Color(0xFFFDEBD6);
     return MaterialApp(
       title: 'Pet Care Harmony',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: accent,
+        colorScheme: const ColorScheme.light(
           primary: accent,
+          secondary: accentDeep,
+          tertiary: accentDeep,
           surface: const Color(0xFFF8F5F0),
+          surfaceContainerHighest: const Color(0xFFF3F4F8),
+          primaryContainer: accentSoft,
+          secondaryContainer: Color(0xFFFFF5E8),
+          onPrimary: Colors.white,
+          onSecondary: Colors.white,
+          onSurface: Color(0xFF17181C),
+        ).copyWith(
           surfaceContainerHighest: const Color(0xFFF3F4F8),
         ),
         scaffoldBackgroundColor: const Color(0xFFF5F2EC),
@@ -33,7 +43,7 @@ class PetCareApp extends StatelessWidget {
         ),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF111218),
+            backgroundColor: accent,
             foregroundColor: Colors.white,
             minimumSize: const Size(0, 52),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -62,7 +72,7 @@ class PetCareApp extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(22),
-            borderSide: const BorderSide(color: accent, width: 1.3),
+            borderSide: const BorderSide(color: accentDeep, width: 1.3),
           ),
         ),
       ),

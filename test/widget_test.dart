@@ -57,6 +57,44 @@ void main() {
     expect(addButtonRect.bottom, lessThanOrEqualTo(panelRect.bottom));
   });
 
+  testWidgets('uses the warm pet orange theme for primary actions', (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byType(Scaffold));
+    final theme = Theme.of(context);
+    expect(theme.colorScheme.primary, const Color(0xFFF2A65A));
+
+    final filledStyle = theme.filledButtonTheme.style!;
+    expect(filledStyle.backgroundColor!.resolve({}), const Color(0xFFF2A65A));
+
+    final plusDecoratedBox = tester.widget<DecoratedBox>(
+      find.ancestor(
+        of: find.byIcon(Icons.add),
+        matching: find.byType(DecoratedBox),
+      ).first,
+    );
+    final decoration = plusDecoratedBox.decoration as BoxDecoration;
+    final gradient = decoration.gradient! as LinearGradient;
+    expect(gradient.colors.first, const Color(0xFF90CE9B));
+    expect(gradient.colors.last, const Color(0xFF6AB57A));
+  });
+
+  testWidgets('keeps informational highlight cards on the cooler accent palette', (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    final coolAccentCards = find.byWidgetPredicate((widget) {
+      if (widget is! Container) {
+        return false;
+      }
+      final decoration = widget.decoration;
+      return decoration is BoxDecoration && decoration.color == const Color(0xFFEAF0FF);
+    });
+
+    expect(coolAccentCards, findsWidgets);
+  });
+
   testWidgets('configures transparent immersive status bar wrapper', (tester) async {
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
