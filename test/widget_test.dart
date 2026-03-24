@@ -43,11 +43,18 @@ void main() {
 
     expect(find.byKey(const ValueKey('bottom_nav_blur')), findsOneWidget);
     expect(tester.widget(find.byKey(const ValueKey('bottom_nav_blur'))), isA<BackdropFilter>());
+    expect(find.byKey(const ValueKey('bottom_nav_panel')), findsOneWidget);
     expect(find.byKey(const ValueKey('dock_add_button')), findsOneWidget);
 
     final addButtonSize = tester.getSize(find.byKey(const ValueKey('dock_add_button')));
     expect(addButtonSize.width, lessThanOrEqualTo(60));
     expect(addButtonSize.height, lessThanOrEqualTo(60));
+
+    final panelRect = tester.getRect(find.byKey(const ValueKey('bottom_nav_panel')));
+    final addButtonRect = tester.getRect(find.byKey(const ValueKey('dock_add_button')));
+    expect((panelRect.center.dx - addButtonRect.center.dx).abs(), lessThanOrEqualTo(0.5));
+    expect(addButtonRect.top, greaterThanOrEqualTo(panelRect.top));
+    expect(addButtonRect.bottom, lessThanOrEqualTo(panelRect.bottom));
   });
 
   testWidgets('configures transparent immersive status bar wrapper', (tester) async {

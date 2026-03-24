@@ -17,9 +17,12 @@ void main() {
     const insets = EdgeInsets.only(bottom: 24);
     final layout = dockLayoutForInsets(insets);
 
-    expect(layout.shellHeight, 108);
-    expect(layout.panelHeight, 100);
-    expect(layout.outerMargin.bottom, 8);
-    expect(layout.innerPadding.bottom, 32);
+    expect(layout.shellHeight, 66);
+    expect(layout.panelHeight, 66);
+    expect(layout.outerMargin.left, 32);
+    expect(layout.outerMargin.right, 32);
+    expect(layout.outerMargin.bottom, 14);
+    expect(layout.innerPadding.top, 8);
+    expect(layout.innerPadding.bottom, 8);
   });
 }
