@@ -1,12 +1,341 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pet_care_harmony/app/pet_care_app.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+const _petsStorageKey = 'pets_v1';
+const _onboardingAutoEnabledKey = 'first_launch_onboarding_auto_enabled_v1';
 
 void main() {
-  testWidgets(
-      'renders HyperOS style checklist shell and can switch to overview',
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('shows first-launch onboarding without a dismiss action',
       (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+        findsOneWidget);
+    expect(find.text('稍后再说'), findsNothing);
+  });
+
+  testWidgets(
+      'can create the first pet through onboarding and land on checklist',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const ValueKey('onboarding_name_field')), 'Mochi');
+    await tester.tap(find.text('猫'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('英短'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('母'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('15').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const ValueKey('onboarding_weight_field')), '4.2');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('onboarding_skip_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_skip_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_skip_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_save_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+        findsNothing);
+    expect(find.text('今天 0 项待处理'), findsOneWidget);
+    await tester.tap(find.text('爱宠'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mochi'), findsWidgets);
+  });
+
+  testWidgets(
+      'requires a custom breed before continuing when choosing other breed',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
+    await tester.tap(find.text('猫'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('其他'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('onboarding_custom_breed_field')),
+        findsOneWidget);
+    final continueButton = tester.widget<FilledButton>(
+      find.byKey(const ValueKey('onboarding_continue_button')),
+    );
+    expect(continueButton.onPressed, isNull);
+  });
+
+  testWidgets(
+      'birthday step uses Chinese month text and keeps selected day visible',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
+    await tester.tap(find.text('猫'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('英短'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('母'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('月'), findsWidgets);
+
+    await tester.tap(find.text('15').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('已选择 '), findsOneWidget);
+    expect(find.textContaining('年'), findsWidgets);
+    expect(find.textContaining('月'), findsWidgets);
+    expect(find.textContaining('日'), findsWidgets);
+    expect(find.text('15'), findsWidgets);
+  });
+
+  testWidgets(
+      'birthday step uses orange text for selected dates without filled background',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
+    await tester.tap(find.text('猫'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('英短'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('母'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    final themedCalendar = tester.widget<Theme>(
+      find
+          .ancestor(
+            of: find.byType(CalendarDatePicker),
+            matching: find.byType(Theme),
+          )
+          .first,
+    );
+    final datePickerTheme = themedCalendar.data.datePickerTheme;
+
+    expect(
+      datePickerTheme.dayForegroundColor?.resolve({WidgetState.selected}),
+      const Color(0xFFD9822B),
+    );
+    expect(
+      datePickerTheme.dayBackgroundColor?.resolve({WidgetState.selected}),
+      Colors.transparent,
+    );
+    expect(
+      datePickerTheme.todayForegroundColor?.resolve({}),
+      const Color(0xFF17181C),
+    );
+    expect(
+      datePickerTheme.todayBackgroundColor?.resolve({}),
+      Colors.transparent,
+    );
+  });
+
+  testWidgets('birthday step allows dates after the current day',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
+    await tester.tap(find.text('猫'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('英短'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('母'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    final calendar = tester.widget<CalendarDatePicker>(
+      find.byType(CalendarDatePicker),
+    );
+    final now = DateTime.now();
+
+    expect(calendar.lastDate.isAfter(now), isTrue);
+  });
+
+  testWidgets('neuter step only shows explicit yes or no options',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
+    await tester.tap(find.text('猫'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('英短'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('母'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('15').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const ValueKey('onboarding_weight_field')), '4.2');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已绝育'), findsOneWidget);
+    expect(find.text('未绝育'), findsOneWidget);
+    expect(find.text('暂不确定'), findsNothing);
+  });
+
+  testWidgets('note step can be skipped and saves the first pet',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const ValueKey('onboarding_name_field')), 'Mochi');
+    await tester.tap(find.text('猫'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('英短'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('母'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('15').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const ValueKey('onboarding_weight_field')), '4.2');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_continue_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('onboarding_skip_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_skip_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_skip_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('onboarding_skip_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+        findsNothing);
+    await tester.tap(find.text('爱宠'));
+    await tester.pumpAndSettle();
+    expect(find.text('未填写'), findsWidgets);
+  });
+
+  testWidgets('can edit pet info from the pets page', (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('爱宠'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('edit_pet_button')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('edit_pet_name_field')),
+      'Tofu',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('edit_pet_note_field')),
+      '洗澡前会躲起来',
+    );
+    await tester.ensureVisible(find.byKey(const ValueKey('edit_pet_save_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('edit_pet_save_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tofu'), findsWidgets);
+    expect(find.text('洗澡前会躲起来'), findsOneWidget);
+  });
+
+  testWidgets(
+      'renders checklist shell and can switch to overview with saved pets',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
 
@@ -14,10 +343,7 @@ void main() {
     expect(find.text('总览'), findsOneWidget);
     expect(find.text('爱宠'), findsOneWidget);
     expect(find.text('我的'), findsOneWidget);
-    expect(find.text('今天 2 项待处理'), findsOneWidget);
-    expect(find.text('今日待办'), findsOneWidget);
-    expect(find.text('即将到期'), findsOneWidget);
-    expect(find.text('已逾期'), findsOneWidget);
+    expect(find.text('今天 0 项待处理'), findsOneWidget);
 
     await tester.tap(find.text('总览'));
     await tester.pumpAndSettle();
@@ -25,8 +351,8 @@ void main() {
     expect(find.text('AI 照护总结'), findsOneWidget);
   });
 
-  testWidgets('opens HyperOS style add sheet with four primary actions',
-      (tester) async {
+  testWidgets('opens add sheet with four primary actions', (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
 
@@ -43,6 +369,7 @@ void main() {
 
   testWidgets('uses immersive dock with compact centered add button',
       (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
 
@@ -69,6 +396,7 @@ void main() {
 
   testWidgets('keeps blur only on the bottom dock and not on content panels',
       (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
 
@@ -78,6 +406,7 @@ void main() {
 
   testWidgets('uses the warm pet orange theme for primary actions',
       (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
 
@@ -105,6 +434,7 @@ void main() {
   testWidgets(
       'keeps informational highlight cards on the cooler accent palette',
       (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
 
@@ -122,6 +452,7 @@ void main() {
 
   testWidgets('configures transparent immersive status bar wrapper',
       (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
 
@@ -138,4 +469,27 @@ void main() {
 
     expect(find.byType(SafeArea), findsNothing);
   });
+}
+
+Map<String, Object> _persistedSinglePetPreferences() {
+  return {
+    _onboardingAutoEnabledKey: false,
+    _petsStorageKey: jsonEncode([
+      {
+        'id': 'pet-1',
+        'name': 'Luna',
+        'avatarText': 'LU',
+        'type': 'cat',
+        'breed': '英短',
+        'sex': '母',
+        'birthday': '2024-01-15',
+        'ageLabel': '新加入',
+        'weightKg': 4.2,
+        'neuterStatus': 'neutered',
+        'feedingPreferences': '未填写',
+        'allergies': '未填写',
+        'note': '未填写',
+      },
+    ]),
+  };
 }

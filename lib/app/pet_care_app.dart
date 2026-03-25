@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:pet_care_harmony/app/pet_care_root.dart';
 
@@ -13,13 +14,23 @@ class PetCareApp extends StatelessWidget {
     return MaterialApp(
       title: 'Pet Care Harmony',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: const [
+        Locale('zh', 'CN'),
+        Locale('en', 'US'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
       theme: ThemeData(
         colorScheme: const ColorScheme.light(
           primary: accent,
           secondary: accentDeep,
           tertiary: accentDeep,
-          surface: const Color(0xFFF8F5F0),
-          surfaceContainerHighest: const Color(0xFFF3F4F8),
+          surface: Color(0xFFF8F5F0),
+          surfaceContainerHighest: Color(0xFFF3F4F8),
           primaryContainer: accentSoft,
           secondaryContainer: Color(0xFFFFF5E8),
           onPrimary: Colors.white,
@@ -46,21 +57,25 @@ class PetCareApp extends StatelessWidget {
             backgroundColor: accent,
             foregroundColor: Colors.white,
             minimumSize: const Size(0, 52),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            textStyle:
+                const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
         ),
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
             foregroundColor: const Color(0xFF727888),
             minimumSize: const Size(0, 46),
-            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            textStyle:
+                const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: const Color(0xFFF6F7FA),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
           hintStyle: const TextStyle(color: Color(0xFF9AA0AC)),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(22),

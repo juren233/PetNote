@@ -557,17 +557,22 @@ class _PetFormState extends State<_PetForm> {
             ],
           ),
           FilledButton(
-            onPressed: () {
-              widget.store.addPet(
+            onPressed: () async {
+              await widget.store.addPet(
                 name: _name.text.trim(),
+                type: PetType.other,
                 breed: _breed.text.trim(),
                 sex: _sex.text.trim(),
                 birthday: _birthday.text.trim(),
                 weightKg: double.tryParse(_weight.text.trim()) ?? 0,
+                neuterStatus: PetNeuterStatus.unknown,
                 feedingPreferences: _feeding.text.trim(),
                 allergies: _allergies.text.trim(),
                 note: _note.text.trim(),
               );
+              if (!context.mounted) {
+                return;
+              }
               Navigator.pop(context);
             },
             child: const Text('保存爱宠'),

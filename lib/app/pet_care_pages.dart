@@ -9,20 +9,45 @@ class ChecklistPage extends StatelessWidget {
     required this.store,
     required this.activeSectionKey,
     required this.onSectionChanged,
+    required this.onAddFirstPet,
   });
 
   final PetCareStore store;
   final String activeSectionKey;
   final ValueChanged<String> onSectionChanged;
+  final VoidCallback onAddFirstPet;
 
   @override
   Widget build(BuildContext context) {
+    final pagePadding =
+        pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
+    if (store.pets.isEmpty) {
+      return ListView(
+        padding: pagePadding,
+        children: [
+          const PageHeader(
+            title: '清单',
+            subtitle: '先建好第一只爱宠，再开始安排照护节奏',
+          ),
+          const HeroPanel(
+            title: '欢迎来到日常照护清单',
+            subtitle: '添加第一只爱宠后，这里会开始承接待办、提醒和记录，让每天的事情更顺手。',
+            child: SizedBox.shrink(),
+          ),
+          EmptyCard(
+            title: '先添加第一只爱宠',
+            subtitle: '建好第一份档案后，清单、提醒和总览都会围绕它展开。',
+            actionLabel: '开始添加宠物',
+            onAction: onAddFirstPet,
+          ),
+        ],
+      );
+    }
+
     final section = store.checklistSections.firstWhere(
       (item) => item.key == activeSectionKey,
       orElse: () => store.checklistSections.first,
     );
-    final pagePadding =
-        pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
     final today = store.checklistSections[0];
     final upcoming = store.checklistSections[1];
     final overdue = store.checklistSections[2];
@@ -92,15 +117,43 @@ class ChecklistPage extends StatelessWidget {
 }
 
 class OverviewPage extends StatelessWidget {
-  const OverviewPage({super.key, required this.store});
+  const OverviewPage({
+    super.key,
+    required this.store,
+    required this.onAddFirstPet,
+  });
 
   final PetCareStore store;
+  final VoidCallback onAddFirstPet;
 
   @override
   Widget build(BuildContext context) {
-    final snapshot = store.overviewSnapshot;
     final pagePadding =
         pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
+    if (store.pets.isEmpty) {
+      return ListView(
+        padding: pagePadding,
+        children: [
+          const PageHeader(
+            title: '总览',
+            subtitle: '先添加宠物，AI 照护总结才会开始积累',
+          ),
+          const HeroPanel(
+            title: '等第一份档案建立后再开始总结',
+            subtitle: '当前还没有宠物资料、提醒或记录。先完成第一只爱宠建档，后续的照护观察会自动收拢到这里。',
+            child: SizedBox.shrink(),
+          ),
+          EmptyCard(
+            title: '先添加第一只爱宠',
+            subtitle: '有了基础档案后，这里才会生成更贴近日常的总结内容。',
+            actionLabel: '开始添加宠物',
+            onAction: onAddFirstPet,
+          ),
+        ],
+      );
+    }
+
+    final snapshot = store.overviewSnapshot;
     return ListView(
       padding: pagePadding,
       children: [
@@ -154,9 +207,16 @@ class OverviewPage extends StatelessWidget {
 }
 
 class PetsPage extends StatelessWidget {
-  const PetsPage({super.key, required this.store});
+  const PetsPage({
+    super.key,
+    required this.store,
+    required this.onAddFirstPet,
+    required this.onEditPet,
+  });
 
   final PetCareStore store;
+  final VoidCallback onAddFirstPet;
+  final ValueChanged<Pet> onEditPet;
 
   @override
   Widget build(BuildContext context) {
@@ -246,15 +306,17 @@ class PetsPage extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         if (pet == null)
-          const EmptyCard(
-            title: '还没有爱宠档案',
-            subtitle: '点击底部中间的 +，先为你的第一只爱宠创建完整档案。',
+          EmptyCard(
+            title: '先添加第一只爱宠',
+            subtitle: '建好第一份宠物档案后，提醒、记录和照护观察都会围绕它展开。',
+            actionLabel: '开始添加宠物',
+            onAction: onAddFirstPet,
           )
         else ...[
           HeroPanel(
             title: pet.name,
             subtitle:
-                '${pet.breed} · ${pet.ageLabel} · 当前体重 ${pet.weightKg} kg',
+                '${petTypeLabel(pet.type)} · ${pet.breed} · ${pet.ageLabel} · 当前体重 ${pet.weightKg} kg',
             child: Row(
               children: [
                 Expanded(
@@ -280,9 +342,17 @@ class PetsPage extends StatelessWidget {
           ),
           SectionCard(
             title: '基础信息',
+            trailing: TextButton(
+              key: const ValueKey('edit_pet_button'),
+              onPressed: () => onEditPet(pet),
+              child: const Text('编辑信息'),
+            ),
             children: [
+              InfoRow(label: '类型', value: petTypeLabel(pet.type)),
               InfoRow(label: '性别', value: pet.sex),
               InfoRow(label: '生日', value: pet.birthday),
+              InfoRow(
+                  label: '绝育状态', value: petNeuterStatusLabel(pet.neuterStatus)),
               InfoRow(label: '喂养偏好', value: pet.feedingPreferences),
               InfoRow(label: '过敏/禁忌', value: pet.allergies),
               InfoRow(label: '备注', value: pet.note),
