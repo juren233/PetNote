@@ -21,7 +21,8 @@ class ChecklistPage extends StatelessWidget {
       (item) => item.key == activeSectionKey,
       orElse: () => store.checklistSections.first,
     );
-    final pagePadding = pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
+    final pagePadding =
+        pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
     final today = store.checklistSections[0];
     final upcoming = store.checklistSections[1];
     final overdue = store.checklistSections[2];
@@ -37,13 +38,13 @@ class ChecklistPage extends StatelessWidget {
           title: '今日照护概况',
           subtitle: '关键节点和日常待办都被整理在这里，先把最重要的事情完成掉。',
           child: MetricOverview(
-              metrics: [
+            metrics: [
               MetricItem(
-                  label: '今日待办',
-                  value: '${today.items.length}',
-                  background: const Color(0xFFEAF0FF),
-                  foreground: const Color(0xFF335FCA),
-                ),
+                label: '今日待办',
+                value: '${today.items.length}',
+                background: const Color(0xFFEAF0FF),
+                foreground: const Color(0xFF335FCA),
+              ),
               MetricItem(
                 label: '即将到期',
                 value: '${upcoming.items.length}',
@@ -78,8 +79,10 @@ class ChecklistPage extends StatelessWidget {
           ...section.items.map(
             (item) => ChecklistCard(
               item: item,
-              onComplete: () => store.markChecklistDone(item.sourceType, item.id),
-              onPostpone: () => store.postponeChecklist(item.sourceType, item.id),
+              onComplete: () =>
+                  store.markChecklistDone(item.sourceType, item.id),
+              onPostpone: () =>
+                  store.postponeChecklist(item.sourceType, item.id),
               onSkip: () => store.skipChecklist(item.sourceType, item.id),
             ),
           ),
@@ -96,7 +99,8 @@ class OverviewPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final snapshot = store.overviewSnapshot;
-    final pagePadding = pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
+    final pagePadding =
+        pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
     return ListView(
       padding: pagePadding,
       children: [
@@ -119,7 +123,8 @@ class OverviewPage extends StatelessWidget {
                   SegmentItem(key: 'oneYear', label: '1年'),
                 ],
                 selectedKey: snapshot.range.name,
-                onChanged: (value) => store.setOverviewRange(_rangeFromKey(value)),
+                onChanged: (value) =>
+                    store.setOverviewRange(_rangeFromKey(value)),
               ),
             ],
           ),
@@ -127,7 +132,8 @@ class OverviewPage extends StatelessWidget {
         ...snapshot.sections.map(
           (section) => SectionCard(
             title: section.title,
-            children: section.items.map((item) => BulletText(text: item)).toList(),
+            children:
+                section.items.map((item) => BulletText(text: item)).toList(),
           ),
         ),
         SectionCard(
@@ -155,7 +161,8 @@ class PetsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pet = store.selectedPet;
-    final pagePadding = pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
+    final pagePadding =
+        pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
     return ListView(
       padding: pagePadding,
       children: [
@@ -177,29 +184,27 @@ class PetsPage extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: selected ? const Color(0xFFF2A65A) : const Color(0xF4FFFFFF),
+                    color: selected
+                        ? const Color(0xFFF2A65A)
+                        : const Color(0xF4FFFFFF),
                     borderRadius: BorderRadius.circular(26),
-                    boxShadow: selected
-                        ? const [
-                            BoxShadow(
-                              color: Color(0x14000000),
-                              blurRadius: 22,
-                              offset: Offset(0, 10),
-                            ),
-                          ]
-                        : null,
                   ),
                   child: Row(
                     children: [
                       CircleAvatar(
                         radius: 20,
-                        backgroundColor: selected ? const Color(0x33FFFFFF) : const Color(0xFFE8EEFF),
+                        backgroundColor: selected
+                            ? const Color(0x33FFFFFF)
+                            : const Color(0xFFE8EEFF),
                         child: Text(
                           item.avatarText,
                           style: TextStyle(
-                            color: selected ? Colors.white : const Color(0xFF335FCA),
+                            color: selected
+                                ? Colors.white
+                                : const Color(0xFF335FCA),
                             fontWeight: FontWeight.w800,
                             fontSize: 12,
                           ),
@@ -212,17 +217,23 @@ class PetsPage extends StatelessWidget {
                         children: [
                           Text(
                             item.name,
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                  color: selected ? Colors.white : const Color(0xFF17181C),
-                                  fontWeight: FontWeight.w800,
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                      color: selected
+                                          ? Colors.white
+                                          : const Color(0xFF17181C),
+                                      fontWeight: FontWeight.w800,
+                                    ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             item.ageLabel,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: selected ? Colors.white70 : const Color(0xFF6C7280),
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: selected
+                                          ? Colors.white70
+                                          : const Color(0xFF6C7280),
+                                    ),
                           ),
                         ],
                       ),
@@ -242,7 +253,8 @@ class PetsPage extends StatelessWidget {
         else ...[
           HeroPanel(
             title: pet.name,
-            subtitle: '${pet.breed} · ${pet.ageLabel} · 当前体重 ${pet.weightKg} kg',
+            subtitle:
+                '${pet.breed} · ${pet.ageLabel} · 当前体重 ${pet.weightKg} kg',
             child: Row(
               children: [
                 Expanded(
@@ -282,14 +294,18 @@ class PetsPage extends StatelessWidget {
                 ? [
                     Text(
                       '暂无提醒',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: const Color(0xFF6C7280)),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: const Color(0xFF6C7280)),
                     ),
                   ]
                 : store.remindersForSelectedPet
                     .map(
                       (item) => ListRow(
                         title: item.title,
-                        subtitle: '${formatDate(item.scheduledAt)} · ${item.recurrence}',
+                        subtitle:
+                            '${formatDate(item.scheduledAt)} · ${item.recurrence}',
                         leading: Container(
                           width: 42,
                           height: 42,
@@ -297,7 +313,8 @@ class PetsPage extends StatelessWidget {
                             color: const Color(0xFFEAF0FF),
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: const Icon(Icons.notifications_active_rounded, color: Color(0xFF5B8CFF)),
+                          child: const Icon(Icons.notifications_active_rounded,
+                              color: Color(0xFF5B8CFF)),
                         ),
                         trailing: HyperBadge(
                           text: _reminderKindLabel(item.kind),
@@ -314,14 +331,18 @@ class PetsPage extends StatelessWidget {
                 ? [
                     Text(
                       '暂无资料记录',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: const Color(0xFF6C7280)),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: const Color(0xFF6C7280)),
                     ),
                   ]
                 : store.recordsForSelectedPet
                     .map(
                       (item) => ListRow(
                         title: item.title,
-                        subtitle: '${formatDate(item.recordDate, withTime: false)} · ${item.summary}',
+                        subtitle:
+                            '${formatDate(item.recordDate, withTime: false)} · ${item.summary}',
                         leading: Container(
                           width: 42,
                           height: 42,
@@ -329,7 +350,8 @@ class PetsPage extends StatelessWidget {
                             color: const Color(0xFFFFF3D8),
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: const Icon(Icons.description_rounded, color: Color(0xFF9C760A)),
+                          child: const Icon(Icons.description_rounded,
+                              color: Color(0xFF9C760A)),
                         ),
                         trailing: HyperBadge(
                           text: _recordTypeLabel(item.type),
@@ -351,7 +373,8 @@ class MePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pagePadding = pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
+    final pagePadding =
+        pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
     return ListView(
       padding: pagePadding,
       children: [

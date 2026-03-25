@@ -123,25 +123,24 @@ class FrostedPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: margin,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 30,
-            offset: Offset(0, 12),
-          ),
-          BoxShadow(
-            color: Color(0x08FFFFFF),
-            blurRadius: 10,
-            offset: Offset(0, -2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
+    return RepaintBoundary(
+      child: Container(
+        margin: margin,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x12000000),
+              blurRadius: 30,
+              offset: Offset(0, 12),
+            ),
+            BoxShadow(
+              color: Color(0x08FFFFFF),
+              blurRadius: 10,
+              offset: Offset(0, -2),
+            ),
+          ],
+        ),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: backgroundColor,
@@ -217,7 +216,8 @@ class MetricOverview extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.only(right: item == metrics.last ? 0 : 10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
                   decoration: BoxDecoration(
                     color: item.background,
                     borderRadius: BorderRadius.circular(24),
@@ -227,11 +227,12 @@ class MetricOverview extends StatelessWidget {
                     children: [
                       Text(
                         item.value,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              color: item.foreground,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.8,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: item.foreground,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.8,
+                                ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -292,24 +293,20 @@ class HyperSegmentedControl extends StatelessWidget {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 220),
                     curve: Curves.easeOutCubic,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 11),
                     decoration: BoxDecoration(
-                      color: selectedKey == item.key ? const Color(0xFFF2A65A) : const Color(0xFFF4F5F8),
+                      color: selectedKey == item.key
+                          ? const Color(0xFFF2A65A)
+                          : const Color(0xFFF4F5F8),
                       borderRadius: BorderRadius.circular(999),
-                      boxShadow: selectedKey == item.key
-                          ? const [
-                              BoxShadow(
-                                color: Color(0x16000000),
-                                blurRadius: 16,
-                                offset: Offset(0, 8),
-                              ),
-                            ]
-                          : null,
                     ),
                     child: Text(
                       item.label,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: selectedKey == item.key ? Colors.white : _mutedText,
+                            color: selectedKey == item.key
+                                ? Colors.white
+                                : _mutedText,
                             fontWeight: FontWeight.w700,
                           ),
                     ),
