@@ -10,6 +10,7 @@ import 'package:pet_care_harmony/app/me_page.dart';
 import 'package:pet_care_harmony/app/navigation_palette.dart';
 import 'package:pet_care_harmony/app/pet_care_pages.dart' hide MePage;
 import 'package:pet_care_harmony/app/pet_edit_sheet.dart';
+import 'package:pet_care_harmony/app/pet_first_launch_intro.dart';
 import 'package:pet_care_harmony/app/pet_onboarding_overlay.dart';
 import 'package:pet_care_harmony/state/app_settings_controller.dart';
 import 'package:pet_care_harmony/state/pet_care_store.dart';
@@ -26,13 +27,14 @@ class PetCareRoot extends StatefulWidget {
   State<PetCareRoot> createState() => _PetCareRootState();
 }
 
-enum _OnboardingEntryPoint { auto, manual }
+enum _OnboardingEntryPoint { intro, manual }
 
 class _PetCareRootState extends State<PetCareRoot> {
   PetCareStore? _store;
   String _activeChecklistKey = 'today';
+  bool _showFirstLaunchIntro = false;
   bool _showOnboarding = false;
-  _OnboardingEntryPoint _onboardingEntryPoint = _OnboardingEntryPoint.auto;
+  _OnboardingEntryPoint _onboardingEntryPoint = _OnboardingEntryPoint.manual;
 
   @override
   void initState() {
@@ -47,9 +49,10 @@ class _PetCareRootState extends State<PetCareRoot> {
     }
     setState(() {
       _store = store;
-      _showOnboarding =
-          store.pets.isEmpty && store.shouldAutoShowFirstLaunchOnboarding;
-      _onboardingEntryPoint = _OnboardingEntryPoint.auto;
+      _showFirstLaunchIntro =
+          store.pets.isEmpty && store.shouldAutoShowFirstLaunchIntro;
+      _showOnboarding = false;
+      _onboardingEntryPoint = _OnboardingEntryPoint.manual;
     });
   }
 
@@ -76,16 +79,19 @@ class _PetCareRootState extends State<PetCareRoot> {
         body: _PetCareBody(
           store: store,
           activeChecklistKey: _activeChecklistKey,
+          showFirstLaunchIntro: _showFirstLaunchIntro,
           showOnboarding: _showOnboarding,
           settingsController: widget.settingsController,
           onSectionChanged: (value) =>
               setState(() => _activeChecklistKey = value),
           onAddFirstPet: _openManualOnboarding,
+          onStartOnboardingFromIntro: _openOnboardingFromIntro,
+          onExploreFirstLaunchIntro: _dismissFirstLaunchIntro,
           onEditPet: (pet) => _openEditPetSheet(context, store, pet),
           onSubmitOnboarding: _submitOnboarding,
           onDeferOnboarding: _deferOnboarding,
         ),
-        bottomNavigationBar: _showOnboarding
+        bottomNavigationBar: _showFirstLaunchIntro || _showOnboarding
             ? null
             : _PetCareBottomNav(
                 store: store,
@@ -124,8 +130,43 @@ class _PetCareRootState extends State<PetCareRoot> {
 
   void _openManualOnboarding() {
     setState(() {
+      _showFirstLaunchIntro = false;
       _onboardingEntryPoint = _OnboardingEntryPoint.manual;
       _showOnboarding = true;
+    });
+  }
+
+  Future<void> _openOnboardingFromIntro() async {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+
+    await store.dismissFirstLaunchIntro();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _showFirstLaunchIntro = false;
+      _onboardingEntryPoint = _OnboardingEntryPoint.intro;
+      _showOnboarding = true;
+    });
+  }
+
+  Future<void> _dismissFirstLaunchIntro() async {
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+
+    await store.dismissFirstLaunchIntro();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _showFirstLaunchIntro = false;
+      _showOnboarding = false;
+      _onboardingEntryPoint = _OnboardingEntryPoint.manual;
     });
   }
 
@@ -161,56 +202,16 @@ class _PetCareRootState extends State<PetCareRoot> {
       return;
     }
     setState(() {
+      _showFirstLaunchIntro = false;
       _showOnboarding = false;
-      _onboardingEntryPoint = _OnboardingEntryPoint.auto;
+      _onboardingEntryPoint = _OnboardingEntryPoint.manual;
     });
   }
 
   Future<void> _deferOnboarding() async {
-    final store = _store;
-    if (store == null) {
-      return;
-    }
-
-    if (_onboardingEntryPoint == _OnboardingEntryPoint.manual) {
-      setState(() {
-        _showOnboarding = false;
-        _onboardingEntryPoint = _OnboardingEntryPoint.auto;
-      });
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('稍后处理首次引导？'),
-        content: const Text(
-          '这次先不创建第一只爱宠档案，之后将不再自动弹出首次引导，你仍可在空状态页手动开始。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('继续填写'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('稍后处理'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) {
-      return;
-    }
-
-    await store.dismissFirstLaunchOnboarding();
-    if (!mounted) {
-      return;
-    }
     setState(() {
       _showOnboarding = false;
-      _onboardingEntryPoint = _OnboardingEntryPoint.auto;
+      _onboardingEntryPoint = _OnboardingEntryPoint.manual;
     });
   }
 }
@@ -219,10 +220,13 @@ class _PetCareBody extends StatelessWidget {
   const _PetCareBody({
     required this.store,
     required this.activeChecklistKey,
+    required this.showFirstLaunchIntro,
     required this.showOnboarding,
     required this.settingsController,
     required this.onSectionChanged,
     required this.onAddFirstPet,
+    required this.onStartOnboardingFromIntro,
+    required this.onExploreFirstLaunchIntro,
     required this.onEditPet,
     required this.onSubmitOnboarding,
     required this.onDeferOnboarding,
@@ -230,10 +234,13 @@ class _PetCareBody extends StatelessWidget {
 
   final PetCareStore store;
   final String activeChecklistKey;
+  final bool showFirstLaunchIntro;
   final bool showOnboarding;
   final AppSettingsController? settingsController;
   final ValueChanged<String> onSectionChanged;
   final VoidCallback onAddFirstPet;
+  final Future<void> Function() onStartOnboardingFromIntro;
+  final Future<void> Function() onExploreFirstLaunchIntro;
   final ValueChanged<Pet> onEditPet;
   final Future<void> Function(PetOnboardingResult result) onSubmitOnboarding;
   final Future<void> Function() onDeferOnboarding;
@@ -273,6 +280,11 @@ class _PetCareBody extends StatelessWidget {
                     ),
                 },
               ),
+              if (showFirstLaunchIntro)
+                PetFirstLaunchIntro(
+                  onStartOnboarding: onStartOnboardingFromIntro,
+                  onExploreFirst: onExploreFirstLaunchIntro,
+                ),
               if (showOnboarding)
                 PetOnboardingOverlay(
                   onSubmit: onSubmitOnboarding,

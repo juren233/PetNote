@@ -39,6 +39,7 @@
 - Harmony 默认读 [ohos/local.properties](/F:/HarmonyProject/Pet/ohos/local.properties) 里的项目内 OHOS Flutter 路径。
 - 根目录工作区默认以“官方 Flutter 状态”为准。
 - Harmony 脚本运行前会临时切换到 OHOS Flutter 状态，结束后再恢复成官方 Flutter 状态。
+- DevEco Studio 直接运行会使用仓库内自管的 OHOS hvigor 插件副本，并在构建前后自动切换 / 恢复根目录共享 Flutter 状态。
 
 这意味着：
 
@@ -63,8 +64,10 @@ git submodule update --init --recursive
 
 - [\.flutter_ohos_sdk_gitcode](/F:/HarmonyProject/Pet/.flutter_ohos_sdk_gitcode) 是正式子模块，不是普通目录。
 - 不要把 OHOS Flutter 整套源码直接复制进主仓库历史。
-- Harmony 相关兼容修复通过补丁文件和脚本自动应用，不依赖子模块里的本地脏改动。
+- Harmony 相关兼容修复通过仓库内自管插件副本、补丁文件和脚本自动应用，不依赖子模块里的本地脏改动。
 - 对应补丁文件是 [tooling/ohos-flutter/flutter-hvigor-plugin.patch](/F:/HarmonyProject/Pet/tooling/ohos-flutter/flutter-hvigor-plugin.patch)。
+- 仓库内自管插件副本位于 [tooling/ohos-hvigor-plugin](/F:/HarmonyProject/Pet/tooling/ohos-hvigor-plugin)。
+- 当前受控入口是 [ohos/hvigorfile.ts](/F:/HarmonyProject/Pet/ohos/hvigorfile.ts) 和 [ohos/hvigorconfig.ts](/F:/HarmonyProject/Pet/ohos/hvigorconfig.ts) 的相对导入，不依赖 `ohos/package.json` 这种本地生成物长期保持某个值。
 
 ## IDE 使用方式
 
@@ -89,6 +92,8 @@ git submodule update --init --recursive
 - 在 DevEco Studio 里打开 [ohos](/F:/HarmonyProject/Pet/ohos)
 - 使用 OHOS Flutter
 - 在这个工程里调试鸿蒙真机 / 虚拟机
+- 现在可以直接点 DevEco 的运行按钮，不需要再手动先跑一次 Harmony 脚本来切状态
+- DevEco Studio 直接运行会使用仓库内自管的 OHOS hvigor 插件副本，而不是直接改动子模块里的 upstream 插件源码
 
 你在 `ohos` 子工程里通常会看到：
 
@@ -157,7 +162,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\flutter-ohos.ps1 -Mode run -T
 - Harmony 模拟器通常使用 `x64`
 - Harmony 真机通常使用 `arm64`
 - 脚本会自动处理本地调试签名
-- 脚本也会自动修正 hvigor 插件，避免 IDE / hvigor 误读根目录的官方 Flutter `package_config`
+- 脚本也会自动校验仓库内 hvigor 插件副本，避免 IDE / hvigor 误读根目录的官方 Flutter `package_config`
+- DevEco 直跑链路也会做同样的状态隔离，不需要额外手动切 Flutter SDK
 
 ## 依赖状态管理
 
@@ -183,6 +189,27 @@ powershell -ExecutionPolicy Bypass -File .\scripts\flutter-ohos.ps1 -Mode run -T
 - 不要在三端之间手动来回执行裸 `flutter pub get`
 - 需要哪一端，就走哪一端脚本
 - Harmony 构建完后，根目录会恢复成官方 Flutter 状态，这是设计如此，不是状态错乱
+- DevEco 直跑 Harmony 时，也会先备份根目录共享生成物，再切到 OHOS 状态，结束后恢复
+
+## OHOS Hvigor 插件归属
+
+- [`tooling/ohos-hvigor-plugin`](/F:/HarmonyProject/Pet/tooling/ohos-hvigor-plugin) 是仓库内自管的 OHOS hvigor 插件副本。
+- [ohos/hvigorfile.ts](/F:/HarmonyProject/Pet/ohos/hvigorfile.ts) 和 [ohos/hvigorconfig.ts](/F:/HarmonyProject/Pet/ohos/hvigorconfig.ts) 会直接相对导入这份仓库内副本。
+- 不再直接修改 OHOS Flutter 子模块里的 hvigor 插件源码。
+- [\.flutter_ohos_sdk_gitcode](/F:/HarmonyProject/Pet/.flutter_ohos_sdk_gitcode) 仍然只是 OHOS Flutter SDK 子模块，不承载项目本地业务定制。
+
+这样做的原因很明确：
+
+- upstream 子模块仓库不是我们的，不能依赖向上游提交本地定制。
+- 如果把关键行为建立在子模块脏改动上，`git status` 会长期脏，而且新机器难以复现。
+- 把 hvigor 插件副本收回主仓库后，DevEco 直跑能力才能随主仓库一起提交、评审和同步。
+- upstream Flutter 工具偶尔会重写 `ohos/package.json` 和 `ohos/node_modules`，但那只是本地生成物；真正决定 DevEco 入口的是 [ohos/hvigorfile.ts](/F:/HarmonyProject/Pet/ohos/hvigorfile.ts) 和 [ohos/hvigorconfig.ts](/F:/HarmonyProject/Pet/ohos/hvigorconfig.ts)。
+
+升级注意事项：
+
+- 升级 [\.flutter_ohos_sdk_gitcode](/F:/HarmonyProject/Pet/.flutter_ohos_sdk_gitcode) 时，不要直接在子模块里手改 hvigor 插件源码。
+- 应该对照 upstream 的 hvigor 插件变更，再同步更新 [tooling/ohos-hvigor-plugin](/F:/HarmonyProject/Pet/tooling/ohos-hvigor-plugin)。
+- 提交前确认 [\.flutter_ohos_sdk_gitcode](/F:/HarmonyProject/Pet/.flutter_ohos_sdk_gitcode) 没有本地脏改动。
 
 ## 提交规范
 
@@ -193,6 +220,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\flutter-ohos.ps1 -Mode run -T
 - 脚本改动
 - [\.gitmodules](/F:/HarmonyProject/Pet/.gitmodules)
 - [README.md](/F:/HarmonyProject/Pet/README.md)
+- [tooling/ohos-hvigor-plugin](/F:/HarmonyProject/Pet/tooling/ohos-hvigor-plugin)
 - [tooling/ohos-flutter/flutter-hvigor-plugin.patch](/F:/HarmonyProject/Pet/tooling/ohos-flutter/flutter-hvigor-plugin.patch)
 - 子模块指针 [\.flutter_ohos_sdk_gitcode](/F:/HarmonyProject/Pet/.flutter_ohos_sdk_gitcode) 的版本更新
 
@@ -210,6 +238,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\flutter-ohos.ps1 -Mode run -T
 
 - 如果 [\.flutter_ohos_sdk_gitcode](/F:/HarmonyProject/Pet/.flutter_ohos_sdk_gitcode) 在主仓库里显示为 `dirty`，先清掉子模块内部的本地改动再提主仓库。
 - 根目录 [pubspec.lock](/F:/HarmonyProject/Pet/pubspec.lock) 提交前应保持“官方 Flutter 默认状态”。
+- 如果需要改 DevEco 直跑逻辑，请优先改 [tooling/ohos-hvigor-plugin](/F:/HarmonyProject/Pet/tooling/ohos-hvigor-plugin)，不要去改子模块里的 upstream hvigor 插件源码。
 
 ## 团队协作建议
 
@@ -240,8 +269,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\flutter-ohos.ps1 -Mode run -T
 - “为什么跑完 Harmony 脚本后，根目录又变回官方 Flutter 了？”
   因为这正是分流设计，避免影响 Android / iOS。
 
-- “为什么 DevEco 运行前建议先跑一次 Harmony 脚本？”
-  因为这会顺手完成子模块初始化、依赖状态切换和 hvigor 补丁落地，能减少 IDE 首次运行问题。
+- “为什么 DevEco 现在可以直接运行了？”
+  因为 hvigor 插件会在构建前自动备份共享状态、切换到 OHOS Flutter、必要时刷新 `package_config`，构建后再恢复。
+
+- “为什么 DevEco 运行前有时仍然建议先跑一次 Harmony 脚本？”
+  因为脚本会顺手完成子模块初始化、签名修复和 hvigor 补丁兜底，适合首次拉仓库或本地环境刚变化之后使用。
 
 - “为什么不要直接把 OHOS Flutter SDK 当普通目录提交？”
   因为体积太大，而且不利于升级和团队同步，子模块更可控。

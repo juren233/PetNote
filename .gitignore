@@ -52,6 +52,7 @@ ohos/sign/
 tmp-*.jpeg
 tmp-*.jpg
 tmp-*.png
+debug_intro_output.txt
 
 # Local Harmony build/cache
 .hvigor/

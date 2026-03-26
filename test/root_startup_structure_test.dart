@@ -7,6 +7,8 @@ void main() {
     final source = File('lib/app/pet_care_root.dart').readAsStringSync();
 
     expect(source.contains('IndexedStack('), isFalse);
-    expect(source.contains('switch (_store.activeTab)'), isTrue);
+    expect(source.contains('final activeTab = store.activeTab;'), isTrue);
+    expect(source.contains('switch (activeTab)'), isTrue);
+    expect(source.contains('PetFirstLaunchIntro('), isTrue);
   });
 }

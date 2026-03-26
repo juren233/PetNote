@@ -36,12 +36,24 @@ function Resolve-ExistingPath {
 function Invoke-Checked {
   param(
     [string]$Executable,
-    [string[]]$Arguments
+    [string[]]$Arguments,
+    [string]$Workdir
   )
+
+  if ($Workdir) {
+    Push-Location $Workdir
+  }
 
   & $Executable @Arguments
   if ($LASTEXITCODE -ne 0) {
+    if ($Workdir) {
+      Pop-Location
+    }
     throw "Command failed with exit code ${LASTEXITCODE}: $Executable $($Arguments -join ' ')"
+  }
+
+  if ($Workdir) {
+    Pop-Location
   }
 }
 
@@ -71,7 +83,88 @@ function Ensure-HvigorPluginPatched {
   $content = (Get-Content -Path $FilePath -Raw).Replace("`r`n", "`n")
 
   $refreshStartMarker = "console.info('Refresh Flutter package config for OHOS IDE run start')"
+  $backupStateMarker = "console.info('Backup Flutter shared state start')"
   $pluginGuardMarker = 'const pluginsByPlatform = JSON.parse(fileContent).plugins ?? {}'
+
+  $stateHelpersSnippet = @'
+const MANAGED_FLUTTER_STATE_FILES = [
+  'pubspec.lock',
+  '.flutter-plugins',
+  '.flutter-plugins-dependencies',
+  '.dart_tool/package_config.json',
+  '.dart_tool/package_config_subset',
+  '.dart_tool/package_graph.json',
+  '.dart_tool/version',
+  'android/local.properties',
+  'ohos/local.properties',
+]
+
+function ensureParentDirectory(targetPath: string) {
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true })
+}
+
+function removePathIfExists(targetPath: string) {
+  if (fs.existsSync(targetPath)) {
+    fs.rmSync(targetPath, { recursive: true, force: true })
+  }
+}
+
+function copyFilePreservingParent(sourcePath: string, destinationPath: string) {
+  ensureParentDirectory(destinationPath)
+  fs.copyFileSync(sourcePath, destinationPath)
+}
+
+function getFlutterStateRoot(flutterProjectPath: string, stateName: string): string {
+  return path.join(flutterProjectPath, '.tooling', 'flutter-state', stateName)
+}
+
+function backupManagedFlutterState(flutterProjectPath: string): string {
+  const backupRoot = path.join(
+    flutterProjectPath,
+    '.tooling',
+    'flutter-state',
+    '.session-backups',
+    `deveco-${Date.now()}`
+  )
+  fs.mkdirSync(backupRoot, { recursive: true })
+
+  MANAGED_FLUTTER_STATE_FILES.forEach(relativePath => {
+    const sourcePath = path.join(flutterProjectPath, relativePath)
+    if (!fs.existsSync(sourcePath)) {
+      return
+    }
+    copyFilePreservingParent(sourcePath, path.join(backupRoot, relativePath))
+  })
+
+  return backupRoot
+}
+
+function restoreManagedFlutterState(flutterProjectPath: string, restoreRoot: string): boolean {
+  if (!fs.existsSync(restoreRoot)) {
+    return false
+  }
+
+  MANAGED_FLUTTER_STATE_FILES.forEach(relativePath => {
+    const sourcePath = path.join(restoreRoot, relativePath)
+    const targetPath = path.join(flutterProjectPath, relativePath)
+    if (fs.existsSync(sourcePath)) {
+      copyFilePreservingParent(sourcePath, targetPath)
+    } else {
+      removePathIfExists(targetPath)
+    }
+  })
+
+  return true
+}
+
+function cleanupManagedFlutterStateBackup(backupRoot: string) {
+  removePathIfExists(backupRoot)
+}
+
+function restoreNamedFlutterState(flutterProjectPath: string, stateName: string): boolean {
+  return restoreManagedFlutterState(flutterProjectPath, getFlutterStateRoot(flutterProjectPath, stateName))
+}
+'@
 
   $packageHelpersSnippet = @'
 function normalizeComparablePath(filePath: string): string {
@@ -126,7 +219,47 @@ function ensureFlutterPackages(flutterExecutablePath: string, flutterProjectPath
   )
   console.info('Refresh Flutter package config for OHOS IDE run end')
 }
+
+function switchToOhosFlutterState(
+  flutterExecutablePath: string,
+  flutterProjectPath: string,
+  sdkPath: string,
+): string {
+  console.info('Backup Flutter shared state start')
+  const sessionStateBackupRoot = backupManagedFlutterState(flutterProjectPath)
+  console.info('Backup Flutter shared state end')
+
+  console.info('Switch to OHOS Flutter state start')
+  if (!restoreNamedFlutterState(flutterProjectPath, 'ohos')) {
+    console.warn('OHOS Flutter state snapshot was not found; refresh package config directly.')
+  }
+  ensureFlutterPackages(flutterExecutablePath, flutterProjectPath, sdkPath)
+  console.info('Switch to OHOS Flutter state end')
+
+  return sessionStateBackupRoot
+}
+
+function restoreFlutterSharedState(flutterProjectPath: string, sessionStateBackupRoot: string) {
+  console.info('Restore Flutter shared state start')
+  const restoredSession = restoreManagedFlutterState(flutterProjectPath, sessionStateBackupRoot)
+  if (!restoredSession) {
+    restoreNamedFlutterState(flutterProjectPath, 'official')
+  }
+  cleanupManagedFlutterStateBackup(sessionStateBackupRoot)
+  console.info('Restore Flutter shared state end')
+}
 '@
+
+  if (-not $content.Contains($backupStateMarker)) {
+    $normalizeMarker = 'function normalizeComparablePath(filePath: string): string {'
+    $normalizeIndex = $content.IndexOf($normalizeMarker)
+    if ($normalizeIndex -lt 0) {
+      Write-Warning "Skip OHOS IDE shared-state backup patch because normalizeComparablePath was not found in $FilePath"
+    }
+    else {
+      $content = $content.Insert($normalizeIndex, "$stateHelpersSnippet`n")
+    }
+  }
 
   if (-not $content.Contains($refreshStartMarker)) {
     $registerTaskAnchor = 'function registerFlutterTask(node: HvigorNode, sdkPath: string, buildMode: string, flutterProjectPath: string,'
@@ -167,6 +300,54 @@ function ensureFlutterPackages(flutterExecutablePath: string, flutterProjectPath
     }
   }
 
+  if (-not $content.Contains('const sessionStateBackupRoot = switchToOhosFlutterState(')) {
+    $oldSwitchSnippet = @'
+      ensureFlutterPackages(flutterExecutablePath, flutterProjectPath, sdkPath)
+      let targetNames: string[]
+'@
+
+    $newSwitchSnippet = @'
+      const sessionStateBackupRoot = switchToOhosFlutterState(
+        flutterExecutablePath,
+        flutterProjectPath,
+        sdkPath,
+      )
+      try {
+        let targetNames: string[]
+'@
+
+    if (-not $content.Contains($oldSwitchSnippet)) {
+      Write-Warning "Skip OHOS IDE shared-state switch hook because ensureFlutterPackages block was not matched in $FilePath"
+    }
+    else {
+      $content = $content.Replace($oldSwitchSnippet, $newSwitchSnippet)
+    }
+  }
+
+  if (-not $content.Contains('restoreFlutterSharedState(flutterProjectPath, sessionStateBackupRoot)')) {
+    $oldRestoreSnippet = @'
+        copyConfigsFile(srcFlutterConfigsDir, destFlutterConfigsDir)
+
+    },
+'@
+
+    $newRestoreSnippet = @'
+        copyConfigsFile(srcFlutterConfigsDir, destFlutterConfigsDir)
+      } finally {
+        restoreFlutterSharedState(flutterProjectPath, sessionStateBackupRoot)
+      }
+
+    },
+'@
+
+    if (-not $content.Contains($oldRestoreSnippet)) {
+      Write-Warning "Skip OHOS IDE shared-state restore hook because copyConfigsFile block was not matched in $FilePath"
+    }
+    else {
+      $content = $content.Replace($oldRestoreSnippet, $newRestoreSnippet)
+    }
+  }
+
   if (-not $content.Contains($pluginGuardMarker)) {
     $oldPluginSnippet = @'
   const ohosPlugins = JSON.parse(fileContent).plugins.ohos
@@ -191,6 +372,57 @@ function ensureFlutterPackages(flutterExecutablePath: string, flutterProjectPath
   }
 
   Set-Content -Path $FilePath -Value ($content.Replace("`n", "`r`n")) -Encoding utf8
+}
+
+function Ensure-RepoOwnedHvigorPluginDependency {
+  param(
+    [string]$RepoRoot
+  )
+
+  $ohosRoot = Join-Path $RepoRoot 'ohos'
+  $packageJsonPath = Join-Path $ohosRoot 'package.json'
+  $packageLockPath = Join-Path $ohosRoot 'package-lock.json'
+  $expectedDependency = 'file:../tooling/ohos-hvigor-plugin'
+  $expectedResolvedPath = (Resolve-Path (Join-Path $RepoRoot 'tooling\\ohos-hvigor-plugin')).Path
+  $currentResolvedPath = $null
+
+  if (Test-Path (Join-Path $ohosRoot 'node_modules\\flutter-hvigor-plugin')) {
+    try {
+      $currentResolvedPath = (Resolve-Path (Join-Path $ohosRoot 'node_modules\\flutter-hvigor-plugin')).Path
+    }
+    catch {
+      $currentResolvedPath = $null
+    }
+  }
+
+  $needsInstall = $true
+  if ((Test-Path $packageJsonPath) -and (Test-Path $packageLockPath) -and $currentResolvedPath) {
+    $packageJsonContent = Get-Content $packageJsonPath -Raw
+    $packageLockContent = Get-Content $packageLockPath -Raw
+    if (
+      $packageJsonContent.Contains('"flutter-hvigor-plugin": "' + $expectedDependency + '"') -and
+      $packageLockContent.Contains('"flutter-hvigor-plugin": "' + $expectedDependency + '"') -and
+      $packageLockContent.Contains('"resolved": "../tooling/ohos-hvigor-plugin"') -and
+      ($currentResolvedPath -eq $expectedResolvedPath)
+    ) {
+      $needsInstall = $false
+    }
+  }
+
+  if (-not $needsInstall) {
+    return
+  }
+
+  $packageJson = @{
+    dependencies = @{
+      'flutter-hvigor-plugin' = $expectedDependency
+    }
+  } | ConvertTo-Json -Depth 5
+
+  Set-Content -Path $packageJsonPath -Value $packageJson -Encoding utf8
+
+  $npm = Resolve-ExistingPath -Candidates @('npm.cmd', 'npm') -Label 'npm'
+  Invoke-Checked -Executable $npm -Arguments @('install') -Workdir $ohosRoot
 }
 
 function Invoke-AllowingUnsignedBuild {
@@ -334,19 +566,21 @@ $keystorePassword = '123456'
 Push-Location $repoRoot
 $stateBackup = Backup-ManagedState -RepoRoot $repoRoot
 try {
-  Ensure-HvigorPluginPatched -FilePath (Join-Path $sdkRepoRoot 'packages\flutter_tools\hvigor\src\plugin\flutter-hvigor-plugin.ts')
-  Ensure-HvigorPluginPatched -FilePath (Join-Path $repoRoot 'ohos\node_modules\flutter-hvigor-plugin\src\plugin\flutter-hvigor-plugin.ts')
+  Ensure-HvigorPluginPatched -FilePath (Join-Path $repoRoot 'tooling\ohos-hvigor-plugin\src\plugin\flutter-hvigor-plugin.ts')
 
   Restore-PlatformState -RepoRoot $repoRoot -StateName 'ohos' | Out-Null
 
   if ($Mode -eq 'test') {
     Invoke-Checked -Executable $flutterSdk -Arguments @('pub', 'get')
+    Ensure-RepoOwnedHvigorPluginDependency -RepoRoot $repoRoot
     Save-PlatformState -RepoRoot $repoRoot -StateName 'ohos'
     Invoke-Checked -Executable $flutterSdk -Arguments @('test')
+    Ensure-RepoOwnedHvigorPluginDependency -RepoRoot $repoRoot
     return
   }
 
   Invoke-Checked -Executable $flutterSdk -Arguments @('pub', 'get')
+  Ensure-RepoOwnedHvigorPluginDependency -RepoRoot $repoRoot
   Save-PlatformState -RepoRoot $repoRoot -StateName 'ohos'
 
   $keytool = Resolve-ExistingPath -Candidates @('keytool.exe', 'keytool') -Label 'keytool'
@@ -362,6 +596,7 @@ try {
     -Executable $flutterSdk `
     -Arguments @('build', 'hap', '--debug', '--target-platform', "ohos-$TargetPlatform", '--no-tree-shake-icons') `
     -UnsignedHapPath $unsignedHap
+  Ensure-RepoOwnedHvigorPluginDependency -RepoRoot $repoRoot
 
   $resolvedSignedHap = @($builtSignedHap, $signedHap) |
     Where-Object { Test-Path $_ } |

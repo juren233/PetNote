@@ -1,31 +1,502 @@
 import 'dart:convert';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pet_care_harmony/app/app_theme.dart';
-import 'package:pet_care_harmony/app/theme_settings_copy.dart';
 import 'package:pet_care_harmony/app/pet_care_app.dart';
+import 'package:pet_care_harmony/app/theme_settings_copy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _petsStorageKey = 'pets_v1';
-const _onboardingAutoEnabledKey = 'first_launch_onboarding_auto_enabled_v1';
+const _firstLaunchIntroAutoEnabledKey = 'first_launch_intro_auto_enabled_v1';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('shows first-launch onboarding with a defer action',
+  testWidgets('intro shows a gray launch paw before first page content appears',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+
+    expect(find.byKey(const ValueKey('intro_launch_paw_icon')), findsOneWidget);
+    expect(find.byKey(const ValueKey('intro_page_0_content')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('first_launch_intro_primary_button')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('intro keeps a single paw during launch without a handoff icon',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 80));
+
+    expect(find.byKey(const ValueKey('intro_launch_paw_icon')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('intro_launch_handoff_hero')), findsNothing);
+    expect(find.byKey(const ValueKey('intro_page_0_content')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('shows first-launch intro before pet onboarding', (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('first_launch_intro_overlay')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('intro_launch_paw_icon')), findsNothing);
+    expect(find.byKey(const ValueKey('intro_page_0_content')), findsOneWidget);
+    expect(find.text('欢迎来到宠伴'), findsOneWidget);
+    expect(find.text('照顾它的每一天，都能更从容一点'), findsNothing);
+    expect(find.widgetWithText(FilledButton, '继续'), findsOneWidget);
+    expect(find.text('宠伴'), findsNothing);
+    expect(find.text('1 / 3'), findsNothing);
+    expect(find.byIcon(Icons.done_rounded), findsNWidgets(3));
+    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+        findsNothing);
+    expect(find.byKey(const ValueKey('bottom_nav_panel')), findsNothing);
+  });
+
+  testWidgets(
+      'first page footer chrome waits until intro rows finish before appearing',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pump();
+    for (var i = 0; i < 20; i++) {
+      if (find
+          .byKey(const ValueKey('intro_launch_paw_icon'))
+          .evaluate()
+          .isEmpty) {
+        break;
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byKey(const ValueKey('intro_launch_paw_icon')), findsNothing);
+
+    expect(find.byKey(const ValueKey('first_launch_intro_indicator')),
+        findsNothing);
+    expect(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+      findsNothing,
+    );
+
+    await tester.pump(const Duration(milliseconds: 680));
+    await tester.pump();
+
+    expect(
+      _revealOpacity(
+        tester,
+        const ValueKey('first_page_indicator_reveal'),
+      ),
+      0,
+    );
+    expect(
+      _revealOpacity(
+        tester,
+        const ValueKey('first_page_continue_reveal'),
+      ),
+      0,
+    );
+
+    var indicatorElapsed = 0;
+    while (indicatorElapsed < 3000 &&
+        find
+            .byKey(const ValueKey('first_launch_intro_indicator'))
+            .evaluate()
+            .isEmpty) {
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.pump();
+      indicatorElapsed += 40;
+    }
+
+    expect(find.byKey(const ValueKey('first_launch_intro_indicator')),
+        findsOneWidget);
+    expect(
+      _revealOpacity(
+        tester,
+        const ValueKey('first_page_continue_reveal'),
+      ),
+      0,
+    );
+
+    var buttonElapsedAfterIndicator = 0;
+    while (buttonElapsedAfterIndicator < 2000 &&
+        _nearestOpacity(
+              tester,
+              find.byKey(const ValueKey('first_launch_intro_continue_button')),
+            ) ==
+            0) {
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.pump();
+      buttonElapsedAfterIndicator += 40;
+    }
+
+    expect(buttonElapsedAfterIndicator, greaterThanOrEqualTo(320));
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('first_launch_intro_indicator')),
+        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('first page indicator stays in place when continue button appears',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pump();
+    for (var i = 0; i < 20; i++) {
+      if (find
+          .byKey(const ValueKey('intro_launch_paw_icon'))
+          .evaluate()
+          .isEmpty) {
+        break;
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    while (find
+        .byKey(const ValueKey('first_launch_intro_indicator'))
+        .evaluate()
+        .isEmpty) {
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.pump();
+    }
+
+    final indicatorBeforeButton = tester.getTopLeft(
+      find.byKey(const ValueKey('first_launch_intro_indicator')),
+    );
+
+    while (find
+        .byKey(const ValueKey('first_launch_intro_continue_button'))
+        .evaluate()
+        .isEmpty) {
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.pump();
+    }
+
+    final indicatorAfterButton = tester.getTopLeft(
+      find.byKey(const ValueKey('first_launch_intro_indicator')),
+    );
+
+    expect(indicatorAfterButton.dy, closeTo(indicatorBeforeButton.dy, 0.5));
+  });
+
+  testWidgets('intro page view uses page spacing without extra end padding',
       (tester) async {
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
 
+    final pageView = tester.widget<PageView>(
+      find.byKey(const ValueKey('first_launch_intro_page_view')),
+    );
+    final controller = pageView.controller! as PageController;
+
+    expect(controller.viewportFraction, 1.0);
+  });
+
+  testWidgets(
+      'second page content reveals when first visited and stays visible',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('intro_page_1_content')), findsNothing);
+
+    await tester.drag(
+      find.byKey(const ValueKey('first_launch_intro_page_view')),
+      const Offset(-400, 0),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('intro_page_1_content')), findsOneWidget);
+
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const ValueKey('first_launch_intro_page_view')),
+      const Offset(400, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const ValueKey('first_launch_intro_page_view')),
+      const Offset(-400, 0),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('intro_page_1_content')), findsOneWidget);
+  });
+
+  testWidgets('intro overlay does not add outer horizontal padding',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    final overlayRect = tester.getRect(
+      find.byKey(const ValueKey('first_launch_intro_overlay')),
+    );
+    final pageViewRect = tester.getRect(
+      find.byKey(const ValueKey('first_launch_intro_page_view')),
+    );
+
+    expect(pageViewRect.left, closeTo(overlayRect.left, 0.5));
+    expect(pageViewRect.right, closeTo(overlayRect.right, 0.5));
+  });
+
+  testWidgets('intro primary CTA opens pet onboarding on final page',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await _advanceIntroToFinalPage(tester);
+    await tester
+        .tap(find.byKey(const ValueKey('first_launch_intro_primary_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey('first_launch_intro_overlay')), findsNothing);
     expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
         findsOneWidget);
+  });
+
+  testWidgets('final page footer reveals sequentially like the first page',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 280));
+
+    expect(find.byKey(const ValueKey('intro_page_2_content')), findsOneWidget);
     expect(
-        find.byKey(const ValueKey('onboarding_defer_button')), findsOneWidget);
-    expect(find.text('稍后'), findsOneWidget);
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_indicator')),
+      ),
+      0,
+    );
+    expect(
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_primary_button')),
+      ),
+      0,
+    );
+    expect(
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_secondary_button')),
+      ),
+      0,
+    );
+
+    await tester.pump(const Duration(milliseconds: 680));
+    await tester.pump();
+
+    expect(
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_indicator')),
+      ),
+      0,
+    );
+    expect(
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_primary_button')),
+      ),
+      0,
+    );
+    expect(
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_secondary_button')),
+      ),
+      0,
+    );
+
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.pump();
+
+    expect(
+      _revealOpacity(
+        tester,
+        const ValueKey('final_page_indicator_reveal'),
+      ),
+      greaterThan(0),
+    );
+    expect(
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_primary_button')),
+      ),
+      0,
+    );
+    expect(
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_secondary_button')),
+      ),
+      0,
+    );
+
+    await tester.pump(const Duration(milliseconds: 360));
+    await tester.pump();
+
+    expect(
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_primary_button')),
+      ),
+      greaterThan(0),
+    );
+    expect(
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_secondary_button')),
+      ),
+      0,
+    );
+
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.pump();
+
+    expect(
+      _opacityOrOne(
+        tester,
+        find.byKey(const ValueKey('first_launch_intro_secondary_button')),
+      ),
+      greaterThan(0),
+    );
+  });
+
+  testWidgets('final page privacy rows use animated lock icons',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await _advanceIntroToFinalPage(tester);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('intro_page_2_content')), findsOneWidget);
+    expect(find.byKey(const ValueKey('privacy_lock_0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('privacy_lock_1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('privacy_lock_2')), findsOneWidget);
+  });
+
+  testWidgets('final page privacy lock stays open long enough to notice',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 280));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 280));
+    await tester.pump(const Duration(milliseconds: 80));
+
+    while (find.byKey(const ValueKey('privacy_lock_0')).evaluate().isEmpty) {
+      await tester.pump(const Duration(milliseconds: 40));
+    }
+
+    expect(
+      _iconDataByKey(tester, const ValueKey('privacy_lock_0')),
+      CupertinoIcons.lock_open_fill,
+    );
+
+    await tester.pump(const Duration(milliseconds: 1080));
+
+    expect(
+      _iconDataByKey(tester, const ValueKey('privacy_lock_0')),
+      CupertinoIcons.lock_open_fill,
+    );
+
+    await tester.pump(const Duration(milliseconds: 2000));
+
+    expect(
+      _iconDataByKey(tester, const ValueKey('privacy_lock_0')),
+      CupertinoIcons.lock_fill,
+    );
+  });
+
+  testWidgets(
+      'choosing explore first hides intro, persists dismissal, and still allows manual reopen',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await _advanceIntroToFinalPage(tester);
+    await tester
+        .tap(find.byKey(const ValueKey('first_launch_intro_secondary_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey('first_launch_intro_overlay')), findsNothing);
+    expect(find.text('先添加第一只爱宠'), findsWidgets);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool(_firstLaunchIntroAutoEnabledKey), isFalse);
+
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey('first_launch_intro_overlay')), findsNothing);
+
+    await tester.tap(find.text('开始添加宠物').first);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+        findsOneWidget);
+  });
+
+  testWidgets(
+      'deferring onboarding entered from intro closes to shell without reopening intro',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await _enterOnboardingFromIntro(tester);
+    await tester.tap(find.byKey(const ValueKey('onboarding_defer_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('稍后处理首次引导？'), findsNothing);
+    expect(
+        find.byKey(const ValueKey('first_launch_intro_overlay')), findsNothing);
+    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+        findsNothing);
+    expect(find.text('先添加第一只爱宠'), findsWidgets);
   });
 
   testWidgets(
@@ -36,6 +507,7 @@ void main() {
 
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
+    await _enterOnboardingFromIntro(tester);
 
     await tester.enterText(
         find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
@@ -73,68 +545,12 @@ void main() {
     );
   });
 
-  testWidgets('defer action shows confirmation and can be cancelled',
-      (tester) async {
-    await tester.pumpWidget(const PetCareApp());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('onboarding_defer_button')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('稍后处理首次引导？'), findsOneWidget);
-    expect(
-      find.text('这次先不创建第一只爱宠档案，之后将不再自动弹出首次引导，你仍可在空状态页手动开始。'),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('继续填写'));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
-        findsOneWidget);
-    expect(
-      SharedPreferences.getInstance()
-          .then((prefs) => prefs.getBool(_onboardingAutoEnabledKey)),
-      completion(isNull),
-    );
-  });
-
-  testWidgets(
-      'confirming defer hides onboarding, persists dismissal, and still allows manual reopen',
-      (tester) async {
-    await tester.pumpWidget(const PetCareApp());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('onboarding_defer_button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '稍后处理'));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
-        findsNothing);
-    expect(find.text('先添加第一只爱宠'), findsWidgets);
-
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool(_onboardingAutoEnabledKey), isFalse);
-
-    await tester.pumpWidget(const PetCareApp());
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
-        findsNothing);
-
-    await tester.tap(find.text('开始添加宠物').first);
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
-        findsOneWidget);
-  });
-
   testWidgets(
       'can create the first pet through onboarding and land on checklist',
       (tester) async {
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
+    await _enterOnboardingFromIntro(tester);
 
     await tester.enterText(
         find.byKey(const ValueKey('onboarding_name_field')), 'Mochi');
@@ -187,6 +603,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
+    await _enterOnboardingFromIntro(tester);
 
     await tester.enterText(
         find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
@@ -210,6 +627,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
+    await _enterOnboardingFromIntro(tester);
 
     await tester.enterText(
         find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
@@ -245,6 +663,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
+    await _enterOnboardingFromIntro(tester);
 
     await tester.enterText(
         find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
@@ -299,6 +718,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
+    await _enterOnboardingFromIntro(tester);
 
     await tester.enterText(
         find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
@@ -329,6 +749,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
+    await _enterOnboardingFromIntro(tester);
 
     await tester.enterText(
         find.byKey(const ValueKey('onboarding_name_field')), 'Nori');
@@ -368,6 +789,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
+    await _enterOnboardingFromIntro(tester);
 
     await tester.enterText(
         find.byKey(const ValueKey('onboarding_name_field')), 'Mochi');
@@ -419,95 +841,12 @@ void main() {
     expect(find.text('未填写'), findsWidgets);
   });
 
-  testWidgets('can edit pet info from the pets page', (tester) async {
-    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('爱宠'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('edit_pet_button')));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(
-      find.byKey(const ValueKey('edit_pet_name_field')),
-      'Tofu',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('edit_pet_note_field')),
-      '洗澡前会躲起来',
-    );
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('edit_pet_save_button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('edit_pet_save_button')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Tofu'), findsWidgets);
-    expect(find.text('洗澡前会躲起来'), findsOneWidget);
-  });
-
-  testWidgets(
-      'renders checklist shell and can switch to overview with saved pets',
-      (tester) async {
-    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
-    await tester.pumpAndSettle();
-
-    expect(find.text('清单'), findsWidgets);
-    expect(find.text('总览'), findsOneWidget);
-    expect(find.text('爱宠'), findsOneWidget);
-    expect(find.text('我的'), findsOneWidget);
-    expect(find.text('今天 0 项待处理'), findsOneWidget);
-
-    await tester.tap(find.text('总览'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('AI 照护总结'), findsOneWidget);
-  });
-
-  testWidgets('opens add sheet with four primary actions', (tester) async {
-    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pumpAndSettle();
-
-    expect(find.text('新增内容'), findsOneWidget);
-    expect(find.text('新增待办'), findsOneWidget);
-    expect(find.text('新增提醒'), findsOneWidget);
-    expect(find.text('新增记录'), findsOneWidget);
-    expect(find.text('新增爱宠'), findsOneWidget);
-    expect(find.text('关闭'), findsNothing);
-  });
-
-  testWidgets('dock add pet action closes sheet and opens onboarding overlay',
-      (tester) async {
-    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pumpAndSettle();
-
-    expect(find.text('新增内容'), findsOneWidget);
-
-    await tester.tap(find.text('新增爱宠'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('新增内容'), findsNothing);
-    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
-        findsOneWidget);
-  });
-
   testWidgets(
       'manual onboarding from dock defer closes overlay without changing auto-show preference',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       ..._persistedSinglePetPreferences(),
-      _onboardingAutoEnabledKey: true,
+      _firstLaunchIntroAutoEnabledKey: true,
     });
     await tester.pumpWidget(const PetCareApp());
     await tester.pumpAndSettle();
@@ -525,7 +864,7 @@ void main() {
         findsNothing);
 
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool(_onboardingAutoEnabledKey), isTrue);
+    expect(prefs.getBool(_firstLaunchIntroAutoEnabledKey), isTrue);
   });
 
   testWidgets('uses immersive dock with compact centered add button',
@@ -667,7 +1006,7 @@ void main() {
     );
   });
 
-  testWidgets('adapts first-launch onboarding surfaces to dark mode',
+  testWidgets('adapts first-launch intro surfaces to dark mode',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       'app_theme_mode_v1': 'dark',
@@ -676,7 +1015,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final overlayMaterial = tester.widget<Material>(
-      find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+      find.byKey(const ValueKey('first_launch_intro_overlay')),
     );
     expect(
       overlayMaterial.color,
@@ -688,7 +1027,7 @@ void main() {
     final gradientBox = tester.widget<DecoratedBox>(
       find
           .descendant(
-            of: find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+            of: find.byKey(const ValueKey('first_launch_intro_overlay')),
             matching: find.byType(DecoratedBox),
           )
           .first,
@@ -700,22 +1039,8 @@ void main() {
       darkPetCareTokens.pageGradientBottom,
     ]);
 
-    final title = tester.widget<Text>(find.text('先认识一下'));
+    final title = tester.widget<Text>(find.text('欢迎来到宠伴'));
     expect(title.style?.color, darkPetCareTokens.primaryText);
-
-    final subtitle = tester.widget<Text>(find.text('先给爱宠起个名字，并告诉我它是什么类型。'));
-    expect(subtitle.style?.color, darkPetCareTokens.secondaryText);
-
-    final optionChip = tester.widget<AnimatedContainer>(
-      find
-          .ancestor(
-            of: find.text('猫'),
-            matching: find.byType(AnimatedContainer),
-          )
-          .first,
-    );
-    final optionDecoration = optionChip.decoration as BoxDecoration;
-    expect(optionDecoration.color, darkPetCareTokens.secondarySurface);
   });
 
   testWidgets('restores persisted system theme preference', (tester) async {
@@ -739,9 +1064,75 @@ void main() {
   });
 }
 
+double _nearestOpacity(WidgetTester tester, Finder finder) {
+  if (finder.evaluate().isEmpty) {
+    return 0;
+  }
+  final opacity = tester.widget<Opacity>(
+    find.ancestor(
+      of: finder,
+      matching: find.byType(Opacity),
+    ).first,
+  );
+  return opacity.opacity;
+}
+
+double _opacityOrOne(WidgetTester tester, Finder finder) {
+  if (finder.evaluate().isEmpty) {
+    return 0;
+  }
+  final opacityAncestors = find.ancestor(
+    of: finder,
+    matching: find.byType(Opacity),
+  );
+  if (opacityAncestors.evaluate().isEmpty) {
+    return 1;
+  }
+  final opacity = tester.widget<Opacity>(opacityAncestors.first);
+  return opacity.opacity;
+}
+
+double _revealOpacity(WidgetTester tester, ValueKey<String> key) {
+  if (find.byKey(key).evaluate().isEmpty) {
+    return 0;
+  }
+  final opacityFinder = find.descendant(
+    of: find.byKey(key),
+    matching: find.byType(Opacity),
+  );
+  if (opacityFinder.evaluate().isEmpty) {
+    return 0;
+  }
+  final opacity = tester.widget<Opacity>(
+    opacityFinder.first,
+  );
+  return opacity.opacity;
+}
+
+IconData _iconDataByKey(WidgetTester tester, ValueKey<String> key) {
+  return tester.widget<Icon>(find.byKey(key)).icon!;
+}
+
+
+Future<void> _advanceIntroToFinalPage(WidgetTester tester) async {
+  for (var i = 0; i < 2; i++) {
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pumpAndSettle();
+  }
+}
+
+Future<void> _enterOnboardingFromIntro(WidgetTester tester) async {
+  await _advanceIntroToFinalPage(tester);
+  await tester
+      .tap(find.byKey(const ValueKey('first_launch_intro_primary_button')));
+  await tester.pumpAndSettle();
+}
+
 Map<String, Object> _persistedSinglePetPreferences() {
   return {
-    _onboardingAutoEnabledKey: false,
+    _firstLaunchIntroAutoEnabledKey: false,
     _petsStorageKey: jsonEncode([
       {
         'id': 'pet-1',

@@ -217,10 +217,9 @@ class PetCareStore extends ChangeNotifier {
     List<ReminderItem>? reminders,
     List<PetRecord>? records,
     SharedPreferences? preferences,
-    bool shouldAutoShowFirstLaunchOnboarding = true,
+    bool shouldAutoShowFirstLaunchIntro = true,
   })  : _preferences = preferences,
-        _shouldAutoShowFirstLaunchOnboarding =
-            shouldAutoShowFirstLaunchOnboarding {
+        _shouldAutoShowFirstLaunchIntro = shouldAutoShowFirstLaunchIntro {
     if (pets != null) {
       _pets.addAll(pets);
     }
@@ -240,7 +239,7 @@ class PetCareStore extends ChangeNotifier {
 
   factory PetCareStore.seeded() {
     return PetCareStore._(
-      shouldAutoShowFirstLaunchOnboarding: false,
+      shouldAutoShowFirstLaunchIntro: false,
       pets: [
         Pet(
           id: 'pet-1',
@@ -370,15 +369,15 @@ class PetCareStore extends ChangeNotifier {
     final petsJson = preferences?.getString(_petsStorageKey);
     return PetCareStore._(
       preferences: preferences,
-      shouldAutoShowFirstLaunchOnboarding:
-          preferences?.getBool(_onboardingAutoEnabledKey) ?? true,
+      shouldAutoShowFirstLaunchIntro:
+          preferences?.getBool(_firstLaunchIntroAutoEnabledKey) ?? true,
       pets: _decodePets(petsJson),
     );
   }
 
   static const String _petsStorageKey = 'pets_v1';
-  static const String _onboardingAutoEnabledKey =
-      'first_launch_onboarding_auto_enabled_v1';
+  static const String _firstLaunchIntroAutoEnabledKey =
+      'first_launch_intro_auto_enabled_v1';
   static const Duration _preferencesLoadTimeout = Duration(seconds: 2);
 
   final List<Pet> _pets = [];
@@ -397,13 +396,12 @@ class PetCareStore extends ChangeNotifier {
   AppTab _activeTab = AppTab.checklist;
   OverviewRange _overviewRange = OverviewRange.sevenDays;
   String _selectedPetId = '';
-  bool _shouldAutoShowFirstLaunchOnboarding;
+  bool _shouldAutoShowFirstLaunchIntro;
 
   AppTab get activeTab => _activeTab;
   OverviewRange get overviewRange => _overviewRange;
   List<Pet> get pets => List<Pet>.unmodifiable(_pets);
-  bool get shouldAutoShowFirstLaunchOnboarding =>
-      _shouldAutoShowFirstLaunchOnboarding;
+  bool get shouldAutoShowFirstLaunchIntro => _shouldAutoShowFirstLaunchIntro;
 
   Pet? get selectedPet {
     for (final pet in _pets) {
@@ -660,9 +658,9 @@ class PetCareStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> dismissFirstLaunchOnboarding() async {
-    _shouldAutoShowFirstLaunchOnboarding = false;
-    await _preferences?.setBool(_onboardingAutoEnabledKey, false);
+  Future<void> dismissFirstLaunchIntro() async {
+    _shouldAutoShowFirstLaunchIntro = false;
+    await _preferences?.setBool(_firstLaunchIntroAutoEnabledKey, false);
     notifyListeners();
   }
 

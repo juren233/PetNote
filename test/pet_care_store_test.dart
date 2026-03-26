@@ -9,12 +9,12 @@ void main() {
     });
 
     test(
-        'load with empty preferences starts with no pets and auto onboarding enabled',
+        'load with empty preferences starts with no pets and auto intro enabled',
         () async {
       final store = await PetCareStore.load();
 
       expect(store.pets, isEmpty);
-      expect(store.shouldAutoShowFirstLaunchOnboarding, isTrue);
+      expect(store.shouldAutoShowFirstLaunchIntro, isTrue);
       expect(store.checklistSections.length, 3);
     });
 
@@ -82,14 +82,13 @@ void main() {
       expect(reloaded.pets.single.note, '喜欢追球');
     });
 
-    test('dismissing first-launch onboarding persists auto-show disabled',
-        () async {
+    test('dismissing first-launch intro persists auto-show disabled', () async {
       final store = await PetCareStore.load();
 
-      await store.dismissFirstLaunchOnboarding();
+      await store.dismissFirstLaunchIntro();
 
       final reloaded = await PetCareStore.load();
-      expect(reloaded.shouldAutoShowFirstLaunchOnboarding, isFalse);
+      expect(reloaded.shouldAutoShowFirstLaunchIntro, isFalse);
     });
 
     test('load falls back to in-memory mode when preferences are unavailable',
@@ -99,7 +98,7 @@ void main() {
       );
 
       expect(store.pets, isEmpty);
-      expect(store.shouldAutoShowFirstLaunchOnboarding, isTrue);
+      expect(store.shouldAutoShowFirstLaunchIntro, isTrue);
     });
 
     test('seeded store exposes three checklist sections', () {

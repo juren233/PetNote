@@ -10,6 +10,28 @@
 
 ---
 
+### Task 0: Add intro motion design constraints
+
+**Files:**
+- Modify: `F:/HarmonyProject/Pet/docs/plans/2026-03-26-first-launch-intro-design.md`
+- Modify: `F:/HarmonyProject/Pet/docs/plans/2026-03-26-first-launch-intro.md`
+
+**Step 1: Record the approved motion behavior**
+
+Document these constraints before implementation:
+
+- opening paw animation replays every time the intro is opened
+- paw color animates from gray to the first-page accent color
+- paw shrinks and moves into the first-page hero icon position
+- each page reveals content only the first time that page is visited in the current intro session
+
+**Step 2: Commit**
+
+```bash
+git add F:/HarmonyProject/Pet/docs/plans/2026-03-26-first-launch-intro-design.md F:/HarmonyProject/Pet/docs/plans/2026-03-26-first-launch-intro.md
+git commit -m "docs: add intro motion design"
+```
+
 ### Task 1: Rename and reshape first-launch persistence semantics
 
 **Files:**
