@@ -46,13 +46,14 @@ class ChecklistPage extends StatelessWidget {
       );
     }
 
-    final section = store.checklistSections.firstWhere(
+    final sections = store.checklistSections;
+    final section = sections.firstWhere(
       (item) => item.key == activeSectionKey,
-      orElse: () => store.checklistSections.first,
+      orElse: () => sections.first,
     );
-    final today = store.checklistSections[0];
-    final upcoming = store.checklistSections[1];
-    final overdue = store.checklistSections[2];
+    final today = sections[0];
+    final upcoming = sections[1];
+    final overdue = sections[2];
 
     return ListView(
       padding: pagePadding,
@@ -223,6 +224,8 @@ class PetsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pet = store.selectedPet;
+    final remindersForSelectedPet = store.remindersForSelectedPet;
+    final recordsForSelectedPet = store.recordsForSelectedPet;
     final pagePadding =
         pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
     return ListView(
@@ -326,13 +329,13 @@ class PetsPage extends StatelessWidget {
                     metrics: [
                       MetricItem(
                         label: '近期提醒',
-                        value: '${store.remindersForSelectedPet.length}',
+                        value: '${remindersForSelectedPet.length}',
                         background: const Color(0xFFEAF0FF),
                         foreground: const Color(0xFF335FCA),
                       ),
                       MetricItem(
                         label: '资料记录',
-                        value: '${store.recordsForSelectedPet.length}',
+                        value: '${recordsForSelectedPet.length}',
                         background: const Color(0xFFF5F0FF),
                         foreground: const Color(0xFF6B51C9),
                       ),
@@ -362,7 +365,7 @@ class PetsPage extends StatelessWidget {
           ),
           SectionCard(
             title: '近期提醒',
-            children: store.remindersForSelectedPet.isEmpty
+            children: remindersForSelectedPet.isEmpty
                 ? [
                     Text(
                       '暂无提醒',
@@ -372,7 +375,7 @@ class PetsPage extends StatelessWidget {
                           ?.copyWith(color: const Color(0xFF6C7280)),
                     ),
                   ]
-                : store.remindersForSelectedPet
+                : remindersForSelectedPet
                     .map(
                       (item) => ListRow(
                         title: item.title,
@@ -399,7 +402,7 @@ class PetsPage extends StatelessWidget {
           ),
           SectionCard(
             title: '资料记录',
-            children: store.recordsForSelectedPet.isEmpty
+            children: recordsForSelectedPet.isEmpty
                 ? [
                     Text(
                       '暂无资料记录',
@@ -409,7 +412,7 @@ class PetsPage extends StatelessWidget {
                           ?.copyWith(color: const Color(0xFF6C7280)),
                     ),
                   ]
-                : store.recordsForSelectedPet
+                : recordsForSelectedPet
                     .map(
                       (item) => ListRow(
                         title: item.title,

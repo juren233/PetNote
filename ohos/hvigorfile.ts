@@ -1,6 +1,7 @@
 import path from 'path'
 import { appTasks } from '@ohos/hvigor-ohos-plugin';
-import { flutterHvigorPlugin } from 'flutter-hvigor-plugin';
+// Keep the `flutter-hvigor-plugin` token so Flutter continues using the Hvigor TS builder.
+import { flutterHvigorPlugin } from '../tooling/ohos-hvigor-plugin';
 
 export default {
     system: appTasks,  /* Built-in plugin of Hvigor. It cannot be modified. */

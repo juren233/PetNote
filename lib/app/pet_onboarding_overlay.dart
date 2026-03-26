@@ -408,10 +408,10 @@ class _PetOnboardingFlowState extends State<PetOnboardingFlow> {
   }
 
   List<Widget> _birthdayStep() {
-    final now = DateTime.now();
-    final latestBirthday = DateTime(now.year + 25, 12, 31);
     final theme = Theme.of(context);
     final tokens = context.petCareTokens;
+    final now = DateTime.now();
+    final latestBirthday = DateTime(now.year + 25, 12, 31);
     final calendarTheme = theme.copyWith(
       datePickerTheme: DatePickerThemeData(
         dayForegroundColor: WidgetStateProperty.resolveWith((states) {
