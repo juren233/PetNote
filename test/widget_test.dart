@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pet_care_harmony/app/app_theme.dart';
+import 'package:pet_care_harmony/app/common_widgets.dart';
 import 'package:pet_care_harmony/app/theme_settings_copy.dart';
 import 'package:pet_care_harmony/app/pet_care_app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -482,7 +484,7 @@ void main() {
     expect(find.text('关闭'), findsNothing);
   });
 
-  testWidgets('dock add pet action closes sheet and opens onboarding overlay',
+  testWidgets('dock add pet action expands sheet into onboarding flow',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(const PetCareApp());
@@ -494,15 +496,206 @@ void main() {
     expect(find.text('新增内容'), findsOneWidget);
 
     await tester.tap(find.text('新增爱宠'));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.text('新增内容'), findsNothing);
+    expect(find.byKey(const ValueKey('manual_onboarding_sheet_transition')),
+        findsOneWidget);
     expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+        findsNothing);
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('先认识一下'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('onboarding_defer_button')), findsOneWidget);
+  });
+
+  testWidgets('dock add todo action expands sheet into full-height form flow',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增待办'));
+    await tester.pump();
+
+    expect(find.text('新增内容'), findsNothing);
+    expect(find.byKey(const ValueKey('manual_expanded_form_transition')),
+        findsOneWidget);
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('新增待办'), findsWidgets);
+    expect(find.byKey(const ValueKey('expanded_form_back_button')),
         findsOneWidget);
   });
 
   testWidgets(
-      'manual onboarding from dock defer closes overlay without changing auto-show preference',
+      'dock add todo, reminder, and record show add-pet empty state when no pets exist',
+      (tester) async {
+    for (final action in ['新增待办', '新增提醒', '新增记录']) {
+      SharedPreferences.setMockInitialValues({
+        _onboardingAutoEnabledKey: false,
+      });
+      await tester.pumpWidget(const PetCareApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(action));
+      await tester.pumpAndSettle();
+
+      final sheetScope = find.descendant(
+        of: find.byKey(const ValueKey('add_sheet_shell')),
+        matching: find.byType(EmptyCard),
+      );
+      expect(
+        find.descendant(of: sheetScope, matching: find.text('先添加第一只爱宠')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: sheetScope, matching: find.text('开始添加宠物')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.descendant(of: sheetScope, matching: find.text('开始添加宠物')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('manual_onboarding_sheet_transition')),
+          findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('expanded todo form back returns to action grid', (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增待办'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('expanded_form_back_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('新增内容'), findsOneWidget);
+    expect(find.text('新增提醒'), findsOneWidget);
+    expect(find.byKey(const ValueKey('manual_expanded_form_transition')),
+        findsNothing);
+  });
+
+  testWidgets('expanded todo form save closes the sheet', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增待办'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, '补货主粮');
+    await tester.drag(
+        find.byType(SingleChildScrollView).last, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '保存待办'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('add_sheet_shell')), findsNothing);
+    expect(find.text('今天 0 项待处理'), findsOneWidget);
+  });
+
+  testWidgets(
+      'dock add reminder and record actions expand into full-height form flow',
+      (tester) async {
+    for (final action in ['新增提醒', '新增记录']) {
+      SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+      await tester.pumpWidget(const PetCareApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(action));
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('manual_expanded_form_transition')),
+          findsOneWidget);
+
+      await tester.pumpAndSettle();
+
+      expect(find.text(action), findsWidgets);
+      expect(find.byKey(const ValueKey('expanded_form_back_button')),
+          findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('dock add pet onboarding keeps the original sheet corner radius',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+
+    BorderRadius resolveRadius() {
+      final shell = tester.widget<ClipRRect>(
+        find.byKey(const ValueKey('add_sheet_shell')),
+      );
+      return shell.borderRadius.resolve(TextDirection.ltr);
+    }
+
+    expect(resolveRadius().topLeft.x, 36);
+    expect(resolveRadius().topRight.x, 36);
+
+    await tester.tap(find.text('新增爱宠'));
+    await tester.pump();
+
+    expect(resolveRadius().topLeft.x, 36);
+    expect(resolveRadius().topRight.x, 36);
+
+    await tester.pumpAndSettle();
+
+    expect(resolveRadius().topLeft.x, 36);
+    expect(resolveRadius().topRight.x, 36);
+  });
+
+  testWidgets(
+      'dock add pet transition clears the action grid before onboarding settles',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增爱宠'));
+    await tester.pump(const Duration(milliseconds: 220));
+
+    expect(find.text('新增待办'), findsNothing);
+    expect(find.text('新增提醒'), findsNothing);
+    expect(find.byKey(const ValueKey('manual_onboarding_sheet_transition')),
+        findsOneWidget);
+    expect(find.text('先认识一下'), findsOneWidget);
+  });
+
+  testWidgets(
+      'manual onboarding from dock defer closes sheet without changing auto-show preference',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       ..._persistedSinglePetPreferences(),
@@ -520,8 +713,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('稍后处理首次引导？'), findsNothing);
-    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
-        findsNothing);
+    expect(find.text('新增内容'), findsNothing);
+    expect(find.byKey(const ValueKey('onboarding_defer_button')), findsNothing);
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(_onboardingAutoEnabledKey), isTrue);
@@ -664,6 +857,130 @@ void main() {
       Theme.of(scaffoldContext).scaffoldBackgroundColor,
       const Color(0xFF020304),
     );
+  });
+
+  testWidgets('adapts add sheet surfaces to dark mode', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      ..._persistedSinglePetPreferences(),
+      'app_theme_mode_v1': 'dark',
+    });
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+
+    final shell = tester.widget<AnimatedContainer>(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('add_sheet_shell')),
+            matching: find.byType(AnimatedContainer),
+          )
+          .first,
+    );
+    final shellGradient =
+        (shell.decoration as BoxDecoration).gradient! as LinearGradient;
+    expect(shellGradient.colors, [
+      darkPetCareTokens.pageGradientTop,
+      darkPetCareTokens.pageGradientBottom,
+    ]);
+
+    final bottomSheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
+    expect(bottomSheet.backgroundColor, darkPetCareTokens.pageGradientTop);
+
+    final title = tester.widget<Text>(find.text('新增内容'));
+    expect(title.style?.color, darkPetCareTokens.primaryText);
+
+    final subtitle = tester.widget<Text>(find.text('今天要给小宝加点什么新内容？'));
+    expect(subtitle.style?.color, darkPetCareTokens.secondaryText);
+
+    final cardTitle = tester.widget<Text>(find.text('新增待办'));
+    expect(cardTitle.style?.color, darkPetCareTokens.primaryText);
+  });
+
+  testWidgets('adapts first-launch onboarding surfaces to dark mode',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'app_theme_mode_v1': 'dark',
+    });
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    final overlayMaterial = tester.widget<Material>(
+      find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+    );
+    expect(
+      overlayMaterial.color,
+      buildPetCareTheme(Brightness.dark)
+          .scaffoldBackgroundColor
+          .withValues(alpha: 0.92),
+    );
+
+    final gradientBox = tester.widget<DecoratedBox>(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('first_launch_onboarding_overlay')),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    final gradient =
+        (gradientBox.decoration as BoxDecoration).gradient! as LinearGradient;
+    expect(gradient.colors, [
+      darkPetCareTokens.pageGradientTop,
+      darkPetCareTokens.pageGradientBottom,
+    ]);
+
+    final title = tester.widget<Text>(find.text('先认识一下'));
+    expect(title.style?.color, darkPetCareTokens.primaryText);
+
+    final subtitle = tester.widget<Text>(
+      find.text('先给爱宠起个名字，并告诉我它是什么类型。'),
+    );
+    expect(subtitle.style?.color, darkPetCareTokens.secondaryText);
+
+    final optionChip = tester.widget<AnimatedContainer>(
+      find
+          .ancestor(
+            of: find.text('猫'),
+            matching: find.byType(AnimatedContainer),
+          )
+          .first,
+    );
+    final optionDecoration = optionChip.decoration as BoxDecoration;
+    expect(optionDecoration.color, darkPetCareTokens.secondarySurface);
+  });
+
+  testWidgets('keeps embedded add-pet onboarding on dark surfaces',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      ..._persistedSinglePetPreferences(),
+      'app_theme_mode_v1': 'dark',
+    });
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增爱宠'));
+    await tester.pumpAndSettle();
+
+    final shellFinder = find
+        .descendant(
+          of: find.byKey(const ValueKey('add_sheet_shell')),
+          matching: find.byType(AnimatedContainer),
+        )
+        .first;
+    final shell = tester.widget<AnimatedContainer>(shellFinder);
+    final shellGradient =
+        (shell.decoration as BoxDecoration).gradient! as LinearGradient;
+    expect(shellGradient.colors, [
+      darkPetCareTokens.pageGradientTop,
+      darkPetCareTokens.pageGradientBottom,
+    ]);
+
+    final title = tester.widget<Text>(find.text('先认识一下'));
+    expect(title.style?.color, darkPetCareTokens.primaryText);
   });
 
   testWidgets('restores persisted system theme preference', (tester) async {

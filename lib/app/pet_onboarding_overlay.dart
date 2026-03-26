@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pet_care_harmony/app/app_theme.dart';
 import 'package:pet_care_harmony/app/common_widgets.dart';
 import 'package:pet_care_harmony/app/pet_onboarding_taxonomy.dart';
 import 'package:pet_care_harmony/state/pet_care_store.dart';
@@ -44,6 +45,53 @@ class PetOnboardingOverlay extends StatefulWidget {
 }
 
 class _PetOnboardingOverlayState extends State<PetOnboardingOverlay> {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.petCareTokens;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return SizedBox.expand(
+      child: Material(
+        key: const ValueKey('first_launch_onboarding_overlay'),
+        color: theme.scaffoldBackgroundColor.withValues(
+          alpha: isDark ? 0.92 : 0.80,
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [tokens.pageGradientTop, tokens.pageGradientBottom],
+            ),
+          ),
+          child: PetOnboardingFlow(
+            onSubmit: widget.onSubmit,
+            onDefer: widget.onDefer,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class PetOnboardingFlow extends StatefulWidget {
+  const PetOnboardingFlow({
+    super.key,
+    required this.onSubmit,
+    required this.onDefer,
+    this.embedded = false,
+  });
+
+  final Future<void> Function(PetOnboardingResult result) onSubmit;
+  final Future<void> Function() onDefer;
+  final bool embedded;
+
+  @override
+  State<PetOnboardingFlow> createState() => _PetOnboardingFlowState();
+}
+
+class _PetOnboardingFlowState extends State<PetOnboardingFlow> {
   final _name = TextEditingController();
   final _customBreed = TextEditingController();
   final _feeding = TextEditingController();
@@ -142,88 +190,79 @@ class _PetOnboardingOverlayState extends State<PetOnboardingOverlay> {
   Widget build(BuildContext context) {
     final insets = MediaQuery.viewPaddingOf(context);
     final step = _steps[_stepIndex];
+    final theme = Theme.of(context);
+    final tokens = context.petCareTokens;
+    final topInset = widget.embedded ? 8.0 : insets.top + 12;
+    final bottomInset = widget.embedded ? 8.0 : insets.bottom + 20;
 
-    return Positioned.fill(
-      child: Material(
-        key: const ValueKey('first_launch_onboarding_overlay'),
-        color: const Color(0xCCF5F2EC),
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFFF8F4EF), Color(0xFFF2F4F8)],
+    return SizedBox.expand(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, topInset, 20, bottomInset),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildTopBar(context),
+            const SizedBox(height: 18),
+            Text(
+              step.title,
+              style: theme.textTheme.displaySmall?.copyWith(
+                color: tokens.primaryText,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -1,
+              ),
             ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-                20, insets.top + 12, 20, insets.bottom + 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildTopBar(context),
-                const SizedBox(height: 18),
-                Text(
-                  step.title,
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                        color: const Color(0xFF17181C),
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -1,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  step.subtitle,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF6C7280),
-                        fontWeight: FontWeight.w500,
-                      ),
-                ),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: _buildStepCard(context),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                if (_showSkipButton)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: TextButton(
-                        key: const ValueKey('onboarding_skip_button'),
-                        onPressed: _isSubmitting ? null : _skipCurrentStep,
-                        child: const Text('跳过'),
-                      ),
-                    ),
-                  ),
-                SizedBox(
+            const SizedBox(height: 8),
+            Text(
+              step.subtitle,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: tokens.secondaryText,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: SingleChildScrollView(
+                child: _buildStepCard(context),
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (_showSkipButton)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: SizedBox(
                   width: double.infinity,
-                  child: FilledButton(
-                    key: ValueKey(
-                      _stepIndex == _steps.length - 1
-                          ? 'onboarding_save_button'
-                          : 'onboarding_continue_button',
-                    ),
-                    onPressed: _isSubmitting
-                        ? null
-                        : _stepIndex == _steps.length - 1
-                            ? _save
-                            : (_canContinue ? _goNext : null),
-                    child:
-                        Text(_stepIndex == _steps.length - 1 ? '保存爱宠' : '继续'),
+                  child: TextButton(
+                    key: const ValueKey('onboarding_skip_button'),
+                    onPressed: _isSubmitting ? null : _skipCurrentStep,
+                    child: const Text('跳过'),
                   ),
                 ),
-              ],
+              ),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: ValueKey(
+                  _stepIndex == _steps.length - 1
+                      ? 'onboarding_save_button'
+                      : 'onboarding_continue_button',
+                ),
+                onPressed: _isSubmitting
+                    ? null
+                    : _stepIndex == _steps.length - 1
+                        ? _save
+                        : (_canContinue ? _goNext : null),
+                child: Text(_stepIndex == _steps.length - 1 ? '保存爱宠' : '继续'),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildTopBar(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.petCareTokens;
     return SizedBox(
       height: 48,
       child: Row(
@@ -250,9 +289,9 @@ class _PetOnboardingOverlayState extends State<PetOnboardingOverlay> {
                     key: const ValueKey('onboarding_progress_bar'),
                     value: (_stepIndex + 1) / _steps.length,
                     minHeight: 8,
-                    backgroundColor: const Color(0xFFE9ECF3),
+                    backgroundColor: tokens.secondarySurface,
                     valueColor:
-                        const AlwaysStoppedAnimation(Color(0xFFF2A65A)),
+                        AlwaysStoppedAnimation(theme.colorScheme.primary),
                   ),
                 ),
               ),
@@ -269,7 +308,13 @@ class _PetOnboardingOverlayState extends State<PetOnboardingOverlay> {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text('稍后'),
+              child: Text(
+                '稍后',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: tokens.secondaryText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
         ],
@@ -365,13 +410,15 @@ class _PetOnboardingOverlayState extends State<PetOnboardingOverlay> {
   List<Widget> _birthdayStep() {
     final now = DateTime.now();
     final latestBirthday = DateTime(now.year + 25, 12, 31);
-    final calendarTheme = Theme.of(context).copyWith(
+    final theme = Theme.of(context);
+    final tokens = context.petCareTokens;
+    final calendarTheme = theme.copyWith(
       datePickerTheme: DatePickerThemeData(
         dayForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const Color(0xFFD9822B);
+            return theme.colorScheme.secondary;
           }
-          return const Color(0xFF17181C);
+          return tokens.primaryText;
         }),
         dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -381,9 +428,9 @@ class _PetOnboardingOverlayState extends State<PetOnboardingOverlay> {
         }),
         todayForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const Color(0xFFD9822B);
+            return theme.colorScheme.secondary;
           }
-          return const Color(0xFF17181C);
+          return tokens.primaryText;
         }),
         todayBackgroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -399,8 +446,8 @@ class _PetOnboardingOverlayState extends State<PetOnboardingOverlay> {
         _birthday == null
             ? '请选择生日'
             : '已选择 ${_formatBirthdayDisplay(_birthday!)}',
-        style: const TextStyle(
-          color: Color(0xFF17181C),
+        style: TextStyle(
+          color: tokens.primaryText,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -544,6 +591,8 @@ class _OptionWrap<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.petCareTokens;
     return Wrap(
       spacing: 10,
       runSpacing: 10,
@@ -556,16 +605,16 @@ class _OptionWrap<T> extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: isSelected
-                  ? const Color(0xFFF2A65A)
-                  : const Color(0xFFF6F7FA),
+                  ? tokens.segmentedSelectedBackground
+                  : tokens.secondarySurface,
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
               labelBuilder(value),
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: isSelected ? Colors.white : const Color(0xFF6C7280),
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: isSelected ? Colors.white : tokens.secondaryText,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         );

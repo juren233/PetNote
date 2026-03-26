@@ -263,15 +263,17 @@ class _PetCareRootState extends State<PetCareRoot> {
   }
 
   Future<void> _openAddSheet(BuildContext context, PetCareStore store) async {
+    final tokens = context.petCareTokens;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (context) => AddActionSheet(
-        store: store,
-        onAddPetViaOnboarding: _openAddPetOnboardingFromSheet,
+      backgroundColor: tokens.pageGradientTop,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
       ),
+      builder: (context) => AddActionSheet(store: store),
     );
   }
 
@@ -293,16 +295,6 @@ class _PetCareRootState extends State<PetCareRoot> {
     setState(() {
       _onboardingEntryPoint = _OnboardingEntryPoint.manual;
       _showOnboarding = true;
-    });
-  }
-
-  void _openAddPetOnboardingFromSheet() {
-    Navigator.of(context).pop();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      _openManualOnboarding();
     });
   }
 
