@@ -7,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'flutter-state.ps1')
 
 function Resolve-ExistingPath {
   param(
@@ -42,6 +43,154 @@ function Invoke-Checked {
   if ($LASTEXITCODE -ne 0) {
     throw "Command failed with exit code ${LASTEXITCODE}: $Executable $($Arguments -join ' ')"
   }
+}
+
+function Ensure-OhosFlutterSubmodule {
+  param(
+    [string]$RepoRoot,
+    [string]$SubmodulePath
+  )
+
+  if (Test-Path (Join-Path $SubmodulePath 'bin\flutter.bat')) {
+    return
+  }
+
+  $git = Resolve-ExistingPath -Candidates @('git.exe', 'git') -Label 'git'
+  Invoke-Checked -Executable $git -Arguments @('-C', $RepoRoot, 'submodule', 'update', '--init', '--recursive', '.flutter_ohos_sdk_gitcode')
+}
+
+function Ensure-HvigorPluginPatched {
+  param(
+    [string]$FilePath
+  )
+
+  if (-not (Test-Path $FilePath)) {
+    return
+  }
+
+  $content = (Get-Content -Path $FilePath -Raw).Replace("`r`n", "`n")
+
+  $refreshStartMarker = "console.info('Refresh Flutter package config for OHOS IDE run start')"
+  $pluginGuardMarker = 'const pluginsByPlatform = JSON.parse(fileContent).plugins ?? {}'
+
+  $packageHelpersSnippet = @'
+function normalizeComparablePath(filePath: string): string {
+  return path.normalize(filePath).replace(/\\/g, '/').toLowerCase()
+}
+
+function resolvePackageRootUri(flutterProjectPath: string, rootUri: string): string {
+  if (rootUri.startsWith('file:///')) {
+    return decodeURIComponent(rootUri.replace('file:///', ''))
+  }
+  if (rootUri.startsWith('file://')) {
+    return decodeURIComponent(rootUri.replace('file://', ''))
+  }
+  return path.resolve(flutterProjectPath, rootUri)
+}
+
+function shouldRefreshFlutterPackages(flutterProjectPath: string, sdkPath: string): boolean {
+  const packageConfigPath = path.join(flutterProjectPath, '.dart_tool', 'package_config.json')
+  if (!fs.existsSync(packageConfigPath)) {
+    return true
+  }
+
+  try {
+    const packageConfig = JSON.parse(fs.readFileSync(packageConfigPath, 'utf-8'))
+    const flutterPackage = packageConfig.packages?.find((pkg: { name?: string }) => pkg.name === 'flutter')
+    if (!flutterPackage?.rootUri) {
+      return true
+    }
+
+    const currentFlutterRoot = resolvePackageRootUri(flutterProjectPath, flutterPackage.rootUri)
+    const expectedFlutterRoot = path.join(sdkPath, 'packages', 'flutter')
+    return normalizeComparablePath(currentFlutterRoot) !== normalizeComparablePath(expectedFlutterRoot)
+  } catch (error) {
+    console.warn(`Failed to inspect package_config.json, refresh Flutter packages by default. ${error}`)
+    return true
+  }
+}
+
+function ensureFlutterPackages(flutterExecutablePath: string, flutterProjectPath: string, sdkPath: string) {
+  if (!shouldRefreshFlutterPackages(flutterProjectPath, sdkPath)) {
+    return
+  }
+
+  console.info('Refresh Flutter package config for OHOS IDE run start')
+  execSync(
+    `${flutterExecutablePath} pub get`,
+    {
+      cwd: flutterProjectPath,
+      stdio: 'inherit',
+      encoding: 'utf8',
+    }
+  )
+  console.info('Refresh Flutter package config for OHOS IDE run end')
+}
+'@
+
+  if (-not $content.Contains($refreshStartMarker)) {
+    $registerTaskAnchor = 'function registerFlutterTask(node: HvigorNode, sdkPath: string, buildMode: string, flutterProjectPath: string,'
+    $registerTaskIndex = $content.IndexOf($registerTaskAnchor)
+    if ($registerTaskIndex -lt 0) {
+      Write-Warning "Skip OHOS IDE package-config auto-refresh patch because registerFlutterTask was not found in $FilePath"
+    }
+    else {
+      $content = $content.Insert($registerTaskIndex, "$packageHelpersSnippet`n")
+    }
+  }
+
+  if (-not $content.Contains('ensureFlutterPackages(flutterExecutablePath, flutterProjectPath, sdkPath)')) {
+    $oldRegisterSnippet = @'
+      const flutterExecutablePath = path.join(
+        sdkPath,
+        'bin',
+        flutterExecutableName
+      )
+      let targetNames: string[]
+'@
+
+    $newRegisterSnippet = @'
+      const flutterExecutablePath = path.join(
+        sdkPath,
+        'bin',
+        flutterExecutableName
+      )
+      ensureFlutterPackages(flutterExecutablePath, flutterProjectPath, sdkPath)
+      let targetNames: string[]
+'@
+
+    if (-not $content.Contains($oldRegisterSnippet)) {
+      Write-Warning "Skip OHOS IDE package-config auto-refresh hook because flutterExecutablePath block was not matched in $FilePath"
+    }
+    else {
+      $content = $content.Replace($oldRegisterSnippet, $newRegisterSnippet)
+    }
+  }
+
+  if (-not $content.Contains($pluginGuardMarker)) {
+    $oldPluginSnippet = @'
+  const ohosPlugins = JSON.parse(fileContent).plugins.ohos
+  const filteredPlugins =
+    ohosPlugins.filter(plugin => plugin.native_build !== false)
+  return filteredPlugins
+'@
+
+    $newPluginSnippet = @'
+  const pluginsByPlatform = JSON.parse(fileContent).plugins ?? {}
+  const ohosPlugins = Array.isArray(pluginsByPlatform.ohos)
+    ? pluginsByPlatform.ohos
+    : []
+  return ohosPlugins.filter(plugin => plugin.native_build !== false)
+'@
+
+    if (-not $content.Contains($oldPluginSnippet)) {
+      throw "Unsupported flutter-hvigor-plugin content in $FilePath"
+    }
+
+    $content = $content.Replace($oldPluginSnippet, $newPluginSnippet)
+  }
+
+  Set-Content -Path $FilePath -Value ($content.Replace("`n", "`r`n")) -Encoding utf8
 }
 
 function Invoke-AllowingUnsignedBuild {
@@ -91,7 +240,11 @@ function Get-DeviceUdid {
     throw "Failed to query device UDID for $Target"
   }
 
-  $udid = (($output | Select-String '([A-F0-9]{64})').Matches.Value | Select-Object -First 1)
+  $match = $output | Select-String '([A-F0-9]{64})' | Select-Object -First 1
+  $udid = $null
+  if ($match -and $match.Matches.Count -gt 0) {
+    $udid = $match.Matches[0].Value
+  }
   if (-not $udid) {
     throw "Could not parse a device UDID from: $output"
   }
@@ -129,9 +282,10 @@ function Get-CompatibleApiVersion {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$sdkRepoRoot = Join-Path $repoRoot '.flutter_ohos_sdk_gitcode'
+Ensure-OhosFlutterSubmodule -RepoRoot $repoRoot -SubmodulePath $sdkRepoRoot
 $flutterSdk = Resolve-ExistingPath -Candidates @(
-  (Join-Path $repoRoot '.flutter_ohos_sdk_gitcode\bin\flutter.bat'),
-  (Join-Path $repoRoot '.flutter_ohos_sdk\bin\flutter.bat')
+  (Join-Path $sdkRepoRoot 'bin\flutter.bat')
 ) -Label 'Flutter OH SDK'
 $devEcoSdkHome = Resolve-ExistingPath -Candidates @(
   $env:DEVECO_SDK_HOME,
@@ -170,6 +324,7 @@ $env:Path = @(
 $signingDir = Join-Path $repoRoot '.signing-temp'
 $unsignedHap = Join-Path $repoRoot 'ohos\entry\build\default\outputs\default\entry-default-unsigned.hap'
 $signedHap = Join-Path $repoRoot 'ohos\entry\build\default\outputs\default\entry-default-signed.hap'
+$builtSignedHap = Join-Path $repoRoot 'build\ohos\hap\entry-default-signed.hap'
 $packInfo = Join-Path $repoRoot 'ohos\entry\build\default\outputs\default\pack.info'
 $bundleInfo = Get-Content (Join-Path $repoRoot 'ohos\AppScope\app.json5') -Raw | ConvertFrom-Json
 $bundleName = [string]$bundleInfo.app.bundleName
@@ -177,11 +332,22 @@ $abilityName = 'EntryAbility'
 $keystorePassword = '123456'
 
 Push-Location $repoRoot
+$stateBackup = Backup-ManagedState -RepoRoot $repoRoot
 try {
+  Ensure-HvigorPluginPatched -FilePath (Join-Path $sdkRepoRoot 'packages\flutter_tools\hvigor\src\plugin\flutter-hvigor-plugin.ts')
+  Ensure-HvigorPluginPatched -FilePath (Join-Path $repoRoot 'ohos\node_modules\flutter-hvigor-plugin\src\plugin\flutter-hvigor-plugin.ts')
+
+  Restore-PlatformState -RepoRoot $repoRoot -StateName 'ohos' | Out-Null
+
   if ($Mode -eq 'test') {
+    Invoke-Checked -Executable $flutterSdk -Arguments @('pub', 'get')
+    Save-PlatformState -RepoRoot $repoRoot -StateName 'ohos'
     Invoke-Checked -Executable $flutterSdk -Arguments @('test')
     return
   }
+
+  Invoke-Checked -Executable $flutterSdk -Arguments @('pub', 'get')
+  Save-PlatformState -RepoRoot $repoRoot -StateName 'ohos'
 
   $keytool = Resolve-ExistingPath -Candidates @('keytool.exe', 'keytool') -Label 'keytool'
   $hdc = Resolve-ExistingPath -Candidates @(
@@ -194,8 +360,24 @@ try {
 
   Invoke-AllowingUnsignedBuild `
     -Executable $flutterSdk `
-    -Arguments @('build', 'hap', '--debug', '--target-platform', "ohos-$TargetPlatform") `
+    -Arguments @('build', 'hap', '--debug', '--target-platform', "ohos-$TargetPlatform", '--no-tree-shake-icons') `
     -UnsignedHapPath $unsignedHap
+
+  $resolvedSignedHap = @($builtSignedHap, $signedHap) |
+    Where-Object { Test-Path $_ } |
+    Select-Object -First 1
+
+  if ($resolvedSignedHap) {
+    if ($Mode -eq 'install' -or $Mode -eq 'run') {
+      Invoke-Checked -Executable $hdc -Arguments @('-t', $DeviceId, 'install', '-r', $resolvedSignedHap)
+    }
+
+    if ($Mode -eq 'run') {
+      Invoke-Checked -Executable $hdc -Arguments @('-t', $DeviceId, 'shell', 'aa', 'start', '-b', $bundleName, '-a', $abilityName)
+    }
+
+    return
+  }
 
   if (-not (Test-Path $unsignedHap)) {
     throw "Unsigned HAP was not generated at $unsignedHap"
@@ -273,5 +455,12 @@ try {
   }
 }
 finally {
+  $restoredOfficialState = Restore-PlatformState -RepoRoot $repoRoot -StateName 'official'
+  if (-not $restoredOfficialState) {
+    Restore-ManagedStateFromBackup -RepoRoot $repoRoot -BackupRoot $stateBackup
+  }
+  elseif (Test-Path $stateBackup) {
+    Remove-Item -Path $stateBackup -Recurse -Force
+  }
   Pop-Location
 }

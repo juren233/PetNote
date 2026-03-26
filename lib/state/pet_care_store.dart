@@ -387,6 +387,12 @@ class PetCareStore extends ChangeNotifier {
   final List<PetRecord> _records = [];
   final DateTime _referenceNow = DateTime.parse('2026-03-24T12:00:00+08:00');
   final SharedPreferences? _preferences;
+  List<ChecklistSection>? _checklistSectionsCache;
+  OverviewSnapshot? _overviewSnapshotCache;
+  String? _remindersForSelectedPetCachePetId;
+  List<ReminderItem>? _remindersForSelectedPetCache;
+  String? _recordsForSelectedPetCachePetId;
+  List<PetRecord>? _recordsForSelectedPetCache;
 
   AppTab _activeTab = AppTab.checklist;
   OverviewRange _overviewRange = OverviewRange.sevenDays;
@@ -409,21 +415,43 @@ class PetCareStore extends ChangeNotifier {
   }
 
   List<ReminderItem> get remindersForSelectedPet {
+    final cached = _remindersForSelectedPetCache;
+    if (cached != null &&
+        _remindersForSelectedPetCachePetId == _selectedPetId) {
+      return cached;
+    }
+
     final results = _reminders
         .where((reminder) => reminder.petId == _selectedPetId)
         .toList();
     results.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
-    return results;
+    final cachedResults = List<ReminderItem>.unmodifiable(results);
+    _remindersForSelectedPetCachePetId = _selectedPetId;
+    _remindersForSelectedPetCache = cachedResults;
+    return cachedResults;
   }
 
   List<PetRecord> get recordsForSelectedPet {
+    final cached = _recordsForSelectedPetCache;
+    if (cached != null && _recordsForSelectedPetCachePetId == _selectedPetId) {
+      return cached;
+    }
+
     final results =
         _records.where((record) => record.petId == _selectedPetId).toList();
     results.sort((a, b) => b.recordDate.compareTo(a.recordDate));
-    return results;
+    final cachedResults = List<PetRecord>.unmodifiable(results);
+    _recordsForSelectedPetCachePetId = _selectedPetId;
+    _recordsForSelectedPetCache = cachedResults;
+    return cachedResults;
   }
 
   List<ChecklistSection> get checklistSections {
+    final cached = _checklistSectionsCache;
+    if (cached != null) {
+      return cached;
+    }
+
     final todayEnd = DateTime(
         _referenceNow.year, _referenceNow.month, _referenceNow.day, 23, 59, 59);
     final today = <ChecklistItemViewModel>[];
@@ -461,7 +489,7 @@ class PetCareStore extends ChangeNotifier {
       }
     }
 
-    return [
+    final sections = List<ChecklistSection>.unmodifiable([
       ChecklistSection(
           key: 'today',
           title: '今日待办',
@@ -477,10 +505,17 @@ class PetCareStore extends ChangeNotifier {
           title: '已逾期',
           summary: '${overdue.length} 项',
           items: overdue),
-    ];
+    ]);
+    _checklistSectionsCache = sections;
+    return sections;
   }
 
   OverviewSnapshot get overviewSnapshot {
+    final cached = _overviewSnapshotCache;
+    if (cached != null) {
+      return cached;
+    }
+
     final rangeStart = _referenceNow.subtract(Duration(
         days: switch (_overviewRange) {
       OverviewRange.sevenDays => 7,
@@ -516,7 +551,7 @@ class PetCareStore extends ChangeNotifier {
       riskItems.add('当前没有明显风险信号，继续保持规律记录即可。');
     }
 
-    return OverviewSnapshot(
+    final snapshot = OverviewSnapshot(
       range: _overviewRange,
       sections: [
         OverviewSection(
@@ -552,20 +587,33 @@ class PetCareStore extends ChangeNotifier {
       ],
       disclaimer: '仅供日常照护参考，不构成诊断或医疗建议，如有异常请及时咨询专业兽医。',
     );
+    _overviewSnapshotCache = snapshot;
+    return snapshot;
   }
 
   void setActiveTab(AppTab tab) {
+    if (_activeTab == tab) {
+      return;
+    }
     _activeTab = tab;
     notifyListeners();
   }
 
   void setOverviewRange(OverviewRange range) {
+    if (_overviewRange == range) {
+      return;
+    }
     _overviewRange = range;
+    _invalidateOverviewDerivedData();
     notifyListeners();
   }
 
   void selectPet(String petId) {
+    if (_selectedPetId == petId) {
+      return;
+    }
     _selectedPetId = petId;
+    _invalidateSelectedPetDerivedData();
     notifyListeners();
   }
 
@@ -575,7 +623,10 @@ class PetCareStore extends ChangeNotifier {
     } else {
       _reminders.firstWhere((item) => item.id == itemId).status =
           ReminderStatus.done;
+      _invalidateSelectedPetReminders();
     }
+    _invalidateChecklistDerivedData();
+    _invalidateOverviewDerivedData();
     notifyListeners();
   }
 
@@ -588,7 +639,10 @@ class PetCareStore extends ChangeNotifier {
       final reminder = _reminders.firstWhere((item) => item.id == itemId);
       reminder.status = ReminderStatus.postponed;
       reminder.scheduledAt = reminder.scheduledAt.add(const Duration(days: 1));
+      _invalidateSelectedPetReminders();
     }
+    _invalidateChecklistDerivedData();
+    _invalidateOverviewDerivedData();
     notifyListeners();
   }
 
@@ -599,7 +653,10 @@ class PetCareStore extends ChangeNotifier {
     } else {
       _reminders.firstWhere((item) => item.id == itemId).status =
           ReminderStatus.skipped;
+      _invalidateSelectedPetReminders();
     }
+    _invalidateChecklistDerivedData();
+    _invalidateOverviewDerivedData();
     notifyListeners();
   }
 
@@ -627,6 +684,8 @@ class PetCareStore extends ChangeNotifier {
       ),
     );
     _activeTab = AppTab.checklist;
+    _invalidateChecklistDerivedData();
+    _invalidateOverviewDerivedData();
     notifyListeners();
   }
 
@@ -652,6 +711,11 @@ class PetCareStore extends ChangeNotifier {
       ),
     );
     _activeTab = AppTab.checklist;
+    _invalidateChecklistDerivedData();
+    _invalidateOverviewDerivedData();
+    if (_selectedPetId == petId) {
+      _invalidateSelectedPetReminders();
+    }
     notifyListeners();
   }
 
@@ -677,6 +741,8 @@ class PetCareStore extends ChangeNotifier {
     );
     _selectedPetId = petId;
     _activeTab = AppTab.pets;
+    _invalidateOverviewDerivedData();
+    _invalidateSelectedPetDerivedData();
     notifyListeners();
   }
 
@@ -711,6 +777,7 @@ class PetCareStore extends ChangeNotifier {
     _selectedPetId = pet.id;
     _activeTab = AppTab.pets;
     await _savePets();
+    _invalidateAllDerivedData();
     notifyListeners();
   }
 
@@ -751,7 +818,38 @@ class PetCareStore extends ChangeNotifier {
     _selectedPetId = current.id;
     _activeTab = AppTab.pets;
     await _savePets();
+    _invalidateChecklistDerivedData();
+    _invalidateOverviewDerivedData();
     notifyListeners();
+  }
+
+  void _invalidateAllDerivedData() {
+    _invalidateChecklistDerivedData();
+    _invalidateOverviewDerivedData();
+    _invalidateSelectedPetDerivedData();
+  }
+
+  void _invalidateChecklistDerivedData() {
+    _checklistSectionsCache = null;
+  }
+
+  void _invalidateOverviewDerivedData() {
+    _overviewSnapshotCache = null;
+  }
+
+  void _invalidateSelectedPetReminders() {
+    _remindersForSelectedPetCachePetId = null;
+    _remindersForSelectedPetCache = null;
+  }
+
+  void _invalidateSelectedPetRecords() {
+    _recordsForSelectedPetCachePetId = null;
+    _recordsForSelectedPetCache = null;
+  }
+
+  void _invalidateSelectedPetDerivedData() {
+    _invalidateSelectedPetReminders();
+    _invalidateSelectedPetRecords();
   }
 
   ChecklistItemViewModel _todoToChecklistItem(TodoItem item) {

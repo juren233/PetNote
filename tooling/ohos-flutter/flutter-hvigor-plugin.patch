@@ -1,0 +1,88 @@
+diff --git a/packages/flutter_tools/hvigor/src/plugin/flutter-hvigor-plugin.ts b/packages/flutter_tools/hvigor/src/plugin/flutter-hvigor-plugin.ts
+index da8bc4f0b5..f34fd5798b 100644
+--- a/packages/flutter_tools/hvigor/src/plugin/flutter-hvigor-plugin.ts
++++ b/packages/flutter_tools/hvigor/src/plugin/flutter-hvigor-plugin.ts
+@@ -248,6 +248,59 @@ function copyConfigsFile(srcDir: string, destDir: string) {
+   console.info("copy ConfigsFile end")
+ }
+
++function normalizeComparablePath(filePath: string): string {
++  return path.normalize(filePath).replace(/\\/g, '/').toLowerCase()
++}
++
++function resolvePackageRootUri(flutterProjectPath: string, rootUri: string): string {
++  if (rootUri.startsWith('file:///')) {
++    return decodeURIComponent(rootUri.replace('file:///', ''))
++  }
++  if (rootUri.startsWith('file://')) {
++    return decodeURIComponent(rootUri.replace('file://', ''))
++  }
++  return path.resolve(flutterProjectPath, rootUri)
++}
++
++function shouldRefreshFlutterPackages(flutterProjectPath: string, sdkPath: string): boolean {
++  const packageConfigPath = path.join(flutterProjectPath, '.dart_tool', 'package_config.json')
++  if (!fs.existsSync(packageConfigPath)) {
++    return true
++  }
++
++  try {
++    const packageConfig = JSON.parse(fs.readFileSync(packageConfigPath, 'utf-8'))
++    const flutterPackage = packageConfig.packages?.find((pkg: { name?: string }) => pkg.name === 'flutter')
++    if (!flutterPackage?.rootUri) {
++      return true
++    }
++
++    const currentFlutterRoot = resolvePackageRootUri(flutterProjectPath, flutterPackage.rootUri)
++    const expectedFlutterRoot = path.join(sdkPath, 'packages', 'flutter')
++    return normalizeComparablePath(currentFlutterRoot) !== normalizeComparablePath(expectedFlutterRoot)
++  } catch (error) {
++    console.warn(`Failed to inspect package_config.json, refresh Flutter packages by default. ${error}`)
++    return true
++  }
++}
++
++function ensureFlutterPackages(flutterExecutablePath: string, flutterProjectPath: string, sdkPath: string) {
++  if (!shouldRefreshFlutterPackages(flutterProjectPath, sdkPath)) {
++    return
++  }
++
++  console.info('Refresh Flutter package config for OHOS IDE run start')
++  execSync(
++    `${flutterExecutablePath} pub get`,
++    {
++      cwd: flutterProjectPath,
++      stdio: 'inherit',
++      encoding: 'utf8',
++    }
++  )
++  console.info('Refresh Flutter package config for OHOS IDE run end')
++}
++
+ function registerFlutterTask(node: HvigorNode, sdkPath: string, buildMode: string, flutterProjectPath: string,
+   target: Target) {
+   const targetPlatforms = getParameters(TARGET_PLATFORM, DEFAULT_PLATFORMS)
+@@ -265,6 +318,7 @@ function registerFlutterTask(node: HvigorNode, sdkPath: string, buildMode: strin
+         'bin',
+         flutterExecutableName
+       )
++      ensureFlutterPackages(flutterExecutablePath, flutterProjectPath, sdkPath)
+       let targetNames: string[]
+       if (buildMode === 'debug') {
+         targetNames = ['debug_ohos_application']
+@@ -446,8 +500,9 @@ function findFlutterPlugins(flutterPluginsDependenciesPath: string): JSON[] {
+     return []
+   }
+   const fileContent = fs.readFileSync(flutterPluginsDependenciesPath, 'utf-8')
+-  const ohosPlugins = JSON.parse(fileContent).plugins.ohos
+-  const filteredPlugins =
+-    ohosPlugins.filter(plugin => plugin.native_build !== false)
+-  return filteredPlugins
+-}
+\ No newline at end of file
++  const pluginsByPlatform = JSON.parse(fileContent).plugins ?? {}
++  const ohosPlugins = Array.isArray(pluginsByPlatform.ohos)
++    ? pluginsByPlatform.ohos
++    : []
++  return ohosPlugins.filter(plugin => plugin.native_build !== false)
++}

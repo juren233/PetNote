@@ -1,5 +1,6 @@
 # Flutter/Dart
 .dart_tool/
+.flutter_ohos_sdk/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
@@ -10,6 +11,8 @@ build/
 # IDE
 .idea/
 .vscode/
+.fleet/
+.history/
 *.iml
 *.ipr
 *.iws
@@ -24,9 +27,15 @@ entry/build/
 ohos/build/
 *.har
 oh_modules/
+ohos/node_modules/
+ohos/oh_modules/
+ohos/entry/oh_modules/
+ohos/entry/src/main/ets/plugins/
+ohos/entry/src/main/resources/rawfile/flutter_assets/
 
 # DevTools
 devtools_options.yaml
+coverage/
 
 # Node
 node_modules/
@@ -39,12 +48,14 @@ ohos/sign/
 # Temporary files
 *.log
 *.tmp
+*.orig
 tmp-*.jpeg
 tmp-*.jpg
 tmp-*.png
 
 # Local Harmony build/cache
 .hvigor/
+.tooling/flutter-state/
 
 # Local legacy backup project
 .legacy_arkui_disabled/

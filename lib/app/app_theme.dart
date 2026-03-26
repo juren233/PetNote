@@ -299,6 +299,7 @@ ThemeData buildPetCareTheme(Brightness brightness) {
     scaffoldBackgroundColor:
         isDark ? const Color(0xFF020304) : const Color(0xFFF5F2EC),
     useMaterial3: true,
+    splashFactory: InkRipple.splashFactory,
     textTheme: const TextTheme(
       displaySmall: TextStyle(fontSize: 34, height: 1.04),
       headlineSmall: TextStyle(fontSize: 27, height: 1.1),
