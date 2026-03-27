@@ -24,7 +24,7 @@ class AddActionSheet extends StatefulWidget {
 }
 
 class _AddActionSheetState extends State<AddActionSheet> {
-  static const _compactSheetHeight = 430.0;
+  static const _compactSheetHeight = 448.0;
   static const _sheetRadius = 36.0;
 
   AddAction _action = AddAction.none;
@@ -171,9 +171,11 @@ class _AddActionSheetState extends State<AddActionSheet> {
         key: const ValueKey('add_actions_boundary'),
         alignment: Alignment.topCenter,
         child: RepaintBoundary(
-          child: _ActionGrid(
-            key: const ValueKey('actions'),
-            onSelect: _selectAction,
+          child: SingleChildScrollView(
+            child: _ActionGrid(
+              key: const ValueKey('actions'),
+              onSelect: _selectAction,
+            ),
           ),
         ),
       );

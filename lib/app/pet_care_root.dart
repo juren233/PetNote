@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:pet_care_harmony/app/add_sheet.dart';
 import 'package:pet_care_harmony/app/app_theme.dart';
 import 'package:pet_care_harmony/app/common_widgets.dart';
+import 'package:pet_care_harmony/app/ios_native_dock.dart';
 import 'package:pet_care_harmony/app/layout_metrics.dart';
 import 'package:pet_care_harmony/app/me_page.dart';
 import 'package:pet_care_harmony/app/navigation_palette.dart';
@@ -19,9 +20,11 @@ class PetCareRoot extends StatefulWidget {
   const PetCareRoot({
     super.key,
     this.settingsController,
+    this.iosDockBuilder,
   });
 
   final AppSettingsController? settingsController;
+  final IosDockBuilder? iosDockBuilder;
 
   @override
   State<PetCareRoot> createState() => _PetCareRootState();
@@ -72,6 +75,9 @@ class _PetCareRootState extends State<PetCareRoot> {
     }
 
     final overlayStyle = petCareOverlayStyleForTheme(Theme.of(context));
+    final useNativeIosDock = !_showFirstLaunchIntro &&
+        !_showOnboarding &&
+        supportsIosNativeDock(Theme.of(context).platform);
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlayStyle,
       child: Scaffold(
@@ -93,11 +99,36 @@ class _PetCareRootState extends State<PetCareRoot> {
         ),
         bottomNavigationBar: _showFirstLaunchIntro || _showOnboarding
             ? null
-            : _PetCareBottomNav(
-                store: store,
-                onAdd: () => _openAddSheet(context, store),
-              ),
+            : useNativeIosDock
+                ? _buildIosNativeDock(context, store)
+                : _PetCareBottomNav(
+                    store: store,
+                    onAdd: () => _openAddSheet(context, store),
+                  ),
       ),
+    );
+  }
+
+  Widget _buildIosNativeDock(BuildContext context, PetCareStore store) {
+    return AnimatedBuilder(
+      animation: store,
+      builder: (context, _) {
+        final builder = widget.iosDockBuilder;
+        if (builder != null) {
+          return builder(
+            context,
+            store.activeTab,
+            store.setActiveTab,
+            () => _openAddSheet(context, store),
+          );
+        }
+
+        return IosNativeDockHost(
+          selectedTab: store.activeTab,
+          onTabSelected: store.setActiveTab,
+          onAddTap: () => _openAddSheet(context, store),
+        );
+      },
     );
   }
 

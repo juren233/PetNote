@@ -6,8 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pet_care_harmony/app/app_theme.dart';
 import 'package:pet_care_harmony/app/common_widgets.dart';
+import 'package:pet_care_harmony/app/ios_native_dock.dart';
 import 'package:pet_care_harmony/app/pet_care_app.dart';
+import 'package:pet_care_harmony/app/pet_care_root.dart';
 import 'package:pet_care_harmony/app/theme_settings_copy.dart';
+import 'package:pet_care_harmony/state/pet_care_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _petsStorageKey = 'pets_v1';
@@ -1094,6 +1097,90 @@ void main() {
         findsNothing);
   });
 
+  testWidgets(
+      'opening add sheet from iOS dock does not throw Flutter layout exceptions',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetCareTheme(Brightness.light)
+            .copyWith(platform: TargetPlatform.iOS),
+        home: PetCareRoot(
+          iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
+            return Container(
+              key: const ValueKey('fake_ios_native_dock'),
+              height: 84,
+              color: Colors.black12,
+              child: Row(
+                children: [
+                  IconButton(
+                    key: const ValueKey('fake_ios_add_button_for_sheet_test'),
+                    onPressed: onAddTap,
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('fake_ios_add_button_for_sheet_test')));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('add_sheet_shell')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'compact add sheet action grid fits within sheet bounds on iPhone-sized iOS screens',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetCareTheme(Brightness.light)
+            .copyWith(platform: TargetPlatform.iOS),
+        home: PetCareRoot(
+          iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
+            return Container(
+              key: const ValueKey('fake_ios_native_dock'),
+              height: 84,
+              color: Colors.black12,
+              child: Row(
+                children: [
+                  IconButton(
+                    key: const ValueKey('fake_ios_add_button_for_layout_test'),
+                    onPressed: onAddTap,
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('fake_ios_add_button_for_layout_test')));
+    await tester.pumpAndSettle();
+
+    final shellRect = tester.getRect(find.byKey(const ValueKey('add_sheet_shell')));
+    final lastActionCardRect = tester.getRect(find.text('新增爱宠'));
+
+    expect(shellRect.height, greaterThanOrEqualTo(448));
+    expect(lastActionCardRect.bottom, lessThanOrEqualTo(shellRect.bottom - 8));
+  });
+
   testWidgets('expanded todo form save closes the sheet', (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1256,6 +1343,84 @@ void main() {
 
     expect(find.byType(BackdropFilter), findsOneWidget);
     expect(find.byKey(const ValueKey('bottom_nav_blur')), findsOneWidget);
+  });
+
+  testWidgets('uses iOS native dock host without Flutter dock chrome on iOS',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetCareTheme(Brightness.light)
+            .copyWith(platform: TargetPlatform.iOS),
+        home: PetCareRoot(
+          iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
+            return Container(
+              key: const ValueKey('fake_ios_native_dock'),
+              height: 84,
+              color: Colors.black12,
+              child: Row(
+                children: [
+                  Text('selected:${selectedTab.name}'),
+                  IconButton(
+                    key: const ValueKey('fake_ios_tab_pets'),
+                    onPressed: () => onTabSelected(AppTab.pets),
+                    icon: const Icon(Icons.pets_rounded),
+                  ),
+                  IconButton(
+                    key: const ValueKey('fake_ios_add'),
+                    onPressed: onAddTap,
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('fake_ios_native_dock')), findsOneWidget);
+    expect(find.byKey(const ValueKey('bottom_nav_panel')), findsNothing);
+    expect(find.byKey(const ValueKey('dock_add_button')), findsNothing);
+    expect(find.text('selected:checklist'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('fake_ios_tab_pets')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('selected:pets'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('fake_ios_add')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('add_sheet_shell')), findsOneWidget);
+  });
+
+  testWidgets('gives the iOS native dock enough height for a floating layout',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          bottomNavigationBar: IosNativeDockHost(
+            selectedTab: AppTab.checklist,
+            onTabSelected: _noopTabSelection,
+            onAddTap: _noop,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final dockSize =
+        tester.getSize(find.byKey(const ValueKey('ios_native_dock_host')));
+    expect(dockSize.height, greaterThanOrEqualTo(138));
+
+    final platformView = tester.widget<UiKitView>(find.byType(UiKitView));
+    final creationParams =
+        platformView.creationParams! as Map<Object?, Object?>;
+    expect(creationParams['brightness'], 'light');
+    expect(creationParams['centerSymbolSize'], 42.0);
+    expect(creationParams['centerSymbolCanvasOffset'], 8.0);
   });
 
   testWidgets('uses the warm pet orange theme for primary actions',
@@ -1596,3 +1761,7 @@ Map<String, Object> _persistedSinglePetPreferences() {
     ]),
   };
 }
+
+void _noop() {}
+
+void _noopTabSelection(AppTab _) {}
