@@ -23,6 +23,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
   static const _launchPawStartColor = Color(0xFFB8BEC8);
   static const _launchPawStartSize = 208.0;
   static const _launchPawEndSize = 112.0;
+  static const _sharedIndicatorColor = Color(0xFFF2A65A);
   static const _pageHorizontalPadding = 20.0;
   static const _pageContentRevealDuration = Duration(milliseconds: 680);
   static const _privacyLockAnimationDuration =
@@ -65,6 +66,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
       subtitle: '把毛孩子的日常照顾、重要提醒和成长记录，放进一个更省心的小空间里。',
       icon: Icons.pets_rounded,
       accentColor: Color(0xFFF2A65A),
+      heroAccentColor: Color(0xFFF2A65A),
       values: [
         _IntroValueData(title: '提醒更清楚'),
         _IntroValueData(title: '记录更集中'),
@@ -76,33 +78,35 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
       subtitle: '从待办提醒到资料记录，宠伴会把重要的照护信息收在顺手的位置。',
       icon: Icons.auto_awesome_rounded,
       accentColor: Color(0xFFD9822B),
+      heroAccentColor: Color(0xFF8D63D2),
       listStyle: _IntroListStyle.cards,
       values: [
         _IntroValueData(
           title: '日常提醒更清楚',
           subtitle: '喂养、驱虫、洗护、复查都能安排得更稳当。',
           icon: Icons.checklist_rounded,
-          iconColor: Color(0xFF335FCA),
+          iconColor: Color(0xFFF2C94C),
         ),
         _IntroValueData(
           title: '宠物信息更集中',
           subtitle: '基础资料、喂养偏好和过敏禁忌等一站式管理。',
           icon: Icons.description_rounded,
-          iconColor: Color(0xFF4A8C5B),
+          iconColor: Color(0xFF335FCA),
         ),
         _IntroValueData(
-          title: '爱宠照顾更加省心',
-          subtitle: '通过总览模块，辅助你更好地照护小宝。',
+          title: '爱宠照顾更省心',
+          subtitle: '通过总览模块，辅助你更好地照护毛孩子。',
           icon: Icons.favorite_rounded,
           iconColor: Color(0xFFE88FB0),
         ),
       ],
     ),
     _IntroPageData(
-      title: '先认识一下你的小宝吧',
-      subtitle: '添加爱宠信息才能够更好地照顾你的小宝~',
+      title: '先认识一下你的毛孩子吧',
+      subtitle: '添加爱宠信息才能够更好地照顾你的毛孩子~',
       icon: Icons.pets_rounded,
       accentColor: Color(0xFF90CE9B),
+      heroAccentColor: Color(0xFF90CE9B),
       values: [
         _IntroValueData(
           title: '你的隐私安全我们始终第一',
@@ -113,7 +117,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
           leadingStyle: _IntroValueLeadingStyle.animatedPrivacyLock,
         ),
         _IntroValueData(
-          title: '即使是 AI 总结也不会泄露',
+          title: '除了AI谁都看不到你的数据',
           leadingStyle: _IntroValueLeadingStyle.animatedPrivacyLock,
         ),
       ],
@@ -194,22 +198,40 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
                   builder: (context, constraints) {
                     return Stack(
                       children: [
-                        PageView(
-                          key: const ValueKey('first_launch_intro_page_view'),
-                          controller: _pageController,
-                          physics: _showLaunchPaw
-                              ? const NeverScrollableScrollPhysics()
-                              : null,
-                          onPageChanged: _handlePageChanged,
-                          children: List.generate(_pages.length, (index) {
-                            final item = _pages[index];
-                            return _IntroPage(
-                              key: ValueKey('intro_page_$index'),
-                              index: index,
-                              data: item,
-                              isRevealed: _revealedPages.contains(index),
-                            );
-                          }),
+                        Column(
+                          children: [
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              height: _launchPawEndSize,
+                              child: _showLaunchPaw
+                                  ? const SizedBox.shrink()
+                                  : Center(
+                                      child: _buildFixedHero(page),
+                                    ),
+                            ),
+                            const SizedBox(height: 22),
+                            Expanded(
+                              child: PageView(
+                                key: const ValueKey(
+                                  'first_launch_intro_page_view',
+                                ),
+                                controller: _pageController,
+                                physics: _showLaunchPaw
+                                    ? const NeverScrollableScrollPhysics()
+                                    : null,
+                                onPageChanged: _handlePageChanged,
+                                children: List.generate(_pages.length, (index) {
+                                  final item = _pages[index];
+                                  return _IntroPage(
+                                    key: ValueKey('intro_page_$index'),
+                                    index: index,
+                                    data: item,
+                                    isRevealed: _revealedPages.contains(index),
+                                  );
+                                }),
+                              ),
+                            ),
+                          ],
                         ),
                         if (_showLaunchPaw)
                           _LaunchPawOverlay(
@@ -283,7 +305,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
             _FooterReveal(
               key: const ValueKey('first_page_indicator_reveal'),
               progress: indicatorProgress,
-              child: _buildIndicator(page.accentColor),
+              child: _buildIndicator(_sharedIndicatorColor),
             ),
             const SizedBox(height: 18),
             _FooterReveal(
@@ -329,7 +351,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
               _FooterReveal(
                 key: const ValueKey('final_page_indicator_reveal'),
                 progress: indicatorProgress,
-                child: _buildIndicator(page.accentColor),
+                child: _buildIndicator(_sharedIndicatorColor),
               ),
               const SizedBox(height: 18),
               _FooterReveal(
@@ -350,7 +372,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
     }
     return Column(
       children: [
-        _buildIndicator(page.accentColor),
+        _buildIndicator(_sharedIndicatorColor),
         const SizedBox(height: 18),
         _buildPrimaryButton(isFinalPage),
       ],
@@ -365,6 +387,13 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
         pageIndex: _pageIndex,
         accentColor: accentColor,
       ),
+    );
+  }
+
+  Widget _buildFixedHero(_IntroPageData page) {
+    return _AnimatedIntroHero(
+      page: page,
+      pageIndex: _pageIndex,
     );
   }
 
@@ -604,27 +633,6 @@ class _IntroPageState extends State<_IntroPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 12),
-          if (widget.index == 0)
-            Center(
-              child: _IntroHeroIcon(
-                heroKey: ValueKey('intro_page_${widget.index}_hero_icon'),
-                icon: widget.data.icon,
-                accentColor: widget.data.accentColor,
-              ),
-            )
-          else
-            _buildReveal(
-              interval: const Interval(0.0, 0.34, curve: Curves.easeOutCubic),
-              child: Center(
-                child: _IntroHeroIcon(
-                  heroKey: ValueKey('intro_page_${widget.index}_hero_icon'),
-                  icon: widget.data.icon,
-                  accentColor: widget.data.accentColor,
-                ),
-              ),
-            ),
-          const SizedBox(height: 22),
           _buildReveal(
             interval: const Interval(0.12, 0.52, curve: Curves.easeOutCubic),
             child: Column(
@@ -774,6 +782,147 @@ class _IntroHeroIcon extends StatelessWidget {
   }
 }
 
+class _AnimatedIntroHero extends StatefulWidget {
+  const _AnimatedIntroHero({
+    required this.page,
+    required this.pageIndex,
+  });
+
+  final _IntroPageData page;
+  final int pageIndex;
+
+  @override
+  State<_AnimatedIntroHero> createState() => _AnimatedIntroHeroState();
+}
+
+class _AnimatedIntroHeroState extends State<_AnimatedIntroHero>
+    with SingleTickerProviderStateMixin {
+  static const _transitionDuration = Duration(milliseconds: 400);
+
+  late final AnimationController _controller;
+  late _IntroPageData _displayedPage;
+  late int _displayedPageIndex;
+  _IntroPageData? _nextPage;
+  int? _nextPageIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayedPage = widget.page;
+    _displayedPageIndex = widget.pageIndex;
+    _controller = AnimationController(
+      vsync: this,
+      duration: _transitionDuration,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedIntroHero oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pageIndex == _displayedPageIndex) {
+      _cancelPendingTransition();
+      return;
+    }
+    if (widget.pageIndex == _nextPageIndex) {
+      return;
+    }
+    _nextPage = widget.page;
+    _nextPageIndex = widget.pageIndex;
+    _controller.forward(from: 0);
+  }
+
+  void _cancelPendingTransition() {
+    _nextPage = null;
+    _nextPageIndex = null;
+    if (_controller.isAnimating || _controller.value != 0) {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      key: const ValueKey('intro_fixed_hero_host'),
+      width: _PetFirstLaunchIntroState._launchPawEndSize,
+      height: _PetFirstLaunchIntroState._launchPawEndSize,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final progress = _controller.value.clamp(0.0, 1.0);
+          if (_nextPage != null && progress >= 0.42) {
+            _displayedPage = _nextPage!;
+            _displayedPageIndex = _nextPageIndex!;
+            _nextPage = null;
+            _nextPageIndex = null;
+          }
+          return Transform.scale(
+            scale: _scaleFor(progress),
+            child: Opacity(
+              opacity: _opacityFor(progress),
+              child: _IntroHeroIcon(
+                heroKey: ValueKey('intro_page_${_displayedPageIndex}_hero_icon'),
+                icon: _displayedPage.icon,
+                accentColor: _displayedPage.heroAccentColor,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  double _scaleFor(double value) {
+    final elapsedMs = _transitionDuration.inMilliseconds * value;
+    if (elapsedMs < 96) {
+      return lerpDouble(
+        1.0,
+        1.12,
+        _segmentValue(elapsedMs, 0, 96, Curves.linear),
+      )!;
+    }
+    if (elapsedMs < 176) {
+      return lerpDouble(
+        1.12,
+        0.72,
+        _segmentValue(elapsedMs, 96, 176, Curves.easeInQuart),
+      )!;
+    }
+    return lerpDouble(
+      0.72,
+      1.0,
+      _segmentValue(elapsedMs, 176, 400, Curves.easeOutQuart),
+    )!;
+  }
+
+  double _opacityFor(double value) {
+    final elapsedMs = _transitionDuration.inMilliseconds * value;
+    if (elapsedMs < 96) {
+      return lerpDouble(
+        1.0,
+        0.96,
+        _segmentValue(elapsedMs, 0, 96, Curves.easeOutCubic),
+      )!;
+    }
+    return lerpDouble(
+      0.96,
+      1.0,
+      _segmentValue(elapsedMs, 96, 400, Curves.easeOutCubic),
+    )!;
+  }
+
+  double _segmentValue(num value, num start, num end, Curve curve) {
+    final segment = (((value - start) / (end - start)).toDouble()).clamp(0.0, 1.0);
+    return curve.transform(segment);
+  }
+}
+
 class _IntroValueRow extends StatelessWidget {
   const _IntroValueRow({
     required this.data,
@@ -920,31 +1069,31 @@ class _AnimatedPrivacyLockIconState extends State<_AnimatedPrivacyLockIcon>
     final elapsedMs =
         _PetFirstLaunchIntroState._privacyLockAnimationDuration.inMilliseconds *
             value;
-    if (elapsedMs < 360) {
+    if (elapsedMs < 300) {
       return lerpDouble(
         1.0,
         1.38,
-        _segmentValue(elapsedMs, 0, 360, Curves.linear),
+        _segmentValue(elapsedMs, 0, 300, Curves.linear),
       )!;
     }
-    if (elapsedMs < 560) {
+    if (elapsedMs < 460) {
       return lerpDouble(
         1.38,
         1.5,
-        _segmentValue(elapsedMs, 360, 560, Curves.linear),
+        _segmentValue(elapsedMs, 300, 460, Curves.linear),
       )!;
     }
-    if (elapsedMs < 1000) {
+    if (elapsedMs < 900) {
       return lerpDouble(
         1.5,
         0.6,
-        _segmentValue(elapsedMs, 560, 1000, Curves.easeInQuart),
+        _segmentValue(elapsedMs, 460, 900, Curves.easeInQuart),
       )!;
     }
     return lerpDouble(
       0.6,
       1.0,
-      _segmentValue(elapsedMs, 1000, 1220, Curves.easeOutQuart),
+      _segmentValue(elapsedMs, 900, 1120, Curves.easeOutQuart),
     )!;
   }
 
@@ -1055,6 +1204,7 @@ class _IntroPageData {
     required this.subtitle,
     required this.icon,
     required this.accentColor,
+    required this.heroAccentColor,
     this.values = const [],
     this.listStyle = _IntroListStyle.checks,
   });
@@ -1063,6 +1213,7 @@ class _IntroPageData {
   final String subtitle;
   final IconData icon;
   final Color accentColor;
+  final Color heroAccentColor;
   final List<_IntroValueData> values;
   final _IntroListStyle listStyle;
 }

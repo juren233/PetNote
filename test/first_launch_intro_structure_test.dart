@@ -9,7 +9,7 @@ void main() {
 
     expect(source.contains('欢迎来到宠伴'), isTrue);
     expect(source.contains('照顾它的每一天，都能更从容一点'), isTrue);
-    expect(source.contains('先认识一下你的小宝吧'), isTrue);
+    expect(source.contains('先认识一下你的毛孩子吧'), isTrue);
     expect(source.contains('那我们开始吧'), isTrue);
     expect(source.contains('先看看宠伴'), isTrue);
     expect(source.contains('Icons.pets_rounded'), isTrue);
@@ -51,15 +51,15 @@ void main() {
     expect(source.contains('Curves.easeInQuart'), isTrue);
     expect(source.contains('Curves.easeOutQuart'), isTrue);
     expect(
-      source.contains('_segmentValue(elapsedMs, 0, 360, Curves.linear)'),
+      source.contains('_segmentValue(elapsedMs, 0, 300, Curves.linear)'),
       isTrue,
     );
     expect(
-      source.contains('_segmentValue(elapsedMs, 360, 560, Curves.linear)'),
+      source.contains('_segmentValue(elapsedMs, 300, 460, Curves.linear)'),
       isTrue,
     );
     expect(
-      source.contains('1000,'),
+      source.contains('900,'),
       isTrue,
     );
     expect(
@@ -67,7 +67,7 @@ void main() {
       isTrue,
     );
     expect(
-      source.contains('_segmentValue(elapsedMs, 1000, 1220, Curves.easeOutQuart)'),
+      source.contains('_segmentValue(elapsedMs, 900, 1120, Curves.easeOutQuart)'),
       isTrue,
     );
     expect(source.contains('1.38,'), isTrue);

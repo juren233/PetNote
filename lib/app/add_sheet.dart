@@ -132,7 +132,7 @@ class _AddActionSheetState extends State<AddActionSheet> {
                 const SizedBox(height: 6),
                 Text(
                   _action == AddAction.none
-                      ? '今天要给小宝加点什么新内容？'
+                      ? '今天要给毛孩子加点什么新内容？'
                       : '保存后会自动跳转详情页面。',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: tokens.secondaryText,

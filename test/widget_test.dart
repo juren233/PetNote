@@ -244,6 +244,163 @@ void main() {
     expect(find.byKey(const ValueKey('intro_page_1_content')), findsOneWidget);
   });
 
+  testWidgets(
+      'hero icons can differ from a shared indicator color across intro pages',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    expect(
+      _selectedIndicatorColor(tester),
+      const Color(0xFFF2A65A),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _iconColorByKey(tester, const ValueKey('intro_page_1_hero_icon')),
+      const Color(0xFF8D63D2),
+    );
+    expect(
+      _selectedIndicatorColor(tester),
+      const Color(0xFFF2A65A),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _iconColorByKey(tester, const ValueKey('intro_page_2_hero_icon')),
+      const Color(0xFF90CE9B),
+    );
+    expect(
+      _selectedIndicatorColor(tester),
+      const Color(0xFFF2A65A),
+    );
+  });
+
+  testWidgets('second page checklist and file icons use the updated colors',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.checklist_rounded)).color,
+      const Color(0xFFF2C94C),
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.description_rounded)).color,
+      const Color(0xFF335FCA),
+    );
+  });
+
+  testWidgets('intro hero icon stays anchored while switching pages',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('intro_fixed_hero_host')), findsOneWidget);
+    expect(find.byKey(const ValueKey('intro_page_0_hero_icon')), findsOneWidget);
+
+    final before = tester.getCenter(
+      find.byKey(const ValueKey('intro_fixed_hero_host')),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    final during = tester.getCenter(
+      find.byKey(const ValueKey('intro_fixed_hero_host')),
+    );
+    expect(during.dx, closeTo(before.dx, 0.5));
+    expect(during.dy, closeTo(before.dy, 0.5));
+    expect(_introHeroIconFinder(), findsOneWidget);
+
+    await tester.pumpAndSettle();
+
+    final after = tester.getCenter(
+      find.byKey(const ValueKey('intro_fixed_hero_host')),
+    );
+    expect(after.dx, closeTo(before.dx, 0.5));
+    expect(after.dy, closeTo(before.dy, 0.5));
+    expect(find.byKey(const ValueKey('intro_page_1_hero_icon')), findsOneWidget);
+    expect(_introHeroIconFinder(), findsOneWidget);
+  });
+
+  testWidgets('intro hero switch shows a visible rebound dip before settling',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 280));
+
+    var sawDip = false;
+    for (var i = 0; i < 18; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+      if (_fixedHeroScale(tester) < 0.9) {
+        sawDip = true;
+        break;
+      }
+    }
+
+    expect(sawDip, isTrue);
+
+    var settledHigh = false;
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+      if (_fixedHeroScale(tester) > 0.96) {
+        settledHigh = true;
+        break;
+      }
+    }
+
+    expect(settledHigh, isTrue);
+  });
+
+  testWidgets('intro hero stays matched when quickly returning to the previous page',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 280));
+
+    expect(find.byKey(const ValueKey('intro_page_1_content')), findsOneWidget);
+    expect(find.byKey(const ValueKey('intro_page_0_hero_icon')), findsOneWidget);
+
+    await tester.fling(
+      find.byKey(const ValueKey('first_launch_intro_page_view')),
+      const Offset(500, 0),
+      1000,
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('intro_page_0_content')), findsOneWidget);
+    expect(find.byKey(const ValueKey('intro_page_0_hero_icon')), findsOneWidget);
+    expect(find.byKey(const ValueKey('intro_page_1_hero_icon')), findsNothing);
+  });
+
   testWidgets('intro overlay does not add outer horizontal padding',
       (tester) async {
     await tester.pumpWidget(const PetCareApp());
@@ -449,6 +606,40 @@ void main() {
     expect(
       _iconDataByKey(tester, const ValueKey('privacy_lock_0')),
       CupertinoIcons.lock_fill,
+    );
+  });
+
+  testWidgets('final page privacy lock reaches its enlarged state a bit sooner',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 280));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(
+      find.byKey(const ValueKey('first_launch_intro_continue_button')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 280));
+    await tester.pump(const Duration(milliseconds: 80));
+
+    while (find.byKey(const ValueKey('privacy_lock_0_scale'))
+        .evaluate()
+        .isEmpty) {
+      await tester.pump(const Duration(milliseconds: 40));
+    }
+
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(
+      _scaleByKey(tester, const ValueKey('privacy_lock_0_scale')),
+      greaterThan(1.45),
     );
   });
 
@@ -1201,7 +1392,7 @@ void main() {
     final title = tester.widget<Text>(find.text('新增内容'));
     expect(title.style?.color, darkPetCareTokens.primaryText);
 
-    final subtitle = tester.widget<Text>(find.text('今天要给小宝加点什么新内容？'));
+    final subtitle = tester.widget<Text>(find.text('今天要给毛孩子加点什么新内容？'));
     expect(subtitle.style?.color, darkPetCareTokens.secondaryText);
 
     final cardTitle = tester.widget<Text>(find.text('新增待办'));
@@ -1311,6 +1502,56 @@ double _revealOpacity(WidgetTester tester, ValueKey<String> key) {
     opacityFinder.first,
   );
   return opacity.opacity;
+}
+
+double _scaleByKey(WidgetTester tester, ValueKey<String> key) {
+  final transform = tester.widget<Transform>(find.byKey(key));
+  return transform.transform.storage[0];
+}
+
+Color? _iconColorByKey(WidgetTester tester, ValueKey<String> key) {
+  return tester.widget<Icon>(
+    find.descendant(
+      of: find.byKey(key),
+      matching: find.byType(Icon),
+    ),
+  ).color;
+}
+
+Color? _selectedIndicatorColor(WidgetTester tester) {
+  final indicatorFinder = find.descendant(
+    of: find.byKey(const ValueKey('first_launch_intro_indicator')),
+    matching: find.byType(AnimatedContainer),
+  );
+  for (var index = 0; index < indicatorFinder.evaluate().length; index++) {
+    final finder = indicatorFinder.at(index);
+    if (tester.getSize(finder).width > 16) {
+      final selected = tester.widget<AnimatedContainer>(finder);
+      final decoration = selected.decoration! as BoxDecoration;
+      return decoration.color;
+    }
+  }
+  return null;
+}
+
+Finder _introHeroIconFinder() {
+  return find.byWidgetPredicate(
+    (widget) =>
+        widget is Container &&
+        widget.key is ValueKey<String> &&
+        (widget.key as ValueKey<String>).value.startsWith('intro_page_') &&
+        (widget.key as ValueKey<String>).value.endsWith('_hero_icon'),
+  );
+}
+
+double _fixedHeroScale(WidgetTester tester) {
+  final transform = tester.widget<Transform>(
+    find.descendant(
+      of: find.byKey(const ValueKey('intro_fixed_hero_host')),
+      matching: find.byType(Transform),
+    ).first,
+  );
+  return transform.transform.storage[0];
 }
 
 IconData _iconDataByKey(WidgetTester tester, ValueKey<String> key) {

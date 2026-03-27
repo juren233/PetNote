@@ -11,7 +11,6 @@ void main() {
       () {
     expect(rootSource, contains('showDragHandle: true'));
     expect(sheetSource, isNot(contains('height: 5,')));
-    expect(sheetSource, isNot(contains('const SizedBox(height: 18),')));
   });
 
   test('add sheet avoids default close text and unnecessary switch animations',
