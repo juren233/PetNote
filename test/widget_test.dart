@@ -8,6 +8,8 @@ import 'package:pet_care_harmony/app/app_theme.dart';
 import 'package:pet_care_harmony/app/common_widgets.dart';
 import 'package:pet_care_harmony/app/ios_native_dock.dart';
 import 'package:pet_care_harmony/app/pet_care_app.dart';
+import 'package:pet_care_harmony/app/pet_care_pages.dart';
+import 'package:pet_care_harmony/app/pet_onboarding_overlay.dart';
 import 'package:pet_care_harmony/app/pet_care_root.dart';
 import 'package:pet_care_harmony/app/theme_settings_copy.dart';
 import 'package:pet_care_harmony/state/pet_care_store.dart';
@@ -37,6 +39,156 @@ void main() {
       find.byKey(const ValueKey('first_launch_intro_primary_button')),
       findsNothing,
     );
+  });
+
+  testWidgets('checklist card uses readable Chinese action labels and separators',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetCareTheme(Brightness.light),
+        home: Scaffold(
+          body: ChecklistCard(
+            item: ChecklistItemViewModel(
+              id: 'reminder-1',
+              sourceType: 'reminder',
+              petId: 'pet-1',
+              petName: 'Luna',
+              petAvatarText: 'LU',
+              title: '体内驱虫',
+              dueLabel: '03/27 18:00',
+              statusLabel: '已逾期',
+              kindLabel: '提醒',
+              note: '晚饭后服用。',
+            ),
+            onComplete: () {},
+            onPostpone: () {},
+            onSkip: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('完成'), findsOneWidget);
+    expect(find.text('延后'), findsOneWidget);
+    expect(find.text('跳过'), findsOneWidget);
+    expect(find.text('Luna · 提醒 · 03/27 18:00'), findsOneWidget);
+  });
+
+  testWidgets('checklist page shows postponed and skipped segments',
+      (tester) async {
+    final store = PetCareStore.seeded();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetCareTheme(Brightness.light),
+        home: Scaffold(
+          body: ChecklistPage(
+            store: store,
+            activeSectionKey: 'today',
+            highlightedChecklistItemKey: null,
+            onSectionChanged: (_) {},
+            onAddFirstPet: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('已延后'), findsOneWidget);
+    expect(find.textContaining('已跳过'), findsOneWidget);
+  });
+
+  testWidgets(
+      'first launch onboarding flow does not show the return-to-actions button',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetCareTheme(Brightness.light),
+        home: Scaffold(
+          body: PetOnboardingFlow(
+            onSubmit: (_) async {},
+            onDefer: () async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('onboarding_return_to_actions_button')),
+        findsNothing);
+  });
+
+
+  testWidgets('intro-entered onboarding shows a back button that returns to intro',
+      (tester) async {
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await _enterOnboardingFromIntro(tester);
+
+    expect(find.byKey(const ValueKey('onboarding_return_to_intro_button')),
+        findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('onboarding_return_to_intro_button')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('first_launch_intro_overlay')), findsOneWidget);
+    expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')), findsNothing);
+  });
+
+  testWidgets('todo and reminder cards use distinct primary action colors',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetCareTheme(Brightness.light),
+        home: Scaffold(
+          body: Column(
+            children: [
+              ChecklistCard(
+                item: ChecklistItemViewModel(
+                  id: 'todo-1',
+                  sourceType: 'todo',
+                  petId: 'pet-1',
+                  petName: 'Luna',
+                  petAvatarText: 'LU',
+                  title: '补货主粮',
+                  dueLabel: '03/27 18:00',
+                  statusLabel: '待处理',
+                  kindLabel: '待办',
+                  note: '',
+                ),
+                onComplete: () {},
+                onPostpone: () {},
+                onSkip: () {},
+              ),
+              ChecklistCard(
+                item: ChecklistItemViewModel(
+                  id: 'reminder-1',
+                  sourceType: 'reminder',
+                  petId: 'pet-1',
+                  petName: 'Luna',
+                  petAvatarText: 'LU',
+                  title: '体内驱虫',
+                  dueLabel: '03/27 18:00',
+                  statusLabel: '待提醒',
+                  kindLabel: '提醒',
+                  note: '',
+                ),
+                onComplete: () {},
+                onPostpone: () {},
+                onSkip: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final buttons = tester.widgetList<FilledButton>(find.byType(FilledButton)).toList();
+    expect(buttons, hasLength(2));
+    expect(buttons[0].style?.backgroundColor?.resolve({}), isNot(equals(buttons[1].style?.backgroundColor?.resolve({}))));
   });
 
   testWidgets('intro keeps a single paw during launch without a handoff icon',
@@ -715,6 +867,9 @@ void main() {
     final overlayRect = tester.getRect(
       find.byKey(const ValueKey('first_launch_onboarding_overlay')),
     );
+    final progressFrameRect = tester.getRect(
+      find.byKey(const ValueKey('onboarding_progress_frame')),
+    );
     final progressRect = tester.getRect(
       find.byKey(const ValueKey('onboarding_progress_bar')),
     );
@@ -727,16 +882,28 @@ void main() {
 
     expect(find.text('2 / 9'), findsNothing);
     expect(
-      (progressRect.center.dx - overlayRect.center.dx).abs(),
+      (progressFrameRect.center.dx - overlayRect.center.dx).abs(),
       lessThanOrEqualTo(4),
     );
-    expect(progressRect.width, closeTo(middleWidth * 0.8, 2));
+    expect(progressFrameRect.width, closeTo(middleWidth * 0.8, 2));
+    expect(progressFrameRect.height, greaterThan(progressRect.height));
+    expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(
-      (progressRect.center.dy - backRect.center.dy).abs(),
+      find.byKey(const ValueKey('onboarding_progress_bar_paint')),
+      findsOneWidget,
+    );
+    final progressFrame = tester.widget<DecoratedBox>(
+      find.byKey(const ValueKey('onboarding_progress_frame')),
+    );
+    final progressDecoration = progressFrame.decoration as BoxDecoration;
+    expect(progressDecoration.border, isNotNull);
+    expect(progressDecoration.border!.top.width, greaterThanOrEqualTo(2));
+    expect(
+      (progressFrameRect.center.dy - backRect.center.dy).abs(),
       lessThanOrEqualTo(2),
     );
     expect(
-      (progressRect.center.dy - deferRect.center.dy).abs(),
+      (progressFrameRect.center.dy - deferRect.center.dy).abs(),
       lessThanOrEqualTo(2),
     );
   });
@@ -1202,7 +1369,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('add_sheet_shell')), findsNothing);
-    expect(find.text('今天 0 项待处理'), findsOneWidget);
+    expect(find.text('补货主粮'), findsOneWidget);
   });
 
   testWidgets(
@@ -1230,6 +1397,107 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     }
+  });
+
+  testWidgets('expanded todo form time field opens a picker flow',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增待办'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('todo_due_at_field')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CalendarDatePicker), findsOneWidget);
+  });
+
+  testWidgets('expanded reminder form uses cupertino picker flow on iOS',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetCareTheme(Brightness.dark)
+            .copyWith(platform: TargetPlatform.iOS),
+        home: PetCareRoot(
+          iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
+            return Container(
+              height: 84,
+              color: Colors.black12,
+              child: Row(
+                children: [
+                  IconButton(
+                    key: const ValueKey('fake_ios_add_button_for_cupertino_picker'),
+                    onPressed: onAddTap,
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('fake_ios_add_button_for_cupertino_picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增提醒'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('reminder_scheduled_date_field')),
+    );
+    await tester.tap(find.byKey(const ValueKey('reminder_scheduled_date_field')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CupertinoDatePicker), findsOneWidget);
+  });
+
+  testWidgets('expanded reminder form save button stays above the sheet bottom',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetCareTheme(Brightness.dark)
+            .copyWith(platform: TargetPlatform.iOS),
+        home: PetCareRoot(
+          iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
+            return Container(
+              height: 84,
+              color: Colors.black12,
+              child: Row(
+                children: [
+                  IconButton(
+                    key: const ValueKey('fake_ios_add_button_for_expanded_layout'),
+                    onPressed: onAddTap,
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('fake_ios_add_button_for_expanded_layout')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增提醒'));
+    await tester.pumpAndSettle();
+
+    final shellRect = tester.getRect(find.byKey(const ValueKey('add_sheet_shell')));
+    final saveRect = tester.getRect(find.widgetWithText(FilledButton, '保存提醒'));
+
+    expect(saveRect.bottom, lessThanOrEqualTo(shellRect.bottom - 8));
   });
 
   testWidgets('dock add pet onboarding keeps the original sheet corner radius',
@@ -1264,7 +1532,7 @@ void main() {
   });
 
   testWidgets(
-      'dock add pet transition clears the action grid before onboarding settles',
+      'dock add pet onboarding shows a top-left back button and returns to actions',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(const PetCareApp());
@@ -1273,13 +1541,56 @@ void main() {
     await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
     await tester.tap(find.text('新增爱宠'));
-    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pumpAndSettle();
 
-    expect(find.text('新增待办'), findsNothing);
-    expect(find.text('新增提醒'), findsNothing);
+    expect(find.byKey(const ValueKey('onboarding_return_to_actions_button')),
+        findsOneWidget);
+
+    await tester.tap(
+        find.byKey(const ValueKey('onboarding_return_to_actions_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('新增内容'), findsOneWidget);
+    expect(find.text('新增爱宠'), findsOneWidget);
+  });
+
+  testWidgets(
+      'dock add pet transition keeps the action grid in a push-back background while onboarding settles',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增爱宠'));
+    await tester.pump(const Duration(milliseconds: 90));
+
+    expect(find.byKey(const ValueKey('add_sheet_push_back_layer')),
+        findsOneWidget);
+    expect(find.text('新增待办'), findsOneWidget);
     expect(find.byKey(const ValueKey('manual_onboarding_sheet_transition')),
         findsOneWidget);
     expect(find.text('先认识一下'), findsOneWidget);
+  });
+
+  testWidgets(
+      'expanded reminder transition does not leave a blur layer behind the foreground sheet',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增提醒'));
+    await tester.pump(const Duration(milliseconds: 180));
+
+    expect(find.text('保存提醒'), findsOneWidget);
+    expect(find.byKey(const ValueKey('add_sheet_foreground_surface')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('add_sheet_push_back_layer')),
+        findsNothing);
   });
 
   testWidgets(
@@ -1562,6 +1873,49 @@ void main() {
 
     final cardTitle = tester.widget<Text>(find.text('新增待办'));
     expect(cardTitle.style?.color, darkPetCareTokens.primaryText);
+  });
+
+  testWidgets('notification action buttons share the same pill layout',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('tab_me')));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('请求通知权限'), 160);
+    await tester.pumpAndSettle();
+
+    final requestFinder = find.ancestor(
+      of: find.text('请求通知权限'),
+      matching: find.byType(FilledButton),
+    );
+    final settingsFinder = find.ancestor(
+      of: find.text('打开系统设置'),
+      matching: find.byType(OutlinedButton),
+    );
+
+    expect(requestFinder, findsOneWidget);
+    expect(settingsFinder, findsOneWidget);
+
+    final requestSize = tester.getSize(requestFinder);
+    final settingsSize = tester.getSize(settingsFinder);
+    expect(requestSize.height, closeTo(settingsSize.height, 0.1));
+
+    final requestStyle =
+        tester.widget<FilledButton>(requestFinder).style!;
+    final settingsStyle =
+        tester.widget<OutlinedButton>(settingsFinder).style!;
+
+    final requestShape =
+        requestStyle.shape!.resolve({})! as RoundedRectangleBorder;
+    final settingsShape =
+        settingsStyle.shape!.resolve({})! as RoundedRectangleBorder;
+
+    expect(requestShape.borderRadius, settingsShape.borderRadius);
+    expect(requestShape.borderRadius,
+        BorderRadius.circular(999));
   });
 
   testWidgets('adapts first-launch intro surfaces to dark mode',

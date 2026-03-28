@@ -10,12 +10,14 @@ class ChecklistPage extends StatelessWidget {
     super.key,
     required this.store,
     required this.activeSectionKey,
+    required this.highlightedChecklistItemKey,
     required this.onSectionChanged,
     required this.onAddFirstPet,
   });
 
   final PetCareStore store;
   final String activeSectionKey;
+  final String? highlightedChecklistItemKey;
   final ValueChanged<String> onSectionChanged;
   final VoidCallback onAddFirstPet;
 
@@ -51,9 +53,11 @@ class ChecklistPage extends StatelessWidget {
       (item) => item.key == activeSectionKey,
       orElse: () => sections.first,
     );
-    final today = sections[0];
-    final upcoming = sections[1];
-    final overdue = sections[2];
+    final today = _sectionByKey(sections, 'today');
+    final upcoming = _sectionByKey(sections, 'upcoming');
+    final overdue = _sectionByKey(sections, 'overdue');
+    final postponed = _sectionByKey(sections, 'postponed');
+    final skipped = _sectionByKey(sections, 'skipped');
 
     return ListView(
       padding: pagePadding,
@@ -93,6 +97,8 @@ class ChecklistPage extends StatelessWidget {
             SegmentItem(key: 'today', label: '今日 ${today.summary}'),
             SegmentItem(key: 'upcoming', label: '即将到期 ${upcoming.summary}'),
             SegmentItem(key: 'overdue', label: '已逾期 ${overdue.summary}'),
+            SegmentItem(key: 'postponed', label: '已延后 ${postponed.summary}'),
+            SegmentItem(key: 'skipped', label: '已跳过 ${skipped.summary}'),
           ],
           selectedKey: activeSectionKey,
           onChanged: onSectionChanged,
@@ -106,7 +112,10 @@ class ChecklistPage extends StatelessWidget {
         else
           ...section.items.map(
             (item) => ChecklistCard(
+              key: ValueKey('checklist_card_${item.sourceType}-${item.id}'),
               item: item,
+              highlighted:
+                  highlightedChecklistItemKey == '${item.sourceType}:${item.id}',
               onComplete: () =>
                   store.markChecklistDone(item.sourceType, item.id),
               onPostpone: () =>
@@ -117,6 +126,21 @@ class ChecklistPage extends StatelessWidget {
       ],
     );
   }
+}
+
+ChecklistSection _sectionByKey(
+  List<ChecklistSection> sections,
+  String key,
+) {
+  return sections.firstWhere(
+    (section) => section.key == key,
+    orElse: () => ChecklistSection(
+      key: key,
+      title: '',
+      summary: '0 项',
+      items: const [],
+    ),
+  );
 }
 
 class OverviewPage extends StatelessWidget {
@@ -385,16 +409,16 @@ class PetsPage extends StatelessWidget {
                           width: 42,
                           height: 42,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEAF0FF),
+                            color: const Color(0xFFFFF1DD),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Icon(Icons.notifications_active_rounded,
-                              color: Color(0xFF5B8CFF)),
+                              color: Color(0xFFF2A65A)),
                         ),
                         trailing: HyperBadge(
                           text: _reminderKindLabel(item.kind),
-                          foreground: const Color(0xFF335FCA),
-                          background: const Color(0xFFEAF0FF),
+                          foreground: const Color(0xFFC57A14),
+                          background: const Color(0xFFFFF1DD),
                         ),
                       ),
                     )
@@ -422,16 +446,16 @@ class PetsPage extends StatelessWidget {
                           width: 42,
                           height: 42,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFFF3D8),
+                            color: const Color(0xFFE8F7EE),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Icon(Icons.description_rounded,
-                              color: Color(0xFF9C760A)),
+                              color: Color(0xFF4FB57C)),
                         ),
                         trailing: HyperBadge(
                           text: _recordTypeLabel(item.type),
-                          foreground: const Color(0xFF8B6B10),
-                          background: const Color(0xFFFFF3D8),
+                          foreground: const Color(0xFF2F8F5B),
+                          background: const Color(0xFFE8F7EE),
                         ),
                       ),
                     )

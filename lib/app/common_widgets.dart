@@ -438,12 +438,14 @@ class ChecklistCard extends StatelessWidget {
   const ChecklistCard({
     super.key,
     required this.item,
+    this.highlighted = false,
     required this.onComplete,
     required this.onPostpone,
     required this.onSkip,
   });
 
   final ChecklistItemViewModel item;
+  final bool highlighted;
   final VoidCallback onComplete;
   final VoidCallback onPostpone;
   final VoidCallback onSkip;
@@ -451,11 +453,15 @@ class ChecklistCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.petCareTokens;
-    final overdue = item.statusLabel == '宸查€炬湡';
-    final reminder = item.kindLabel == '鎻愰啋';
+    final overdue = item.statusLabel == '已逾期';
+    final accent = _checklistAccent(item.sourceType);
     return FrostedPanel(
+      key: highlighted ? ValueKey('highlighted_checklist_item_${item.id}') : null,
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
+      backgroundColor: highlighted
+          ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.14)
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -466,9 +472,7 @@ class ChecklistCard extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: reminder
-                      ? tokens.badgeBlueBackground
-                      : tokens.badgeGoldBackground,
+                  color: accent.background,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Center(
@@ -496,7 +500,7 @@ class ChecklistCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${item.petName} 路 ${item.kindLabel} 路 ${item.dueLabel}',
+                      '${item.petName} · ${item.kindLabel} · ${item.dueLabel}',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: tokens.secondaryText,
                             fontWeight: FontWeight.w500,
@@ -522,10 +526,10 @@ class ChecklistCard extends StatelessWidget {
                 text: item.statusLabel,
                 foreground: overdue
                     ? tokens.badgeRedForeground
-                    : tokens.badgeBlueForeground,
+                    : accent.foreground,
                 background: overdue
                     ? tokens.badgeRedBackground
-                    : tokens.badgeBlueBackground,
+                    : accent.background,
               ),
             ],
           ),
@@ -534,19 +538,29 @@ class ChecklistCard extends StatelessWidget {
             children: [
               Expanded(
                 child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: accent.buttonColor,
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: onComplete,
-                  child: const Text('瀹屾垚'),
+                  child: const Text('完成'),
                 ),
               ),
               const SizedBox(width: 10),
               TextButton(
                 onPressed: onPostpone,
-                child: const Text('寤跺悗'),
+                style: TextButton.styleFrom(
+                  foregroundColor: accent.buttonColor,
+                ),
+                child: const Text('延后'),
               ),
               const SizedBox(width: 4),
               TextButton(
                 onPressed: onSkip,
-                child: const Text('璺宠繃'),
+                style: TextButton.styleFrom(
+                  foregroundColor: accent.buttonColor,
+                ),
+                child: const Text('跳过'),
               ),
             ],
           ),
@@ -555,6 +569,33 @@ class ChecklistCard extends StatelessWidget {
     );
   }
 }
+
+class _ChecklistAccent {
+  const _ChecklistAccent({
+    required this.background,
+    required this.foreground,
+    required this.buttonColor,
+  });
+
+  final Color background;
+  final Color foreground;
+  final Color buttonColor;
+}
+
+_ChecklistAccent _checklistAccent(String sourceType) => switch (sourceType) {
+      'reminder' => const _ChecklistAccent(
+          background: Color(0xFFFFF1DD),
+          foreground: Color(0xFFC57A14),
+          buttonColor: Color(0xFFF2A65A)),
+      'record' => const _ChecklistAccent(
+          background: Color(0xFFE8F7EE),
+          foreground: Color(0xFF2F8F5B),
+          buttonColor: Color(0xFF4FB57C)),
+      _ => const _ChecklistAccent(
+          background: Color(0xFFEAF0FF),
+          foreground: Color(0xFF335FCA),
+          buttonColor: Color(0xFF4F7BFF)),
+    };
 
 class HyperBadge extends StatelessWidget {
   const HyperBadge({
@@ -729,12 +770,14 @@ class HyperTextField extends StatelessWidget {
     this.hintText,
     this.readOnly = false,
     this.maxLines = 1,
+    this.onTap,
   });
 
   final TextEditingController controller;
   final String? hintText;
   final bool readOnly;
   final int maxLines;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -742,6 +785,7 @@ class HyperTextField extends StatelessWidget {
       controller: controller,
       readOnly: readOnly,
       maxLines: maxLines,
+      onTap: onTap,
       decoration: InputDecoration(hintText: hintText),
     );
   }

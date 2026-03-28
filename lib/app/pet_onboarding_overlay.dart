@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:pet_care_harmony/app/app_theme.dart';
 import 'package:pet_care_harmony/app/common_widgets.dart';
@@ -35,10 +38,12 @@ class PetOnboardingOverlay extends StatefulWidget {
     super.key,
     required this.onSubmit,
     required this.onDefer,
+    this.onReturnToIntro,
   });
 
   final Future<void> Function(PetOnboardingResult result) onSubmit;
   final Future<void> Function() onDefer;
+  final VoidCallback? onReturnToIntro;
 
   @override
   State<PetOnboardingOverlay> createState() => _PetOnboardingOverlayState();
@@ -68,6 +73,7 @@ class _PetOnboardingOverlayState extends State<PetOnboardingOverlay> {
           child: PetOnboardingFlow(
             onSubmit: widget.onSubmit,
             onDefer: widget.onDefer,
+            onReturnToIntro: widget.onReturnToIntro,
           ),
         ),
       ),
@@ -81,11 +87,15 @@ class PetOnboardingFlow extends StatefulWidget {
     required this.onSubmit,
     required this.onDefer,
     this.embedded = false,
+    this.onReturnToActions,
+    this.onReturnToIntro,
   });
 
   final Future<void> Function(PetOnboardingResult result) onSubmit;
   final Future<void> Function() onDefer;
   final bool embedded;
+  final VoidCallback? onReturnToActions;
+  final VoidCallback? onReturnToIntro;
 
   @override
   State<PetOnboardingFlow> createState() => _PetOnboardingFlowState();
@@ -190,9 +200,7 @@ class _PetOnboardingFlowState extends State<PetOnboardingFlow> {
   Widget build(BuildContext context) {
     final insets = MediaQuery.viewPaddingOf(context);
     final step = _steps[_stepIndex];
-    final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
-    final topInset = widget.embedded ? 8.0 : insets.top + 12;
+    final topInset = widget.embedded ? 20.0 : insets.top + 12;
     final bottomInset = widget.embedded ? 8.0 : insets.bottom + 20;
 
     return SizedBox.expand(
@@ -205,19 +213,19 @@ class _PetOnboardingFlowState extends State<PetOnboardingFlow> {
             const SizedBox(height: 18),
             Text(
               step.title,
-              style: theme.textTheme.displaySmall?.copyWith(
-                color: tokens.primaryText,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1,
-              ),
+              style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                    color: context.petCareTokens.primaryText,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -1,
+                  ),
             ),
             const SizedBox(height: 8),
             Text(
               step.subtitle,
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: tokens.secondaryText,
-                fontWeight: FontWeight.w500,
-              ),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: context.petCareTokens.secondaryText,
+                    fontWeight: FontWeight.w500,
+                  ),
             ),
             const SizedBox(height: 20),
             Expanded(
@@ -263,6 +271,16 @@ class _PetOnboardingFlowState extends State<PetOnboardingFlow> {
   Widget _buildTopBar(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = context.petCareTokens;
+    final isDark = theme.brightness == Brightness.dark;
+    final progressFrameBorderColor = isDark
+        ? tokens.primaryText.withValues(alpha: 0.24)
+        : const Color(0xFFDCCDBA);
+    final progressFrameBackground = isDark
+        ? const Color(0xFF0E1014)
+        : const Color(0xFFFCF8F2);
+    final progressTrackColor = isDark
+        ? const Color(0xFF181C22)
+        : const Color(0xFFECE3D7);
     return SizedBox(
       height: 48,
       child: Row(
@@ -276,8 +294,25 @@ class _PetOnboardingFlowState extends State<PetOnboardingFlow> {
                         ? null
                         : () => setState(() => _stepIndex -= 1),
                     icon: const Icon(Icons.arrow_back_rounded),
+                    color: tokens.secondaryText,
                   )
-                : null,
+                : (widget.embedded && widget.onReturnToActions != null)
+                    ? IconButton(
+                        key: const ValueKey('onboarding_return_to_actions_button'),
+                        onPressed:
+                            _isSubmitting ? null : widget.onReturnToActions,
+                        icon: const Icon(Icons.arrow_back_rounded),
+                        color: tokens.secondaryText,
+                      )
+                    : (widget.onReturnToIntro != null)
+                        ? IconButton(
+                            key: const ValueKey('onboarding_return_to_intro_button'),
+                            onPressed:
+                                _isSubmitting ? null : widget.onReturnToIntro,
+                            icon: const Icon(Icons.arrow_back_rounded),
+                            color: tokens.secondaryText,
+                          )
+                        : null,
           ),
           Expanded(
             child: Center(
@@ -285,13 +320,42 @@ class _PetOnboardingFlowState extends State<PetOnboardingFlow> {
                 widthFactor: 0.8,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    key: const ValueKey('onboarding_progress_bar'),
-                    value: (_stepIndex + 1) / _steps.length,
-                    minHeight: 8,
-                    backgroundColor: tokens.secondarySurface,
-                    valueColor:
-                        AlwaysStoppedAnimation(theme.colorScheme.primary),
+                  child: DecoratedBox(
+                    key: const ValueKey('onboarding_progress_frame'),
+                    decoration: BoxDecoration(
+                      color: progressFrameBackground,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: progressFrameBorderColor,
+                        width: 2.2,
+                      ),
+                      boxShadow: isDark
+                          ? null
+                          : [
+                              BoxShadow(
+                                color: const Color(0xFFEDD7B8)
+                                    .withValues(alpha: 0.24),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(999),
+                        child: _AnimatedPipelineProgressBar(
+                          key: const ValueKey('onboarding_progress_bar'),
+                          progress: (_stepIndex + 1) / _steps.length,
+                          height: 8,
+                          trackColor: progressTrackColor,
+                          fillColor: theme.colorScheme.primary,
+                          glowColor: isDark
+                              ? Colors.white.withValues(alpha: 0.16)
+                              : Colors.white.withValues(alpha: 0.38),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -574,6 +638,208 @@ class _StepCopy {
 
   final String title;
   final String subtitle;
+}
+
+class _AnimatedPipelineProgressBar extends StatefulWidget {
+  const _AnimatedPipelineProgressBar({
+    super.key,
+    required this.progress,
+    required this.height,
+    required this.trackColor,
+    required this.fillColor,
+    required this.glowColor,
+  });
+
+  final double progress;
+  final double height;
+  final Color trackColor;
+  final Color fillColor;
+  final Color glowColor;
+
+  @override
+  State<_AnimatedPipelineProgressBar> createState() =>
+      _AnimatedPipelineProgressBarState();
+}
+
+class _AnimatedPipelineProgressBarState extends State<_AnimatedPipelineProgressBar>
+    with TickerProviderStateMixin {
+  late final AnimationController _progressController = AnimationController(
+    vsync: this,
+    value: 1,
+    duration: const Duration(milliseconds: 420),
+  )..addListener(() => setState(() {}));
+
+  late double _startProgress = widget.progress;
+  late double _targetProgress = widget.progress;
+  late double _displayedProgress = widget.progress;
+  int _flowDirection = 1;
+
+  @override
+  void dispose() {
+    _progressController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedPipelineProgressBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((widget.progress - _targetProgress).abs() < 0.0001) {
+      return;
+    }
+    _flowDirection = widget.progress >= _targetProgress ? 1 : -1;
+    _startProgress = _displayedProgress;
+    _targetProgress = widget.progress;
+    _progressController.duration = Duration(
+      milliseconds: _flowDirection > 0 ? 460 : 520,
+    );
+    _progressController.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final easedProgress =
+        Curves.easeOutCubic.transform(_progressController.value);
+    _displayedProgress =
+        lerpDouble(_startProgress, _targetProgress, easedProgress)!;
+    final flowPhase = _progressController.isAnimating
+        ? (easedProgress * 0.82).clamp(0.0, 1.0)
+        : 1.0;
+    final shimmerOpacity = _progressController.isAnimating
+        ? (1 - Curves.easeOutQuad.transform(_progressController.value)) * 0.92
+        : 0.28;
+
+    return SizedBox(
+      key: const ValueKey('onboarding_progress_bar_paint'),
+      height: widget.height,
+      child: CustomPaint(
+        painter: _PipelineProgressPainter(
+          progress: _displayedProgress.clamp(0.0, 1.0),
+          flowPhase: flowPhase,
+          shimmerOpacity: shimmerOpacity,
+          flowDirection: _flowDirection,
+          trackColor: widget.trackColor,
+          fillColor: widget.fillColor,
+          glowColor: widget.glowColor,
+        ),
+      ),
+    );
+  }
+}
+
+class _PipelineProgressPainter extends CustomPainter {
+  const _PipelineProgressPainter({
+    required this.progress,
+    required this.flowPhase,
+    required this.shimmerOpacity,
+    required this.flowDirection,
+    required this.trackColor,
+    required this.fillColor,
+    required this.glowColor,
+  });
+
+  final double progress;
+  final double flowPhase;
+  final double shimmerOpacity;
+  final int flowDirection;
+  final Color trackColor;
+  final Color fillColor;
+  final Color glowColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final radius = Radius.circular(size.height / 2);
+    final track = RRect.fromRectAndRadius(Offset.zero & size, radius);
+
+    final trackPaint = Paint()..color = trackColor;
+    canvas.drawRRect(track, trackPaint);
+
+    if (progress <= 0) {
+      return;
+    }
+
+    final fillWidth = math.max(size.height, size.width * progress);
+    final fillRect = Rect.fromLTWH(0, 0, fillWidth.clamp(0, size.width), size.height);
+    final fill = RRect.fromRectAndRadius(fillRect, radius);
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [
+          Color.lerp(fillColor, Colors.white, 0.1)!,
+          fillColor,
+          Color.lerp(fillColor, Colors.black, 0.04)!,
+        ],
+      ).createShader(fillRect);
+    canvas.drawRRect(fill, fillPaint);
+
+    canvas.save();
+    canvas.clipRRect(fill);
+
+    if (shimmerOpacity > 0.001) {
+      final directionPhase =
+          _normalizePhase(flowPhase, animateWithDirection: shimmerOpacity > 0.3);
+      final shimmerWidth = math.max(22.0, size.width * 0.14);
+      final shimmerTravel = fillRect.width + shimmerWidth;
+      final shimmerX = (directionPhase * shimmerTravel) - shimmerWidth;
+      final shimmerRect = Rect.fromLTWH(
+        shimmerX,
+        0,
+        shimmerWidth,
+        size.height,
+      );
+      final shimmerPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            Colors.white.withValues(alpha: 0),
+            glowColor.withValues(alpha: 0.32 * shimmerOpacity),
+            glowColor.withValues(alpha: 0.88 * shimmerOpacity),
+            glowColor.withValues(alpha: 0.32 * shimmerOpacity),
+            Colors.white.withValues(alpha: 0),
+          ],
+          stops: const [0.0, 0.28, 0.5, 0.72, 1.0],
+        ).createShader(shimmerRect);
+      canvas.drawRect(shimmerRect, shimmerPaint);
+    }
+
+    final headWidth = math.min(18.0, fillRect.width);
+    final headRect = Rect.fromLTWH(
+      math.max(0, fillRect.right - headWidth),
+      0,
+      headWidth,
+      size.height,
+    );
+    final headPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [
+          Colors.white.withValues(alpha: 0),
+          glowColor.withValues(alpha: 0.72),
+        ],
+      ).createShader(headRect);
+    canvas.drawRect(headRect, headPaint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _PipelineProgressPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.flowPhase != flowPhase ||
+        oldDelegate.shimmerOpacity != shimmerOpacity ||
+        oldDelegate.flowDirection != flowDirection ||
+        oldDelegate.trackColor != trackColor ||
+        oldDelegate.fillColor != fillColor ||
+        oldDelegate.glowColor != glowColor;
+  }
+
+  double _normalizePhase(double phase, {required bool animateWithDirection}) {
+    if (!animateWithDirection) {
+      return 1.0;
+    }
+    return flowDirection >= 0 ? phase : 1 - phase;
+  }
 }
 
 class _OptionWrap<T> extends StatelessWidget {

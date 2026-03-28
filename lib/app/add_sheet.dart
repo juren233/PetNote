@@ -1,5 +1,5 @@
 import 'dart:async';
-
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:pet_care_harmony/app/app_theme.dart';
 import 'package:pet_care_harmony/app/common_widgets.dart';
@@ -26,6 +26,8 @@ class AddActionSheet extends StatefulWidget {
 class _AddActionSheetState extends State<AddActionSheet> {
   static const _compactSheetHeight = 448.0;
   static const _sheetRadius = 36.0;
+  static const _expandedTransitionDuration = Duration(milliseconds: 420);
+  static const _gridRetireDelay = Duration(milliseconds: 140);
 
   AddAction _action = AddAction.none;
   Timer? _transitionTimer;
@@ -162,6 +164,7 @@ class _AddActionSheetState extends State<AddActionSheet> {
           embedded: true,
           onSubmit: _submitPetOnboarding,
           onDefer: _closePetOnboarding,
+          onReturnToActions: _resetToActions,
         ),
       );
     }
@@ -224,14 +227,17 @@ class _AddActionSheetState extends State<AddActionSheet> {
     return TweenAnimationBuilder<double>(
       key: key,
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 320),
+      duration: _expandedTransitionDuration,
       curve: Curves.easeOutCubic,
       child: child,
       builder: (context, progress, expandedChild) {
+        final tokens = context.petCareTokens;
         final collapseProgress =
-            Curves.easeInCubic.transform((progress / 0.3).clamp(0.0, 1.0));
+            Curves.easeOutCubic.transform((progress / 0.34).clamp(0.0, 1.0));
         final revealProgress = Curves.easeOutCubic
-            .transform(((progress - 0.38) / 0.62).clamp(0.0, 1.0));
+            .transform(((progress - 0.14) / 0.86).clamp(0.0, 1.0));
+        final pushBackProgress =
+            Curves.easeOutCubic.transform((progress / 0.32).clamp(0.0, 1.0));
 
         return Stack(
           fit: StackFit.expand,
@@ -241,13 +247,15 @@ class _AddActionSheetState extends State<AddActionSheet> {
                 child: ClipRect(
                   child: Align(
                     alignment: Alignment.topCenter,
-                    heightFactor: 1 - collapseProgress,
+                    heightFactor: 1 - (collapseProgress * 0.16),
                     child: Transform.translate(
-                      offset: Offset(0, -48 * collapseProgress),
-                      child: Opacity(
-                        opacity: 1 - collapseProgress,
-                        child: Align(
-                          alignment: Alignment.topCenter,
+                      offset: Offset(0, 12 * pushBackProgress),
+                      child: Transform.scale(
+                        scale: 1 - (0.024 * pushBackProgress),
+                        alignment: Alignment.topCenter,
+                        child: Opacity(
+                          key: const ValueKey('add_sheet_push_back_layer'),
+                          opacity: 1 - (0.92 * collapseProgress),
                           child: RepaintBoundary(
                             child: _ActionGrid(
                               onSelect: (_) {},
@@ -262,10 +270,31 @@ class _AddActionSheetState extends State<AddActionSheet> {
             IgnorePointer(
               ignoring: revealProgress < 0.999,
               child: Transform.translate(
-                offset: Offset(0, 44 * (1 - revealProgress)),
-                child: Opacity(
-                  opacity: revealProgress,
-                  child: expandedChild,
+                offset: Offset(0, 54 * (1 - revealProgress)),
+                child: Transform.scale(
+                  scale: 0.965 + (0.035 * revealProgress),
+                  alignment: Alignment.topCenter,
+                  child: Opacity(
+                    key: const ValueKey('add_sheet_foreground_surface_opacity'),
+                    opacity: 1,
+                    child: DecoratedBox(
+                      key: const ValueKey('add_sheet_foreground_surface'),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            tokens.pageGradientTop,
+                            tokens.pageGradientBottom,
+                          ],
+                        ),
+                      ),
+                      child: Opacity(
+                        opacity: revealProgress,
+                        child: expandedChild,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -312,7 +341,7 @@ class _AddActionSheetState extends State<AddActionSheet> {
       _action = action;
       _showTransitionGrid = true;
     });
-    _transitionTimer = Timer(const Duration(milliseconds: 96), () {
+    _transitionTimer = Timer(_gridRetireDelay, () {
       if (!mounted) {
         return;
       }
@@ -489,13 +518,15 @@ class _TodoFormState extends State<_TodoForm> {
   final _title = TextEditingController();
   final _note = TextEditingController();
   late String _petId;
-  final _dueAt = DateTime.parse('2026-03-25T09:00:00+08:00');
+  late DateTime _dueAt;
   late final TextEditingController _dueAtText;
+  NotificationLeadTime _notificationLeadTime = NotificationLeadTime.none;
 
   @override
   void initState() {
     super.initState();
     _petId = widget.store.pets.first.id;
+    _dueAt = _defaultFutureDateTime();
     _dueAtText = TextEditingController(text: formatDate(_dueAt));
   }
 
@@ -509,38 +540,102 @@ class _TodoFormState extends State<_TodoForm> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SectionCard(
-          title: '基础信息',
-          children: [
-            const SectionLabel(text: '标题'),
-            HyperTextField(controller: _title, hintText: '例如：补货主粮'),
-            const SectionLabel(text: '关联爱宠'),
-            _PetSelector(
-                pets: widget.store.pets,
-                value: _petId,
-                onChanged: (value) => setState(() => _petId = value)),
-            const SectionLabel(text: '时间'),
-            HyperTextField(controller: _dueAtText, readOnly: true),
-            const SectionLabel(text: '备注'),
-            HyperTextField(
-                controller: _note, hintText: '记录一下补货偏好', maxLines: 3),
-          ],
-        ),
-        FilledButton(
-          onPressed: () {
-            widget.store.addTodo(
-                title: _title.text.trim(),
-                petId: _petId,
-                dueAt: _dueAt,
-                note: _note.text.trim());
-            Navigator.pop(context);
-          },
-          child: const Text('保存待办'),
-        ),
-      ],
+    return _ExpandedFormContent(
+      actionLabel: '保存待办',
+      actionColor: const Color(0xFF4F7BFF),
+      onSubmit: () async {
+        await widget.store.addTodo(
+          title: _title.text.trim(),
+          petId: _petId,
+          dueAt: _dueAt,
+          notificationLeadTime: _notificationLeadTime,
+          note: _note.text.trim(),
+        );
+        if (!context.mounted) {
+          return;
+        }
+        Navigator.pop(context);
+      },
+      child: SectionCard(
+        title: '基础信息',
+        children: [
+          const SectionLabel(text: '标题'),
+          HyperTextField(controller: _title, hintText: '例如：补货主粮'),
+          const SectionLabel(text: '关联爱宠'),
+          _PetSelector(
+              pets: widget.store.pets,
+              value: _petId,
+              onChanged: (value) => setState(() => _petId = value)),
+          const SectionLabel(text: '时间'),
+          _AdaptiveDateTimeField(
+            materialFieldKey: const ValueKey('todo_due_at_field'),
+            iosDateFieldKey: const ValueKey('todo_due_date_field'),
+            iosTimeFieldKey: const ValueKey('todo_due_time_field'),
+            value: _dueAt,
+            onPickDateTime: _pickDueAt,
+            onPickDate: _pickDueDateOnIos,
+            onPickTime: _pickDueTimeOnIos,
+          ),
+          const SectionLabel(text: '提前通知'),
+          _ChoiceWrap<NotificationLeadTime>(
+            values: NotificationLeadTime.values,
+            selected: _notificationLeadTime,
+            labelBuilder: notificationLeadTimeLabel,
+            onChanged: (value) =>
+                setState(() => _notificationLeadTime = value),
+          ),
+          const SectionLabel(text: '备注'),
+          HyperTextField(
+              controller: _note, hintText: '记录一下补货偏好', maxLines: 3),
+        ],
+      ),
     );
+  }
+
+  Future<void> _pickDueAt() async {
+    final nextDateTime = await _pickDateTime(context, initialValue: _dueAt);
+    if (nextDateTime == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _dueAt = nextDateTime;
+      _dueAtText.text = formatDate(_dueAt);
+    });
+  }
+
+  Future<void> _pickDueDateOnIos() async {
+    final nextDate = await _pickCupertinoDate(context, initialValue: _dueAt);
+    if (nextDate == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _dueAt = DateTime(
+        nextDate.year,
+        nextDate.month,
+        nextDate.day,
+        _dueAt.hour,
+        _dueAt.minute,
+      );
+      _dueAtText.text = formatDate(_dueAt);
+    });
+  }
+
+  Future<void> _pickDueTimeOnIos() async {
+    final nextDateTime =
+        await _pickCupertinoTime(context, initialValue: _dueAt);
+    if (nextDateTime == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _dueAt = DateTime(
+        _dueAt.year,
+        _dueAt.month,
+        _dueAt.day,
+        nextDateTime.hour,
+        nextDateTime.minute,
+      );
+      _dueAtText.text = formatDate(_dueAt);
+    });
   }
 }
 
@@ -559,13 +654,15 @@ class _ReminderFormState extends State<_ReminderForm> {
   final _recurrence = TextEditingController(text: '单次');
   late String _petId;
   ReminderKind _kind = ReminderKind.custom;
-  final _scheduledAt = DateTime.parse('2026-03-25T20:00:00+08:00');
+  late DateTime _scheduledAt;
   late final TextEditingController _scheduledAtText;
+  NotificationLeadTime _notificationLeadTime = NotificationLeadTime.none;
 
   @override
   void initState() {
     super.initState();
     _petId = widget.store.pets.first.id;
+    _scheduledAt = _defaultFutureDateTime();
     _scheduledAtText = TextEditingController(text: formatDate(_scheduledAt));
   }
 
@@ -580,49 +677,114 @@ class _ReminderFormState extends State<_ReminderForm> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SectionCard(
-          title: '提醒信息',
-          children: [
-            const SectionLabel(text: '标题'),
-            HyperTextField(controller: _title, hintText: '例如：体内驱虫'),
-            const SectionLabel(text: '关联爱宠'),
-            _PetSelector(
-                pets: widget.store.pets,
-                value: _petId,
-                onChanged: (value) => setState(() => _petId = value)),
-            const SectionLabel(text: '提醒类型'),
-            _ChoiceWrap<ReminderKind>(
-              values: ReminderKind.values,
-              selected: _kind,
-              labelBuilder: _reminderKindLabel,
-              onChanged: (value) => setState(() => _kind = value),
-            ),
-            const SectionLabel(text: '时间'),
-            HyperTextField(controller: _scheduledAtText, readOnly: true),
-            const SectionLabel(text: '重复规则'),
-            HyperTextField(controller: _recurrence),
-            const SectionLabel(text: '备注'),
-            HyperTextField(controller: _note, maxLines: 3),
-          ],
-        ),
-        FilledButton(
-          onPressed: () {
-            widget.store.addReminder(
-              title: _title.text.trim(),
-              petId: _petId,
-              scheduledAt: _scheduledAt,
-              kind: _kind,
-              recurrence: _recurrence.text.trim(),
-              note: _note.text.trim(),
-            );
-            Navigator.pop(context);
-          },
-          child: const Text('保存提醒'),
-        ),
-      ],
+    return _ExpandedFormContent(
+      actionLabel: '保存提醒',
+      actionColor: const Color(0xFFF2A65A),
+      onSubmit: () async {
+        await widget.store.addReminder(
+          title: _title.text.trim(),
+          petId: _petId,
+          scheduledAt: _scheduledAt,
+          notificationLeadTime: _notificationLeadTime,
+          kind: _kind,
+          recurrence: _recurrence.text.trim(),
+          note: _note.text.trim(),
+        );
+        if (!context.mounted) {
+          return;
+        }
+        Navigator.pop(context);
+      },
+      child: SectionCard(
+        title: '提醒信息',
+        children: [
+          const SectionLabel(text: '标题'),
+          HyperTextField(controller: _title, hintText: '例如：体内驱虫'),
+          const SectionLabel(text: '关联爱宠'),
+          _PetSelector(
+              pets: widget.store.pets,
+              value: _petId,
+              onChanged: (value) => setState(() => _petId = value)),
+          const SectionLabel(text: '提醒类型'),
+          _ChoiceWrap<ReminderKind>(
+            values: ReminderKind.values,
+            selected: _kind,
+            labelBuilder: _reminderKindLabel,
+            onChanged: (value) => setState(() => _kind = value),
+          ),
+          const SectionLabel(text: '时间'),
+          _AdaptiveDateTimeField(
+            materialFieldKey: const ValueKey('reminder_scheduled_at_field'),
+            iosDateFieldKey: const ValueKey('reminder_scheduled_date_field'),
+            iosTimeFieldKey: const ValueKey('reminder_scheduled_time_field'),
+            value: _scheduledAt,
+            onPickDateTime: _pickScheduledAt,
+            onPickDate: _pickScheduledDateOnIos,
+            onPickTime: _pickScheduledTimeOnIos,
+          ),
+          const SectionLabel(text: '提前通知'),
+          _ChoiceWrap<NotificationLeadTime>(
+            values: NotificationLeadTime.values,
+            selected: _notificationLeadTime,
+            labelBuilder: notificationLeadTimeLabel,
+            onChanged: (value) =>
+                setState(() => _notificationLeadTime = value),
+          ),
+          const SectionLabel(text: '重复规则'),
+          HyperTextField(controller: _recurrence),
+          const SectionLabel(text: '备注'),
+          HyperTextField(controller: _note, maxLines: 3),
+        ],
+      ),
     );
+  }
+
+  Future<void> _pickScheduledAt() async {
+    final nextDateTime =
+        await _pickDateTime(context, initialValue: _scheduledAt);
+    if (nextDateTime == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _scheduledAt = nextDateTime;
+      _scheduledAtText.text = formatDate(_scheduledAt);
+    });
+  }
+
+  Future<void> _pickScheduledDateOnIos() async {
+    final nextDate =
+        await _pickCupertinoDate(context, initialValue: _scheduledAt);
+    if (nextDate == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _scheduledAt = DateTime(
+        nextDate.year,
+        nextDate.month,
+        nextDate.day,
+        _scheduledAt.hour,
+        _scheduledAt.minute,
+      );
+      _scheduledAtText.text = formatDate(_scheduledAt);
+    });
+  }
+
+  Future<void> _pickScheduledTimeOnIos() async {
+    final nextDateTime =
+        await _pickCupertinoTime(context, initialValue: _scheduledAt);
+    if (nextDateTime == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _scheduledAt = DateTime(
+        _scheduledAt.year,
+        _scheduledAt.month,
+        _scheduledAt.day,
+        nextDateTime.hour,
+        nextDateTime.minute,
+      );
+      _scheduledAtText.text = formatDate(_scheduledAt);
+    });
   }
 }
 
@@ -641,13 +803,14 @@ class _RecordFormState extends State<_RecordForm> {
   final _note = TextEditingController();
   late String _petId;
   PetRecordType _type = PetRecordType.other;
-  final _recordDate = DateTime.parse('2026-03-24T19:00:00+08:00');
+  late DateTime _recordDate;
   late final TextEditingController _recordDateText;
 
   @override
   void initState() {
     super.initState();
     _petId = widget.store.pets.first.id;
+    _recordDate = DateTime.now();
     _recordDateText = TextEditingController(text: formatDate(_recordDate));
   }
 
@@ -662,49 +825,105 @@ class _RecordFormState extends State<_RecordForm> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SectionCard(
-          title: '资料信息',
-          children: [
-            const SectionLabel(text: '关联爱宠'),
-            _PetSelector(
-                pets: widget.store.pets,
-                value: _petId,
-                onChanged: (value) => setState(() => _petId = value)),
-            const SectionLabel(text: '记录类型'),
-            _ChoiceWrap<PetRecordType>(
-              values: PetRecordType.values,
-              selected: _type,
-              labelBuilder: _recordTypeLabel,
-              onChanged: (value) => setState(() => _type = value),
-            ),
-            const SectionLabel(text: '标题'),
-            HyperTextField(controller: _title, hintText: '例如：体检结果'),
-            const SectionLabel(text: '时间'),
-            HyperTextField(controller: _recordDateText, readOnly: true),
-            const SectionLabel(text: '摘要'),
-            HyperTextField(controller: _summary, maxLines: 3),
-            const SectionLabel(text: '备注'),
-            HyperTextField(controller: _note, maxLines: 3),
-          ],
-        ),
-        FilledButton(
-          onPressed: () {
-            widget.store.addRecord(
-              petId: _petId,
-              type: _type,
-              title: _title.text.trim(),
-              recordDate: _recordDate,
-              summary: _summary.text.trim(),
-              note: _note.text.trim(),
-            );
-            Navigator.pop(context);
-          },
-          child: const Text('保存记录'),
-        ),
-      ],
+    return _ExpandedFormContent(
+      actionLabel: '保存记录',
+      actionColor: const Color(0xFF4FB57C),
+      onSubmit: () async {
+        await widget.store.addRecord(
+          petId: _petId,
+          type: _type,
+          title: _title.text.trim(),
+          recordDate: _recordDate,
+          summary: _summary.text.trim(),
+          note: _note.text.trim(),
+        );
+        if (!context.mounted) {
+          return;
+        }
+        Navigator.pop(context);
+      },
+      child: SectionCard(
+        title: '资料信息',
+        children: [
+          const SectionLabel(text: '关联爱宠'),
+          _PetSelector(
+              pets: widget.store.pets,
+              value: _petId,
+              onChanged: (value) => setState(() => _petId = value)),
+          const SectionLabel(text: '记录类型'),
+          _ChoiceWrap<PetRecordType>(
+            values: PetRecordType.values,
+            selected: _type,
+            labelBuilder: _recordTypeLabel,
+            onChanged: (value) => setState(() => _type = value),
+          ),
+          const SectionLabel(text: '标题'),
+          HyperTextField(controller: _title, hintText: '例如：体检结果'),
+          const SectionLabel(text: '时间'),
+          _AdaptiveDateTimeField(
+            materialFieldKey: const ValueKey('record_date_field'),
+            iosDateFieldKey: const ValueKey('record_date_date_field'),
+            iosTimeFieldKey: const ValueKey('record_date_time_field'),
+            value: _recordDate,
+            onPickDateTime: _pickRecordDate,
+            onPickDate: _pickRecordDateOnIos,
+            onPickTime: _pickRecordTimeOnIos,
+          ),
+          const SectionLabel(text: '摘要'),
+          HyperTextField(controller: _summary, maxLines: 3),
+          const SectionLabel(text: '备注'),
+          HyperTextField(controller: _note, maxLines: 3),
+        ],
+      ),
     );
+  }
+
+  Future<void> _pickRecordDate() async {
+    final nextDateTime =
+        await _pickDateTime(context, initialValue: _recordDate);
+    if (nextDateTime == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _recordDate = nextDateTime;
+      _recordDateText.text = formatDate(_recordDate);
+    });
+  }
+
+  Future<void> _pickRecordDateOnIos() async {
+    final nextDate =
+        await _pickCupertinoDate(context, initialValue: _recordDate);
+    if (nextDate == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _recordDate = DateTime(
+        nextDate.year,
+        nextDate.month,
+        nextDate.day,
+        _recordDate.hour,
+        _recordDate.minute,
+      );
+      _recordDateText.text = formatDate(_recordDate);
+    });
+  }
+
+  Future<void> _pickRecordTimeOnIos() async {
+    final nextDateTime =
+        await _pickCupertinoTime(context, initialValue: _recordDate);
+    if (nextDateTime == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _recordDate = DateTime(
+        _recordDate.year,
+        _recordDate.month,
+        _recordDate.day,
+        nextDateTime.hour,
+        nextDateTime.minute,
+      );
+      _recordDateText.text = formatDate(_recordDate);
+    });
   }
 }
 
@@ -865,13 +1084,311 @@ class _ExpandedFormShell extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         Expanded(
+          child: child,
+        ),
+      ],
+    );
+  }
+}
+
+class _ExpandedFormContent extends StatelessWidget {
+  const _ExpandedFormContent({
+    required this.child,
+    required this.actionLabel,
+    required this.onSubmit,
+    required this.actionColor,
+  });
+
+  final Widget child;
+  final String actionLabel;
+  final Future<void> Function() onSubmit;
+  final Color actionColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
           child: SingleChildScrollView(
+            padding: EdgeInsets.only(bottom: bottomInset + 24),
             child: child,
+          ),
+        ),
+        const SizedBox(height: 16),
+        SafeArea(
+          top: false,
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: actionColor,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: onSubmit,
+            child: Text(actionLabel),
           ),
         ),
       ],
     );
   }
+}
+
+class _AdaptiveDateTimeField extends StatelessWidget {
+  const _AdaptiveDateTimeField({
+    required this.materialFieldKey,
+    required this.iosDateFieldKey,
+    required this.iosTimeFieldKey,
+    required this.value,
+    required this.onPickDateTime,
+    required this.onPickDate,
+    required this.onPickTime,
+  });
+
+  final Key materialFieldKey;
+  final Key iosDateFieldKey;
+  final Key iosTimeFieldKey;
+  final DateTime value;
+  final Future<void> Function() onPickDateTime;
+  final Future<void> Function() onPickDate;
+  final Future<void> Function() onPickTime;
+
+  @override
+  Widget build(BuildContext context) {
+    if (Theme.of(context).platform != TargetPlatform.iOS) {
+      final tokens = context.petCareTokens;
+      return InkWell(
+        key: materialFieldKey,
+        borderRadius: BorderRadius.circular(22),
+        onTap: onPickDateTime,
+        child: InputDecorator(
+          decoration: const InputDecoration(),
+          child: Text(
+            formatDate(value),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: tokens.primaryText,
+                ),
+          ),
+        ),
+      );
+    }
+
+    final tokens = context.petCareTokens;
+    return Container(
+      decoration: BoxDecoration(
+        color: tokens.panelBackground,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: tokens.panelBorder, width: 1.1),
+      ),
+      child: Column(
+        children: [
+          _IosPickerRow(
+            key: iosDateFieldKey,
+            icon: CupertinoIcons.calendar,
+            label: '日期',
+            value: _formatIosDate(value),
+            onTap: onPickDate,
+          ),
+          Divider(height: 1, color: tokens.panelBorder),
+          _IosPickerRow(
+            key: iosTimeFieldKey,
+            icon: CupertinoIcons.time,
+            label: '时间',
+            value: _formatIosTime(value),
+            onTap: onPickTime,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IosPickerRow extends StatelessWidget {
+  const _IosPickerRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Future<void> Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.petCareTokens;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: tokens.secondaryText, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: tokens.primaryText,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+DateTime _defaultFutureDateTime() {
+  final now = DateTime.now().add(const Duration(hours: 1));
+  final nextMinute = ((now.minute / 5).ceil() * 5) % 60;
+  final nextHour = nextMinute == 0 ? now.hour + 1 : now.hour;
+  return DateTime(
+    now.year,
+    now.month,
+    now.day,
+    nextHour,
+    nextMinute,
+  );
+}
+
+Future<DateTime?> _pickDateTime(
+  BuildContext context, {
+  required DateTime initialValue,
+}) async {
+  final date = await showDatePicker(
+    context: context,
+    initialDate: initialValue,
+    firstDate: DateTime(2020),
+    lastDate: DateTime(2100),
+  );
+  if (date == null || !context.mounted) {
+    return null;
+  }
+
+  final time = await showTimePicker(
+    context: context,
+    initialTime: TimeOfDay.fromDateTime(initialValue),
+  );
+  if (time == null) {
+    return null;
+  }
+
+  return DateTime(
+    date.year,
+    date.month,
+    date.day,
+    time.hour,
+    time.minute,
+  );
+}
+
+Future<DateTime?> _pickCupertinoDate(
+  BuildContext context, {
+  required DateTime initialValue,
+}) {
+  return _showCupertinoPickerSheet(
+    context,
+    initialValue: initialValue,
+    mode: CupertinoDatePickerMode.date,
+  );
+}
+
+Future<DateTime?> _pickCupertinoTime(
+  BuildContext context, {
+  required DateTime initialValue,
+}) {
+  return _showCupertinoPickerSheet(
+    context,
+    initialValue: initialValue,
+    mode: CupertinoDatePickerMode.time,
+  );
+}
+
+Future<DateTime?> _showCupertinoPickerSheet(
+  BuildContext context, {
+  required DateTime initialValue,
+  required CupertinoDatePickerMode mode,
+}) {
+  var pickedValue = initialValue;
+  return showCupertinoModalPopup<DateTime>(
+    context: context,
+    builder: (popupContext) {
+      final brightness = Theme.of(context).brightness;
+      final backgroundColor =
+          brightness == Brightness.dark ? const Color(0xFF1C1C1E) : Colors.white;
+      return Container(
+        height: 320,
+        padding: const EdgeInsets.only(top: 12),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => Navigator.of(popupContext).pop(),
+                    child: const Text('取消'),
+                  ),
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () => Navigator.of(popupContext).pop(pickedValue),
+                    child: const Text('完成'),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: CupertinoDatePicker(
+                mode: mode,
+                use24hFormat: false,
+                initialDateTime: initialValue,
+                onDateTimeChanged: (value) {
+                  pickedValue = value;
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+String _formatIosDate(DateTime value) {
+  final now = DateTime.now();
+  final isToday = value.year == now.year &&
+      value.month == now.month &&
+      value.day == now.day;
+  if (isToday) {
+    return '今天';
+  }
+  return '${value.year}年${value.month}月${value.day}日';
+}
+
+String _formatIosTime(DateTime value) {
+  final period = value.hour < 12 ? '上午' : '下午';
+  final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+  final minute = value.minute.toString().padLeft(2, '0');
+  return '$period $hour:$minute';
 }
 
 class _MissingPetPrerequisite extends StatelessWidget {

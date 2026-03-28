@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,10 @@ import 'package:pet_care_harmony/app/ios_native_dock.dart';
 import 'package:pet_care_harmony/app/layout_metrics.dart';
 import 'package:pet_care_harmony/app/me_page.dart';
 import 'package:pet_care_harmony/app/navigation_palette.dart';
+import 'package:pet_care_harmony/notifications/method_channel_notification_adapter.dart';
+import 'package:pet_care_harmony/notifications/notification_coordinator.dart';
+import 'package:pet_care_harmony/notifications/notification_models.dart';
+import 'package:pet_care_harmony/notifications/notification_platform_adapter.dart';
 import 'package:pet_care_harmony/app/pet_care_pages.dart' hide MePage;
 import 'package:pet_care_harmony/app/pet_edit_sheet.dart';
 import 'package:pet_care_harmony/app/pet_first_launch_intro.dart';
@@ -21,10 +26,14 @@ class PetCareRoot extends StatefulWidget {
     super.key,
     this.settingsController,
     this.iosDockBuilder,
+    this.storeLoader,
+    this.notificationAdapter,
   });
 
   final AppSettingsController? settingsController;
   final IosDockBuilder? iosDockBuilder;
+  final Future<PetCareStore> Function()? storeLoader;
+  final NotificationPlatformAdapter? notificationAdapter;
 
   @override
   State<PetCareRoot> createState() => _PetCareRootState();
@@ -32,31 +41,78 @@ class PetCareRoot extends StatefulWidget {
 
 enum _OnboardingEntryPoint { intro, manual }
 
-class _PetCareRootState extends State<PetCareRoot> {
+class _PetCareRootState extends State<PetCareRoot>
+    with WidgetsBindingObserver {
   PetCareStore? _store;
+  NotificationCoordinator? _notificationCoordinator;
   String _activeChecklistKey = 'today';
+  String? _highlightedChecklistItemKey;
   bool _showFirstLaunchIntro = false;
   bool _showOnboarding = false;
   _OnboardingEntryPoint _onboardingEntryPoint = _OnboardingEntryPoint.manual;
+  Timer? _timeRefreshTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadStore();
   }
 
   Future<void> _loadStore() async {
-    final store = await PetCareStore.load();
+    final store = await (widget.storeLoader ?? PetCareStore.load)();
     if (!mounted) {
       return;
     }
+    final oldStore = _store;
+    oldStore?.removeListener(_handleStoreChanged);
+    store.addListener(_handleStoreChanged);
     setState(() {
       _store = store;
+      _notificationCoordinator = null;
       _showFirstLaunchIntro =
           store.pets.isEmpty && store.shouldAutoShowFirstLaunchIntro;
       _showOnboarding = false;
       _onboardingEntryPoint = _OnboardingEntryPoint.manual;
     });
+    _startTimeRefreshTicker();
+    unawaited(_initializeNotifications(store));
+  }
+
+  Future<void> _initializeNotifications(PetCareStore store) async {
+    final coordinator = NotificationCoordinator(
+      adapter: widget.notificationAdapter ??
+          MethodChannelNotificationPlatformAdapter(),
+    );
+    await coordinator.init();
+    await coordinator.syncFromStore(store);
+    final launchIntent = await coordinator.consumeLaunchIntent();
+    if (!mounted || !identical(_store, store)) {
+      coordinator.dispose();
+      return;
+    }
+    setState(() {
+      _notificationCoordinator = coordinator;
+    });
+    if (launchIntent != null) {
+      _applyNotificationIntent(store, launchIntent);
+    }
+  }
+
+  void _startTimeRefreshTicker() {
+    _timeRefreshTimer?.cancel();
+    _timeRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      setState(() {});
+    }
   }
 
   @override
@@ -88,6 +144,8 @@ class _PetCareRootState extends State<PetCareRoot> {
           showFirstLaunchIntro: _showFirstLaunchIntro,
           showOnboarding: _showOnboarding,
           settingsController: widget.settingsController,
+          notificationCoordinator: _notificationCoordinator,
+          highlightedChecklistItemKey: _highlightedChecklistItemKey,
           onSectionChanged: (value) =>
               setState(() => _activeChecklistKey = value),
           onAddFirstPet: _openManualOnboarding,
@@ -96,6 +154,10 @@ class _PetCareRootState extends State<PetCareRoot> {
           onEditPet: (pet) => _openEditPetSheet(context, store, pet),
           onSubmitOnboarding: _submitOnboarding,
           onDeferOnboarding: _deferOnboarding,
+          onReturnToIntroFromOnboarding:
+              _onboardingEntryPoint == _OnboardingEntryPoint.intro
+                  ? _returnToIntroFromOnboarding
+                  : null,
         ),
         bottomNavigationBar: _showFirstLaunchIntro || _showOnboarding
             ? null
@@ -179,6 +241,7 @@ class _PetCareRootState extends State<PetCareRoot> {
     if (!mounted) {
       return;
     }
+
     setState(() {
       _showFirstLaunchIntro = false;
       _onboardingEntryPoint = _OnboardingEntryPoint.intro;
@@ -196,10 +259,19 @@ class _PetCareRootState extends State<PetCareRoot> {
     if (!mounted) {
       return;
     }
+    store.setActiveTab(AppTab.checklist);
     setState(() {
       _showFirstLaunchIntro = false;
       _showOnboarding = false;
       _onboardingEntryPoint = _OnboardingEntryPoint.manual;
+    });
+  }
+
+  void _returnToIntroFromOnboarding() {
+    setState(() {
+      _showOnboarding = false;
+      _showFirstLaunchIntro = true;
+      _onboardingEntryPoint = _OnboardingEntryPoint.intro;
     });
   }
 
@@ -247,6 +319,65 @@ class _PetCareRootState extends State<PetCareRoot> {
       _onboardingEntryPoint = _OnboardingEntryPoint.manual;
     });
   }
+
+  void _handleStoreChanged() {
+    final store = _store;
+    final coordinator = _notificationCoordinator;
+    if (store == null || coordinator == null) {
+      return;
+    }
+    unawaited(coordinator.syncFromStore(store));
+    unawaited(_consumeForegroundNotificationTap(store));
+  }
+
+  Future<void> _consumeForegroundNotificationTap(PetCareStore store) async {
+    final coordinator = _notificationCoordinator;
+    if (coordinator == null) {
+      return;
+    }
+    final intent = await coordinator.consumeForegroundTap();
+    if (intent != null && mounted) {
+      _applyNotificationIntent(store, intent);
+    }
+  }
+
+  void _applyNotificationIntent(
+    PetCareStore store,
+    NotificationLaunchIntent intent,
+  ) {
+    final sectionKey = _sectionKeyForPayload(store, intent.payload);
+    setState(() {
+      _showFirstLaunchIntro = false;
+      _showOnboarding = false;
+      _activeChecklistKey = sectionKey;
+      _highlightedChecklistItemKey = intent.payload.key;
+    });
+    store.setActiveTab(AppTab.checklist);
+  }
+
+  String _sectionKeyForPayload(
+    PetCareStore store,
+    NotificationPayload payload,
+  ) {
+    for (final section in store.checklistSections) {
+      for (final item in section.items) {
+        final itemKey = '${item.sourceType}:${item.id}';
+        if (itemKey == payload.key) {
+          return section.key;
+        }
+      }
+    }
+    return 'today';
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timeRefreshTimer?.cancel();
+    _store?.removeListener(_handleStoreChanged);
+    _notificationCoordinator?.dispose();
+    super.dispose();
+  }
 }
 
 class _PetCareBody extends StatelessWidget {
@@ -256,6 +387,8 @@ class _PetCareBody extends StatelessWidget {
     required this.showFirstLaunchIntro,
     required this.showOnboarding,
     required this.settingsController,
+    required this.notificationCoordinator,
+    required this.highlightedChecklistItemKey,
     required this.onSectionChanged,
     required this.onAddFirstPet,
     required this.onStartOnboardingFromIntro,
@@ -263,6 +396,7 @@ class _PetCareBody extends StatelessWidget {
     required this.onEditPet,
     required this.onSubmitOnboarding,
     required this.onDeferOnboarding,
+    required this.onReturnToIntroFromOnboarding,
   });
 
   final PetCareStore store;
@@ -270,6 +404,8 @@ class _PetCareBody extends StatelessWidget {
   final bool showFirstLaunchIntro;
   final bool showOnboarding;
   final AppSettingsController? settingsController;
+  final NotificationCoordinator? notificationCoordinator;
+  final String? highlightedChecklistItemKey;
   final ValueChanged<String> onSectionChanged;
   final VoidCallback onAddFirstPet;
   final Future<void> Function() onStartOnboardingFromIntro;
@@ -277,6 +413,7 @@ class _PetCareBody extends StatelessWidget {
   final ValueChanged<Pet> onEditPet;
   final Future<void> Function(PetOnboardingResult result) onSubmitOnboarding;
   final Future<void> Function() onDeferOnboarding;
+  final VoidCallback? onReturnToIntroFromOnboarding;
 
   @override
   Widget build(BuildContext context) {
@@ -284,6 +421,7 @@ class _PetCareBody extends StatelessWidget {
       animation: store,
       builder: (context, _) {
         final activeTab = store.activeTab;
+        final notificationCoordinator = this.notificationCoordinator;
         return RepaintBoundary(
           key: const ValueKey('page_content_boundary'),
           child: Stack(
@@ -293,6 +431,8 @@ class _PetCareBody extends StatelessWidget {
                   AppTab.checklist => ChecklistPage(
                       store: store,
                       activeSectionKey: activeChecklistKey,
+                      highlightedChecklistItemKey:
+                          highlightedChecklistItemKey,
                       onSectionChanged: onSectionChanged,
                       onAddFirstPet: onAddFirstPet,
                     ),
@@ -310,6 +450,25 @@ class _PetCareBody extends StatelessWidget {
                           AppThemePreference.system,
                       onThemePreferenceChanged: (value) =>
                           settingsController?.setThemePreference(value),
+                      notificationPermissionState:
+                          notificationCoordinator?.permissionState ??
+                              NotificationPermissionState.unknown,
+                      notificationPushToken:
+                          notificationCoordinator?.pushToken,
+                      onRequestNotificationPermission:
+                          notificationCoordinator == null
+                              ? null
+                              : () async {
+                                  await notificationCoordinator
+                                      .requestPermission();
+                                },
+                      onOpenNotificationSettings:
+                          notificationCoordinator == null
+                              ? null
+                              : () async {
+                                  await notificationCoordinator
+                                      .openNotificationSettings();
+                                },
                     ),
                 },
               ),
@@ -322,6 +481,7 @@ class _PetCareBody extends StatelessWidget {
                 PetOnboardingOverlay(
                   onSubmit: onSubmitOnboarding,
                   onDefer: onDeferOnboarding,
+                  onReturnToIntro: onReturnToIntroFromOnboarding,
                 ),
             ],
           ),

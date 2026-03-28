@@ -9,10 +9,12 @@ class PetFirstLaunchIntro extends StatefulWidget {
     super.key,
     required this.onStartOnboarding,
     required this.onExploreFirst,
+    this.fillParent = true,
   });
 
   final Future<void> Function() onStartOnboarding;
   final Future<void> Function() onExploreFirst;
+  final bool fillParent;
 
   @override
   State<PetFirstLaunchIntro> createState() => _PetFirstLaunchIntroState();
@@ -58,6 +60,8 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
 
   int _pageIndex = 0;
   bool _showLaunchPaw = true;
+  bool _isPrimaryNavigating = false;
+  bool _isSecondaryNavigating = false;
   final Set<int> _revealedPages = <int>{};
 
   static const _pages = [
@@ -175,8 +179,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
     final isFinalPage = _pageIndex == _pages.length - 1;
     final insets = MediaQuery.viewPaddingOf(context);
 
-    return Positioned.fill(
-      child: Material(
+    final content = Material(
         key: const ValueKey('first_launch_intro_overlay'),
         color: theme.scaffoldBackgroundColor.withValues(
           alpha: isDark ? 0.92 : 0.80,
@@ -253,7 +256,14 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
             ],
           ),
         ),
-      ),
+      );
+
+    if (!widget.fillParent) {
+      return content;
+    }
+
+    return Positioned.fill(
+      child: content,
     );
   }
 
@@ -406,7 +416,9 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
               ? 'first_launch_intro_primary_button'
               : 'first_launch_intro_continue_button',
         ),
-        onPressed: isFinalPage ? widget.onStartOnboarding : _goNext,
+        onPressed: isFinalPage
+            ? (_isPrimaryNavigating ? null : _handleStartOnboarding)
+            : _goNext,
         child: Text(isFinalPage ? '那我们开始吧' : '继续'),
       ),
     );
@@ -417,10 +429,38 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
       width: double.infinity,
       child: TextButton(
         key: const ValueKey('first_launch_intro_secondary_button'),
-        onPressed: widget.onExploreFirst,
+        onPressed: _isSecondaryNavigating ? null : _handleExploreFirst,
         child: const Text('先看看宠伴'),
       ),
     );
+  }
+
+  Future<void> _handleStartOnboarding() async {
+    if (_isPrimaryNavigating) {
+      return;
+    }
+    setState(() => _isPrimaryNavigating = true);
+    try {
+      await widget.onStartOnboarding();
+    } finally {
+      if (mounted) {
+        setState(() => _isPrimaryNavigating = false);
+      }
+    }
+  }
+
+  Future<void> _handleExploreFirst() async {
+    if (_isSecondaryNavigating) {
+      return;
+    }
+    setState(() => _isSecondaryNavigating = true);
+    try {
+      await widget.onExploreFirst();
+    } finally {
+      if (mounted) {
+        setState(() => _isSecondaryNavigating = false);
+      }
+    }
   }
 
   void _startFirstPageFooterReveal() {

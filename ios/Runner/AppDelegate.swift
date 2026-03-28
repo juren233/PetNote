@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -15,6 +16,17 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IosNativeDockPlugin") {
       IosNativeDockPlugin.register(with: registrar)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetCareNotificationPlugin") {
+      PetCareNotificationPlugin.register(with: registrar)
+    }
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+    PetCareNotificationPlugin.shared?.updatePushToken(deviceToken)
   }
 }
 
@@ -61,6 +73,193 @@ private enum IosNativeDockTab: Int, CaseIterable {
     case .me:
       return "person.fill"
     }
+  }
+}
+
+final class PetCareNotificationPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate {
+  static let channelName = "pet_care_harmony/notifications"
+  static var shared: PetCareNotificationPlugin?
+
+  private let channel: FlutterMethodChannel
+  private var initialLaunchIntent: [String: Any]?
+  private var pendingForegroundTap: [String: Any]?
+  private var pushToken: String?
+
+  init(channel: FlutterMethodChannel) {
+    self.channel = channel
+    super.init()
+    UNUserNotificationCenter.current().delegate = self
+  }
+
+  static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: channelName,
+      binaryMessenger: registrar.messenger()
+    )
+    let instance = PetCareNotificationPlugin(channel: channel)
+    shared = instance
+    registrar.addMethodCallDelegate(instance, channel: channel)
+  }
+
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "initialize":
+      result(nil)
+    case "getPermissionState":
+      getPermissionState(result: result)
+    case "requestPermission":
+      requestPermission(result: result)
+    case "scheduleLocalNotification":
+      scheduleLocalNotification(arguments: call.arguments as? [String: Any], result: result)
+    case "cancelNotification":
+      cancelNotification(key: call.arguments as? String)
+      result(nil)
+    case "getInitialLaunchIntent":
+      result(initialLaunchIntent)
+      initialLaunchIntent = nil
+    case "consumeForegroundTap":
+      result(pendingForegroundTap)
+      pendingForegroundTap = nil
+    case "registerPushToken":
+      UIApplication.shared.registerForRemoteNotifications()
+      result(pushToken)
+    case "openNotificationSettings":
+      openSettings()
+      result(nil)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  func updatePushToken(_ deviceToken: Data) {
+    pushToken = deviceToken.map { String(format: "%02x", $0) }.joined()
+  }
+
+  private func getPermissionState(result: @escaping FlutterResult) {
+    UNUserNotificationCenter.current().getNotificationSettings { settings in
+      DispatchQueue.main.async {
+        result(self.permissionLabel(from: settings.authorizationStatus))
+      }
+    }
+  }
+
+  private func requestPermission(result: @escaping FlutterResult) {
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+      DispatchQueue.main.async {
+        if granted {
+          UIApplication.shared.registerForRemoteNotifications()
+        }
+        result(granted ? "authorized" : "denied")
+      }
+    }
+  }
+
+  private func scheduleLocalNotification(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard
+      let arguments,
+      let key = arguments["key"] as? String,
+      let epochMillis = arguments["scheduledAtEpochMs"] as? NSNumber,
+      let payload = arguments["payload"] as? [String: Any]
+    else {
+      result(nil)
+      return
+    }
+
+    let content = UNMutableNotificationContent()
+    content.title = arguments["title"] as? String ?? "宠伴提醒"
+    content.body = arguments["body"] as? String ?? ""
+    content.sound = .default
+    content.userInfo = payload
+
+    let scheduledAt = Date(timeIntervalSince1970: epochMillis.doubleValue / 1000.0)
+    let triggerDate = max(Date().addingTimeInterval(1), scheduledAt)
+    let components = Calendar.current.dateComponents(
+      [.year, .month, .day, .hour, .minute, .second],
+      from: triggerDate
+    )
+    let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+    let request = UNNotificationRequest(identifier: key, content: content, trigger: trigger)
+
+    UNUserNotificationCenter.current().add(request) { error in
+      DispatchQueue.main.async {
+        result(error == nil ? nil : FlutterError(code: "schedule_failed", message: error?.localizedDescription, details: nil))
+      }
+    }
+  }
+
+  private func cancelNotification(key: String?) {
+    guard let key else {
+      return
+    }
+    let center = UNUserNotificationCenter.current()
+    center.removePendingNotificationRequests(withIdentifiers: [key])
+    center.removeDeliveredNotifications(withIdentifiers: [key])
+  }
+
+  private func openSettings() {
+    guard let url = URL(string: UIApplication.openSettingsURLString) else {
+      return
+    }
+    UIApplication.shared.open(url)
+  }
+
+  private func permissionLabel(from status: UNAuthorizationStatus) -> String {
+    switch status {
+    case .authorized:
+      return "authorized"
+    case .provisional, .ephemeral:
+      return "provisional"
+    case .denied:
+      return "denied"
+    case .notDetermined:
+      return "unknown"
+    @unknown default:
+      return "unknown"
+    }
+  }
+
+  private func intentMap(
+    userInfo: [AnyHashable: Any],
+    fromForeground: Bool
+  ) -> [String: Any] {
+    return [
+      "payload": [
+        "sourceType": userInfo["sourceType"] as? String ?? "todo",
+        "sourceId": userInfo["sourceId"] as? String ?? "",
+        "petId": userInfo["petId"] as? String ?? "",
+        "routeTarget": userInfo["routeTarget"] as? String ?? "checklist",
+      ],
+      "fromForeground": fromForeground,
+    ]
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    if #available(iOS 14.0, *) {
+      completionHandler([.banner, .sound, .badge])
+    } else {
+      completionHandler([.alert, .sound, .badge])
+    }
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let payload = intentMap(
+      userInfo: response.notification.request.content.userInfo,
+      fromForeground: UIApplication.shared.applicationState == .active
+    )
+    if UIApplication.shared.applicationState == .active {
+      pendingForegroundTap = payload
+    } else {
+      initialLaunchIntent = payload
+    }
+    completionHandler()
   }
 }
 
