@@ -164,7 +164,6 @@ jobs:
           TAG_NAME: ${{ steps.parse.outputs.tag }}
         with:
           script: |
-            const core = require('@actions/core');
             const tag = process.env.TAG_NAME;
             let exists = false;
 
