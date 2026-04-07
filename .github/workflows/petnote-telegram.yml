@@ -42,8 +42,7 @@ jobs:
               }
 
               const lines = commit.message
-                .split("
-")
+                .split("\n")
                 .map(l => l.trim())
                 .filter(Boolean);
 
@@ -51,8 +50,7 @@ jobs:
               const bodyLines = lines.slice(1);
 
               const blockquote = bodyLines.length
-                ? `<blockquote>${escapeHTML(bodyLines.join("
-"))}</blockquote>`
+                ? `<blockquote>${escapeHTML(bodyLines.join("\n"))}</blockquote>`
                 : "";
 
               const time = new Date(commit.timestamp).toLocaleString(
