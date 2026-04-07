@@ -21,14 +21,17 @@ class NavigationAccent {
 
 NavigationAccent tabAccentFor(BuildContext context, AppTab tab) {
   final scheme = Theme.of(context).colorScheme;
-  final tokens = context.petCareTokens;
   return switch (tab) {
     AppTab.checklist => NavigationAccent(scheme.primary, scheme.primary),
     AppTab.overview =>
-      NavigationAccent(tokens.badgeBlueForeground, tokens.badgeBlueForeground),
-    AppTab.pets =>
-      NavigationAccent(tokens.badgeRedForeground, tokens.badgeRedForeground),
-    AppTab.me =>
-      NavigationAccent(tokens.badgeGoldForeground, tokens.badgeGoldForeground),
+      const NavigationAccent(Color(0xFF9B84E8), Color(0xFF9B84E8)),
+    AppTab.pets => NavigationAccent(
+        darkPetCareTokens.badgeRedForeground,
+        darkPetCareTokens.badgeRedForeground,
+      ),
+    AppTab.me => NavigationAccent(
+        darkPetCareTokens.badgeBlueForeground,
+        darkPetCareTokens.badgeBlueForeground,
+      ),
   };
 }
