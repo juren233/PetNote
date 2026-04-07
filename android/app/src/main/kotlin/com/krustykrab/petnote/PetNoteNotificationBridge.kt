@@ -1,4 +1,4 @@
-package com.harmony.pet.pet_care_harmony
+package com.krustykrab.petnote
 
 import android.Manifest
 import android.app.Activity
@@ -19,18 +19,18 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
 
-class PetCareNotificationBridge(
+class PetNoteNotificationBridge(
     private val activity: Activity,
     messenger: BinaryMessenger,
 ) : MethodChannel.MethodCallHandler {
     companion object {
-        const val CHANNEL_NAME = "pet_care_harmony/notifications"
+        const val CHANNEL_NAME = "petnote/notifications"
         const val REQUEST_CODE_NOTIFICATIONS = 24037
-        const val CHANNEL_ID = "pet_care_harmony_care"
-        const val EXTRA_NOTIFICATION_KEY = "pet_care_notification_key"
-        const val EXTRA_NOTIFICATION_TITLE = "pet_care_notification_title"
-        const val EXTRA_NOTIFICATION_BODY = "pet_care_notification_body"
-        const val EXTRA_NOTIFICATION_PAYLOAD = "pet_care_notification_payload"
+        const val CHANNEL_ID = "petnote_care"
+        const val EXTRA_NOTIFICATION_KEY = "petnote_notification_key"
+        const val EXTRA_NOTIFICATION_TITLE = "petnote_notification_title"
+        const val EXTRA_NOTIFICATION_BODY = "petnote_notification_body"
+        const val EXTRA_NOTIFICATION_PAYLOAD = "petnote_notification_payload"
     }
 
     private val context: Context = activity.applicationContext
@@ -138,7 +138,7 @@ class PetCareNotificationBridge(
         val body = arguments["body"] as? String ?: ""
         val payloadMap = arguments["payload"] as? Map<*, *> ?: emptyMap<String, Any?>()
         val payloadJson = JSONObject(payloadMap).toString()
-        val receiverIntent = Intent(context, PetCareNotificationReceiver::class.java).apply {
+        val receiverIntent = Intent(context, PetNoteNotificationReceiver::class.java).apply {
             putExtra(EXTRA_NOTIFICATION_KEY, key)
             putExtra(EXTRA_NOTIFICATION_TITLE, title)
             putExtra(EXTRA_NOTIFICATION_BODY, body)
@@ -177,7 +177,7 @@ class PetCareNotificationBridge(
         if (key.isNullOrEmpty()) {
             return
         }
-        val receiverIntent = Intent(context, PetCareNotificationReceiver::class.java)
+        val receiverIntent = Intent(context, PetNoteNotificationReceiver::class.java)
         val pendingIntent = PendingIntent.getBroadcast(
             context,
             key.hashCode(),

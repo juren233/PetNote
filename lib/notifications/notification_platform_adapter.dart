@@ -1,4 +1,4 @@
-import 'package:pet_care_harmony/notifications/notification_models.dart';
+import 'package:petnote/notifications/notification_models.dart';
 
 abstract class NotificationPlatformAdapter {
   Future<void> initialize();

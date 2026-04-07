@@ -5,7 +5,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 
-bundle_id="com.harmony.pet.petCareHarmony"
+bundle_id="com.krustykrab.petnote"
 ios_simulator_app="build/ios/iphonesimulator/Runner.app"
 ios_device_app="build/ios/iphoneos/Runner.app"
 ios_unsigned_ipa="build/ios/Runner-unsigned.ipa"

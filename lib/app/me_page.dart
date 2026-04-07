@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:pet_care_harmony/app/app_theme.dart';
-import 'package:pet_care_harmony/app/common_widgets.dart';
-import 'package:pet_care_harmony/app/layout_metrics.dart';
-import 'package:pet_care_harmony/notifications/notification_models.dart';
-import 'package:pet_care_harmony/app/theme_settings_copy.dart';
-import 'package:pet_care_harmony/state/app_settings_controller.dart';
+import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/common_widgets.dart';
+import 'package:petnote/app/layout_metrics.dart';
+import 'package:petnote/notifications/notification_models.dart';
+import 'package:petnote/app/theme_settings_copy.dart';
+import 'package:petnote/state/app_settings_controller.dart';
 
 class MePage extends StatelessWidget {
   const MePage({
@@ -29,7 +29,7 @@ class MePage extends StatelessWidget {
     final pagePadding =
         pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
     final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     final sharedNotificationButtonShape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(999),
     );
@@ -115,7 +115,8 @@ class MePage extends StatelessWidget {
           children: [
             ListRow(
               title: '提醒权限',
-              subtitle: _notificationPermissionLabel(notificationPermissionState),
+              subtitle:
+                  _notificationPermissionLabel(notificationPermissionState),
             ),
             ListRow(
               title: '提醒方式',
@@ -204,7 +205,7 @@ class _ThemePreferenceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Container(
       decoration: BoxDecoration(
         color: tokens.listRowBackground,

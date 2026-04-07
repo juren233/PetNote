@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/state/petnote_store.dart';
 
 typedef IosDockBuilder = Widget Function(
   BuildContext context,
@@ -9,7 +9,7 @@ typedef IosDockBuilder = Widget Function(
   VoidCallback onAddTap,
 );
 
-const _iosNativeDockViewType = 'pet_care_harmony/ios_native_dock';
+const _iosNativeDockViewType = 'petnote/ios_native_dock';
 const _iosNativeDockCenterSymbolSize = 42.0;
 const _iosNativeDockCenterSymbolCanvasOffset = 8.0;
 
@@ -70,7 +70,7 @@ class _IosNativeDockHostState extends State<IosNativeDockHost> {
   }
 
   void _onPlatformViewCreated(int viewId) {
-    final channel = MethodChannel('pet_care_harmony/ios_native_dock_$viewId');
+    final channel = MethodChannel('petnote/ios_native_dock_$viewId');
     _channel = channel;
     channel.setMethodCallHandler(_handleMethodCall);
     _syncSelectedTab();

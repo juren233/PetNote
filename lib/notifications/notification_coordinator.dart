@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:pet_care_harmony/notifications/notification_models.dart';
-import 'package:pet_care_harmony/notifications/notification_platform_adapter.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/notifications/notification_models.dart';
+import 'package:petnote/notifications/notification_platform_adapter.dart';
+import 'package:petnote/state/petnote_store.dart';
 
 class NotificationCoordinator extends ChangeNotifier {
   NotificationCoordinator({
@@ -40,7 +40,7 @@ class NotificationCoordinator extends ChangeNotifier {
     return _permissionState;
   }
 
-  Future<void> syncFromStore(PetCareStore store) async {
+  Future<void> syncFromStore(PetNoteStore store) async {
     final jobs = _buildJobsFromStore(store);
     final nextKeys = jobs.map((job) => job.key).toSet();
     final staleKeys = _scheduledKeys.difference(nextKeys);
@@ -69,7 +69,7 @@ class NotificationCoordinator extends ChangeNotifier {
     return _adapter.openNotificationSettings();
   }
 
-  List<NotificationJob> _buildJobsFromStore(PetCareStore store) {
+  List<NotificationJob> _buildJobsFromStore(PetNoteStore store) {
     final jobs = <NotificationJob>[];
     final now = _nowProvider();
 

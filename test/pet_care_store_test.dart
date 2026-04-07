@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/state/petnote_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  group('PetCareStore', () {
+  group('PetNoteStore', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
     });
@@ -11,7 +11,7 @@ void main() {
     test(
         'load with empty preferences starts with no pets and auto intro enabled',
         () async {
-      final store = await PetCareStore.load();
+      final store = await PetNoteStore.load();
 
       expect(store.pets, isEmpty);
       expect(store.shouldAutoShowFirstLaunchIntro, isTrue);
@@ -19,7 +19,7 @@ void main() {
     });
 
     test('adding a pet persists its typed profile fields', () async {
-      final store = await PetCareStore.load();
+      final store = await PetNoteStore.load();
 
       await store.addPet(
         name: 'Mochi',
@@ -34,7 +34,7 @@ void main() {
         note: '未填写',
       );
 
-      final reloaded = await PetCareStore.load();
+      final reloaded = await PetNoteStore.load();
 
       expect(reloaded.pets, hasLength(1));
       expect(reloaded.pets.single.name, 'Mochi');
@@ -44,7 +44,7 @@ void main() {
     });
 
     test('adding todo reminder and record persists all non-pet data', () async {
-      final store = await PetCareStore.load();
+      final store = await PetNoteStore.load();
 
       await store.addPet(
         name: 'Mochi',
@@ -83,7 +83,7 @@ void main() {
         note: '继续观察',
       );
 
-      final reloaded = await PetCareStore.load();
+      final reloaded = await PetNoteStore.load();
 
       expect(reloaded.todos, hasLength(1));
       expect(reloaded.todos.single.title, '补主粮');
@@ -94,7 +94,7 @@ void main() {
     });
 
     test('updating a pet persists edited profile fields', () async {
-      final store = await PetCareStore.load();
+      final store = await PetNoteStore.load();
       await store.addPet(
         name: 'Mochi',
         type: PetType.cat,
@@ -122,7 +122,7 @@ void main() {
         note: '喜欢追球',
       );
 
-      final reloaded = await PetCareStore.load();
+      final reloaded = await PetNoteStore.load();
 
       expect(reloaded.pets, hasLength(1));
       expect(reloaded.pets.single.name, 'Tofu');
@@ -133,17 +133,17 @@ void main() {
     });
 
     test('dismissing first-launch intro persists auto-show disabled', () async {
-      final store = await PetCareStore.load();
+      final store = await PetNoteStore.load();
 
       await store.dismissFirstLaunchIntro();
 
-      final reloaded = await PetCareStore.load();
+      final reloaded = await PetNoteStore.load();
       expect(reloaded.shouldAutoShowFirstLaunchIntro, isFalse);
     });
 
     test('load falls back to in-memory mode when preferences are unavailable',
         () async {
-      final store = await PetCareStore.load(
+      final store = await PetNoteStore.load(
         preferencesLoader: () async => throw Exception('plugin unavailable'),
       );
 
@@ -152,7 +152,7 @@ void main() {
     });
 
     test('seeded store exposes five checklist sections', () {
-      final store = PetCareStore.seeded();
+      final store = PetNoteStore.seeded();
 
       expect(store.checklistSections.length, 5);
       expect(store.checklistSections.first.title, '今日待办');
@@ -163,7 +163,7 @@ void main() {
     test(
         'marking a checklist item done removes it from open checklist grouping',
         () {
-      final store = PetCareStore.seeded();
+      final store = PetNoteStore.seeded();
       final firstItem = store.checklistSections.first.items.first;
 
       store.markChecklistDone(firstItem.sourceType, firstItem.id);
@@ -176,14 +176,15 @@ void main() {
     });
 
     test('overview snapshot contains four report sections', () {
-      final store = PetCareStore.seeded();
+      final store = PetNoteStore.seeded();
 
       expect(store.overviewSnapshot.sections.length, 4);
       expect(store.overviewSnapshot.disclaimer, isNotEmpty);
     });
 
-    test('postponing a checklist item moves it into postponed section', () async {
-      final store = PetCareStore.seeded();
+    test('postponing a checklist item moves it into postponed section',
+        () async {
+      final store = PetNoteStore.seeded();
       final todayItem = store.checklistSections
           .firstWhere((section) => section.key == 'today')
           .items
@@ -208,7 +209,7 @@ void main() {
     });
 
     test('skipping a checklist item moves it into skipped section', () async {
-      final store = PetCareStore.seeded();
+      final store = PetNoteStore.seeded();
       final upcomingItem = store.checklistSections
           .firstWhere((section) => section.key == 'upcoming')
           .items
@@ -232,10 +233,11 @@ void main() {
       );
     });
 
-    test('same-day reminders appear in today and move to overdue after time passes',
+    test(
+        'same-day reminders appear in today and move to overdue after time passes',
         () async {
       DateTime now = DateTime.parse('2026-03-27T10:00:00+08:00');
-      final store = await PetCareStore.load(nowProvider: () => now);
+      final store = await PetNoteStore.load(nowProvider: () => now);
 
       await store.addPet(
         name: 'Mochi',

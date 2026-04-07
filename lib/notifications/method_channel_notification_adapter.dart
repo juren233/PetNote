@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
-import 'package:pet_care_harmony/notifications/notification_models.dart';
-import 'package:pet_care_harmony/notifications/notification_platform_adapter.dart';
+import 'package:petnote/notifications/notification_models.dart';
+import 'package:petnote/notifications/notification_platform_adapter.dart';
 
 class MethodChannelNotificationPlatformAdapter
     implements NotificationPlatformAdapter {
@@ -8,7 +8,7 @@ class MethodChannelNotificationPlatformAdapter
     MethodChannel? channel,
   }) : _channel = channel ?? const MethodChannel(_channelName);
 
-  static const String _channelName = 'pet_care_harmony/notifications';
+  static const String _channelName = 'petnote/notifications';
 
   final MethodChannel _channel;
 
@@ -44,7 +44,8 @@ class MethodChannelNotificationPlatformAdapter
   @override
   Future<void> scheduleLocalNotification(NotificationJob job) async {
     try {
-      await _channel.invokeMethod<void>('scheduleLocalNotification', job.toMap());
+      await _channel.invokeMethod<void>(
+          'scheduleLocalNotification', job.toMap());
     } on MissingPluginException {
       // Unsupported platforms silently skip scheduling for now.
     }

@@ -133,8 +133,8 @@ class TodoItem {
       petId: json['petId'] as String,
       title: json['title'] as String,
       dueAt: DateTime.parse(json['dueAt'] as String),
-      notificationLeadTime:
-          _notificationLeadTimeFromName(json['notificationLeadTime'] as String?),
+      notificationLeadTime: _notificationLeadTimeFromName(
+          json['notificationLeadTime'] as String?),
       status: _todoStatusFromName(json['status'] as String?),
       note: json['note'] as String? ?? '',
     );
@@ -185,8 +185,8 @@ class ReminderItem {
       kind: _reminderKindFromName(json['kind'] as String?),
       title: json['title'] as String,
       scheduledAt: DateTime.parse(json['scheduledAt'] as String),
-      notificationLeadTime:
-          _notificationLeadTimeFromName(json['notificationLeadTime'] as String?),
+      notificationLeadTime: _notificationLeadTimeFromName(
+          json['notificationLeadTime'] as String?),
       recurrence: json['recurrence'] as String? ?? '单次',
       status: _reminderStatusFromName(json['status'] as String?),
       note: json['note'] as String? ?? '',
@@ -300,8 +300,8 @@ class OverviewSnapshot {
   final String disclaimer;
 }
 
-class PetCareStore extends ChangeNotifier {
-  PetCareStore._({
+class PetNoteStore extends ChangeNotifier {
+  PetNoteStore._({
     List<Pet>? pets,
     List<TodoItem>? todos,
     List<ReminderItem>? reminders,
@@ -329,12 +329,12 @@ class PetCareStore extends ChangeNotifier {
     }
   }
 
-  factory PetCareStore.seeded({
+  factory PetNoteStore.seeded({
     DateTime Function()? nowProvider,
   }) {
-    return PetCareStore._(
-      nowProvider: nowProvider ??
-          () => DateTime.parse('2026-03-24T12:00:00+08:00'),
+    return PetNoteStore._(
+      nowProvider:
+          nowProvider ?? () => DateTime.parse('2026-03-24T12:00:00+08:00'),
       shouldAutoShowFirstLaunchIntro: false,
       pets: [
         Pet(
@@ -464,7 +464,7 @@ class PetCareStore extends ChangeNotifier {
     );
   }
 
-  static Future<PetCareStore> load({
+  static Future<PetNoteStore> load({
     Future<SharedPreferences> Function()? preferencesLoader,
     DateTime Function()? nowProvider,
   }) async {
@@ -473,7 +473,7 @@ class PetCareStore extends ChangeNotifier {
     final todosJson = preferences?.getString(_todosStorageKey);
     final remindersJson = preferences?.getString(_remindersStorageKey);
     final recordsJson = preferences?.getString(_recordsStorageKey);
-    return PetCareStore._(
+    return PetNoteStore._(
       preferences: preferences,
       nowProvider: nowProvider,
       shouldAutoShowFirstLaunchIntro:
@@ -517,7 +517,8 @@ class PetCareStore extends ChangeNotifier {
   OverviewRange get overviewRange => _overviewRange;
   List<Pet> get pets => List<Pet>.unmodifiable(_pets);
   List<TodoItem> get todos => List<TodoItem>.unmodifiable(_todos);
-  List<ReminderItem> get reminders => List<ReminderItem>.unmodifiable(_reminders);
+  List<ReminderItem> get reminders =>
+      List<ReminderItem>.unmodifiable(_reminders);
   List<PetRecord> get records => List<PetRecord>.unmodifiable(_records);
   bool get shouldAutoShowFirstLaunchIntro => _shouldAutoShowFirstLaunchIntro;
 
@@ -587,7 +588,8 @@ class PetCareStore extends ChangeNotifier {
         skipped.add(item);
       } else if (todo.status == TodoStatus.postponed) {
         postponed.add(item);
-      } else if (_effectiveTodoStatus(todo, referenceNow) == TodoStatus.overdue) {
+      } else if (_effectiveTodoStatus(todo, referenceNow) ==
+          TodoStatus.overdue) {
         overdue.add(item);
       } else if (!todo.dueAt.isAfter(todayEnd)) {
         today.add(item);

@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pet_care_harmony/notifications/notification_coordinator.dart';
-import 'package:pet_care_harmony/notifications/notification_models.dart';
-import 'package:pet_care_harmony/notifications/notification_platform_adapter.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/notifications/notification_coordinator.dart';
+import 'package:petnote/notifications/notification_models.dart';
+import 'package:petnote/notifications/notification_platform_adapter.dart';
+import 'package:petnote/state/petnote_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -10,14 +10,15 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('syncFromStore schedules open todos and pending reminders then cancels resolved ones',
+  test(
+      'syncFromStore schedules open todos and pending reminders then cancels resolved ones',
       () async {
     final adapter = _FakeNotificationPlatformAdapter();
     final coordinator = NotificationCoordinator(
       adapter: adapter,
       nowProvider: () => DateTime.parse('2026-03-24T12:00:00+08:00'),
     );
-    final store = PetCareStore.seeded();
+    final store = PetNoteStore.seeded();
 
     await coordinator.init();
     await coordinator.syncFromStore(store);
@@ -46,7 +47,8 @@ void main() {
     expect(adapter.cancelled, contains('todo:todo-1'));
   });
 
-  test('notification lead time schedules five-minute-early triggers and skips overdue jobs',
+  test(
+      'notification lead time schedules five-minute-early triggers and skips overdue jobs',
       () async {
     final adapter = _FakeNotificationPlatformAdapter();
     final now = DateTime.parse('2026-03-27T10:00:00+08:00');
@@ -54,7 +56,7 @@ void main() {
       adapter: adapter,
       nowProvider: () => now,
     );
-    final store = await PetCareStore.load(nowProvider: () => now);
+    final store = await PetNoteStore.load(nowProvider: () => now);
 
     await store.addPet(
       name: 'Mochi',

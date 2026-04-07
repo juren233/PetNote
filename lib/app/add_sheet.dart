@@ -2,11 +2,11 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:pet_care_harmony/app/app_theme.dart';
-import 'package:pet_care_harmony/app/common_widgets.dart';
-import 'package:pet_care_harmony/app/pet_care_pages.dart';
-import 'package:pet_care_harmony/app/pet_onboarding_overlay.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/common_widgets.dart';
+import 'package:petnote/app/petnote_pages.dart';
+import 'package:petnote/app/pet_onboarding_overlay.dart';
+import 'package:petnote/state/petnote_store.dart';
 
 enum AddAction { none, todo, reminder, record, pet }
 
@@ -18,7 +18,7 @@ class AddActionSheet extends StatefulWidget {
     required this.store,
   });
 
-  final PetCareStore store;
+  final PetNoteStore store;
 
   @override
   State<AddActionSheet> createState() => _AddSheetState();
@@ -54,7 +54,8 @@ class _AddSheetState extends State<AddActionSheet>
     if (progress >= _actionsRevealStart) {
       return 0;
     }
-    final revealProgress = (1 - (progress / _actionsRevealStart)).clamp(0.0, 1.0);
+    final revealProgress =
+        (1 - (progress / _actionsRevealStart)).clamp(0.0, 1.0);
     return Curves.easeOutQuad.transform(revealProgress);
   }
 
@@ -93,7 +94,7 @@ class _AddSheetState extends State<AddActionSheet>
         final mediaQuery = MediaQuery.of(context);
         final availableHeight =
             mediaQuery.size.height - mediaQuery.padding.top - 12;
-        final tokens = context.petCareTokens;
+        final tokens = context.petNoteTokens;
         final shellProgress = _hasExpandedStage ? _sheetMotionProgress : 0.0;
         final sheetHeight =
             lerpDouble(_compactSheetHeight, availableHeight, shellProgress)!;
@@ -343,7 +344,7 @@ class _AddSheetState extends State<AddActionSheet>
       child: child,
       builder: (context, expandedChild) {
         final progress = _sheetMotionProgress;
-        final tokens = context.petCareTokens;
+        final tokens = context.petNoteTokens;
         final foregroundOffset = 40.0 * (1 - progress);
         final foregroundSurfaceOpacity =
             _isCollapsing ? 1 - _actionsRevealOpacity : 1.0;
@@ -466,7 +467,7 @@ class _ActionGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
@@ -535,7 +536,7 @@ class _ActionGridPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
@@ -628,7 +629,7 @@ class _ActionsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Padding(
       key: const ValueKey('add_actions_header_boundary'),
       padding: const EdgeInsets.only(bottom: 14),
@@ -668,7 +669,7 @@ class _ExpandedHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -723,7 +724,7 @@ class _ActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return FrostedPanel(
       padding: EdgeInsets.zero,
       child: Material(
@@ -789,7 +790,7 @@ class _ActionPreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: tokens.panelBackground,
@@ -837,7 +838,7 @@ class _ActionPreviewCard extends StatelessWidget {
 class _TodoForm extends StatefulWidget {
   const _TodoForm({super.key, required this.store});
 
-  final PetCareStore store;
+  final PetNoteStore store;
 
   @override
   State<_TodoForm> createState() => _TodoFormState();
@@ -969,7 +970,7 @@ class _TodoFormState extends State<_TodoForm> {
 class _ReminderForm extends StatefulWidget {
   const _ReminderForm({super.key, required this.store});
 
-  final PetCareStore store;
+  final PetNoteStore store;
 
   @override
   State<_ReminderForm> createState() => _ReminderFormState();
@@ -1117,7 +1118,7 @@ class _ReminderFormState extends State<_ReminderForm> {
 class _RecordForm extends StatefulWidget {
   const _RecordForm({super.key, required this.store});
 
-  final PetCareStore store;
+  final PetNoteStore store;
 
   @override
   State<_RecordForm> createState() => _RecordFormState();
@@ -1256,7 +1257,7 @@ class _RecordFormState extends State<_RecordForm> {
 class _PetForm extends StatefulWidget {
   const _PetForm({required this.store});
 
-  final PetCareStore store;
+  final PetNoteStore store;
 
   @override
   State<_PetForm> createState() => _PetFormState();
@@ -1445,7 +1446,7 @@ class _AdaptiveDateTimeField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (Theme.of(context).platform != TargetPlatform.iOS) {
-      final tokens = context.petCareTokens;
+      final tokens = context.petNoteTokens;
       return InkWell(
         key: materialFieldKey,
         borderRadius: BorderRadius.circular(22),
@@ -1462,7 +1463,7 @@ class _AdaptiveDateTimeField extends StatelessWidget {
       );
     }
 
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Container(
       decoration: BoxDecoration(
         color: tokens.panelBackground,
@@ -1508,7 +1509,7 @@ class _IosPickerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
@@ -1724,7 +1725,7 @@ class _PetSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Wrap(
       spacing: 10,
       runSpacing: 10,
@@ -1774,7 +1775,7 @@ class _ChoiceWrap<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Wrap(
       spacing: 10,
       runSpacing: 10,

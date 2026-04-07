@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pet_care_harmony/app/app_theme.dart';
-import 'package:pet_care_harmony/app/pet_care_root.dart';
-import 'package:pet_care_harmony/notifications/notification_models.dart';
-import 'package:pet_care_harmony/notifications/notification_platform_adapter.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/petnote_root.dart';
+import 'package:petnote/notifications/notification_models.dart';
+import 'package:petnote/notifications/notification_platform_adapter.dart';
+import 'package:petnote/state/petnote_store.dart';
 
 void main() {
-  testWidgets('notification launch intent switches to checklist and highlights target item',
+  testWidgets(
+      'notification launch intent switches to checklist and highlights target item',
       (tester) async {
-    final store = PetCareStore.seeded()..setActiveTab(AppTab.me);
+    final store = PetNoteStore.seeded()..setActiveTab(AppTab.me);
     final adapter = _RootFakeNotificationPlatformAdapter(
       initialIntent: const NotificationLaunchIntent(
         payload: NotificationPayload(
@@ -23,8 +24,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light),
-        home: PetCareRoot(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: PetNoteRoot(
           storeLoader: () async => store,
           notificationAdapter: adapter,
         ),
@@ -33,20 +34,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('清单'), findsWidgets);
-    expect(find.byKey(const ValueKey('highlighted_checklist_item_todo-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('highlighted_checklist_item_todo-1')),
+        findsOneWidget);
   });
 
-  testWidgets('root does not request notification permission on launch when platform state is unknown',
+  testWidgets(
+      'root does not request notification permission on launch when platform state is unknown',
       (tester) async {
-    final store = PetCareStore.seeded();
+    final store = PetNoteStore.seeded();
     final adapter = _RootFakeNotificationPlatformAdapter(
       permissionState: NotificationPermissionState.unknown,
     );
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light),
-        home: PetCareRoot(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: PetNoteRoot(
           storeLoader: () async => store,
           notificationAdapter: adapter,
         ),
@@ -58,7 +61,8 @@ void main() {
   });
 }
 
-class _RootFakeNotificationPlatformAdapter implements NotificationPlatformAdapter {
+class _RootFakeNotificationPlatformAdapter
+    implements NotificationPlatformAdapter {
   _RootFakeNotificationPlatformAdapter({
     this.initialIntent,
     this.permissionState = NotificationPermissionState.authorized,
@@ -80,7 +84,8 @@ class _RootFakeNotificationPlatformAdapter implements NotificationPlatformAdapte
   }
 
   @override
-  Future<NotificationLaunchIntent?> getInitialLaunchIntent() async => initialIntent;
+  Future<NotificationLaunchIntent?> getInitialLaunchIntent() async =>
+      initialIntent;
 
   @override
   Future<void> initialize() async {}

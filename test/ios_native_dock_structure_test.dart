@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('ios native dock view configures transparent non-opaque container layers', () {
+  test(
+      'ios native dock view configures transparent non-opaque container layers',
+      () {
     final source = File('ios/Runner/AppDelegate.swift').readAsStringSync();
 
     expect(source.contains('rootView.backgroundColor = .clear'), isTrue);

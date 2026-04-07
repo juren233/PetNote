@@ -1,4 +1,4 @@
-package com.harmony.pet.pet_care_harmony
+package com.krustykrab.petnote
 
 import android.os.Build
 import android.view.Surface
@@ -9,7 +9,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity() {
-    private var notificationBridge: PetCareNotificationBridge? = null
+    private var notificationBridge: PetNoteNotificationBridge? = null
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
@@ -18,7 +18,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        notificationBridge = PetCareNotificationBridge(
+        notificationBridge = PetNoteNotificationBridge(
             activity = this,
             messenger = flutterEngine.dartExecutor.binaryMessenger,
         )

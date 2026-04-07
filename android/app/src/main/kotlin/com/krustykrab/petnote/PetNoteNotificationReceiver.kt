@@ -1,4 +1,4 @@
-package com.harmony.pet.pet_care_harmony
+package com.krustykrab.petnote
 
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -7,20 +7,20 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 
-class PetCareNotificationReceiver : BroadcastReceiver() {
+class PetNoteNotificationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val key =
-            intent.getStringExtra(PetCareNotificationBridge.EXTRA_NOTIFICATION_KEY) ?: return
-        val title = intent.getStringExtra(PetCareNotificationBridge.EXTRA_NOTIFICATION_TITLE) ?: "宠伴提醒"
-        val body = intent.getStringExtra(PetCareNotificationBridge.EXTRA_NOTIFICATION_BODY) ?: ""
-        val payload = intent.getStringExtra(PetCareNotificationBridge.EXTRA_NOTIFICATION_PAYLOAD)
+            intent.getStringExtra(PetNoteNotificationBridge.EXTRA_NOTIFICATION_KEY) ?: return
+        val title = intent.getStringExtra(PetNoteNotificationBridge.EXTRA_NOTIFICATION_TITLE) ?: "宠伴提醒"
+        val body = intent.getStringExtra(PetNoteNotificationBridge.EXTRA_NOTIFICATION_BODY) ?: ""
+        val payload = intent.getStringExtra(PetNoteNotificationBridge.EXTRA_NOTIFICATION_PAYLOAD)
 
         val launchIntent = context.packageManager
             .getLaunchIntentForPackage(context.packageName)
             ?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 if (payload != null) {
-                    putExtra(PetCareNotificationBridge.EXTRA_NOTIFICATION_PAYLOAD, payload)
+                    putExtra(PetNoteNotificationBridge.EXTRA_NOTIFICATION_PAYLOAD, payload)
                 }
             }
             ?: return
@@ -34,7 +34,7 @@ class PetCareNotificationReceiver : BroadcastReceiver() {
 
         val notification = NotificationCompat.Builder(
             context,
-            PetCareNotificationBridge.CHANNEL_ID,
+            PetNoteNotificationBridge.CHANNEL_ID,
         )
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)

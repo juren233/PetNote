@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:pet_care_harmony/app/app_theme.dart';
-import 'package:pet_care_harmony/app/common_widgets.dart';
-import 'package:pet_care_harmony/app/layout_metrics.dart';
-import 'package:pet_care_harmony/state/app_settings_controller.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/common_widgets.dart';
+import 'package:petnote/app/layout_metrics.dart';
+import 'package:petnote/state/app_settings_controller.dart';
+import 'package:petnote/state/petnote_store.dart';
 
 class ChecklistPage extends StatelessWidget {
   const ChecklistPage({
@@ -15,7 +15,7 @@ class ChecklistPage extends StatelessWidget {
     required this.onAddFirstPet,
   });
 
-  final PetCareStore store;
+  final PetNoteStore store;
   final String activeSectionKey;
   final String? highlightedChecklistItemKey;
   final ValueChanged<String> onSectionChanged;
@@ -114,8 +114,8 @@ class ChecklistPage extends StatelessWidget {
             (item) => ChecklistCard(
               key: ValueKey('checklist_card_${item.sourceType}-${item.id}'),
               item: item,
-              highlighted:
-                  highlightedChecklistItemKey == '${item.sourceType}:${item.id}',
+              highlighted: highlightedChecklistItemKey ==
+                  '${item.sourceType}:${item.id}',
               onComplete: () =>
                   store.markChecklistDone(item.sourceType, item.id),
               onPostpone: () =>
@@ -150,7 +150,7 @@ class OverviewPage extends StatelessWidget {
     required this.onAddFirstPet,
   });
 
-  final PetCareStore store;
+  final PetNoteStore store;
   final VoidCallback onAddFirstPet;
 
   @override
@@ -222,7 +222,7 @@ class OverviewPage extends StatelessWidget {
             Text(
               snapshot.disclaimer,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: context.petCareTokens.secondaryText,
+                    color: context.petNoteTokens.secondaryText,
                     height: 1.6,
                   ),
             ),
@@ -241,7 +241,7 @@ class PetsPage extends StatelessWidget {
     required this.onEditPet,
   });
 
-  final PetCareStore store;
+  final PetNoteStore store;
   final VoidCallback onAddFirstPet;
   final ValueChanged<Pet> onEditPet;
 
@@ -574,7 +574,7 @@ class _ThemePreferenceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Container(
       decoration: BoxDecoration(
         color: tokens.listRowBackground,

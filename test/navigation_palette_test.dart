@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pet_care_harmony/app/app_theme.dart';
-import 'package:pet_care_harmony/app/navigation_palette.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/navigation_palette.dart';
+import 'package:petnote/state/petnote_store.dart';
 
 void main() {
   testWidgets('uses the dark-mode tab accent palette in light mode',
@@ -15,7 +15,7 @@ void main() {
         children: [
           Expanded(
             child: MaterialApp(
-              theme: buildPetCareTheme(Brightness.light),
+              theme: buildPetNoteTheme(Brightness.light),
               home: Builder(
                 builder: (innerContext) {
                   lightContext = innerContext;
@@ -26,7 +26,7 @@ void main() {
           ),
           Expanded(
             child: MaterialApp(
-              theme: buildPetCareTheme(Brightness.dark),
+              theme: buildPetNoteTheme(Brightness.dark),
               home: Builder(
                 builder: (innerContext) {
                   darkContext = innerContext;
@@ -75,7 +75,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light),
+        theme: buildPetNoteTheme(Brightness.light),
         home: Builder(
           builder: (innerContext) {
             context = innerContext;

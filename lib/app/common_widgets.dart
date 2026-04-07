@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:pet_care_harmony/app/app_theme.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/state/petnote_store.dart';
 
 class HyperPageBackground extends StatelessWidget {
   const HyperPageBackground({super.key, required this.child});
@@ -9,7 +9,7 @@ class HyperPageBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -61,7 +61,7 @@ class PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 18),
       child: Row(
@@ -114,7 +114,7 @@ class FrostedPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return RepaintBoundary(
       child: Container(
         margin: margin,
@@ -163,7 +163,7 @@ class HeroPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return FrostedPanel(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
@@ -274,7 +274,7 @@ class HyperSegmentedControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -335,7 +335,7 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     final spaced = <Widget>[];
     for (var index = 0; index < children.length; index += 1) {
       spaced.add(children[index]);
@@ -387,7 +387,7 @@ class EmptyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return FrostedPanel(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -452,11 +452,13 @@ class ChecklistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     final overdue = item.statusLabel == '已逾期';
     final accent = _checklistAccent(item.sourceType);
     return FrostedPanel(
-      key: highlighted ? ValueKey('highlighted_checklist_item_${item.id}') : null,
+      key: highlighted
+          ? ValueKey('highlighted_checklist_item_${item.id}')
+          : null,
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
       backgroundColor: highlighted
@@ -524,12 +526,10 @@ class ChecklistCard extends StatelessWidget {
               const SizedBox(width: 10),
               HyperBadge(
                 text: item.statusLabel,
-                foreground: overdue
-                    ? tokens.badgeRedForeground
-                    : accent.foreground,
-                background: overdue
-                    ? tokens.badgeRedBackground
-                    : accent.background,
+                foreground:
+                    overdue ? tokens.badgeRedForeground : accent.foreground,
+                background:
+                    overdue ? tokens.badgeRedBackground : accent.background,
               ),
             ],
           ),
@@ -635,7 +635,7 @@ class BulletText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -671,7 +671,7 @@ class InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -716,7 +716,7 @@ class ListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -803,7 +803,7 @@ class SectionLabel extends StatelessWidget {
       child: Text(
         text,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: context.petCareTokens.secondaryText,
+              color: context.petNoteTokens.secondaryText,
               fontWeight: FontWeight.w700,
             ),
       ),

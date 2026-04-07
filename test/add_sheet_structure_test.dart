@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final rootSource = File('lib/app/pet_care_root.dart').readAsStringSync();
+  final rootSource = File('lib/app/petnote_root.dart').readAsStringSync();
   final sheetSource = File('lib/app/add_sheet.dart').readAsStringSync();
 
   test(

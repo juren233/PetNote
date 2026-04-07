@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:pet_care_harmony/app/app_theme.dart';
+import 'package:petnote/app/app_theme.dart';
 
 class PetFirstLaunchIntro extends StatefulWidget {
   const PetFirstLaunchIntro({
@@ -169,7 +169,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     final isDark = theme.brightness == Brightness.dark;
     final page = _pages[_pageIndex];
     final isFinalPage = _pageIndex == _pages.length - 1;
@@ -747,7 +747,7 @@ class _IntroPageState extends State<_IntroPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     if (!widget.isRevealed) {
       return const SizedBox.shrink();
     }
@@ -1064,7 +1064,7 @@ class _IntroValueRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -1238,7 +1238,7 @@ class _IntroFeatureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),

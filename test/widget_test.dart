@@ -4,15 +4,15 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pet_care_harmony/app/app_theme.dart';
-import 'package:pet_care_harmony/app/common_widgets.dart';
-import 'package:pet_care_harmony/app/ios_native_dock.dart';
-import 'package:pet_care_harmony/app/pet_care_app.dart';
-import 'package:pet_care_harmony/app/pet_care_pages.dart';
-import 'package:pet_care_harmony/app/pet_onboarding_overlay.dart';
-import 'package:pet_care_harmony/app/pet_care_root.dart';
-import 'package:pet_care_harmony/app/theme_settings_copy.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/common_widgets.dart';
+import 'package:petnote/app/ios_native_dock.dart';
+import 'package:petnote/app/petnote_app.dart';
+import 'package:petnote/app/petnote_pages.dart';
+import 'package:petnote/app/pet_onboarding_overlay.dart';
+import 'package:petnote/app/petnote_root.dart';
+import 'package:petnote/app/theme_settings_copy.dart';
+import 'package:petnote/state/petnote_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _petsStorageKey = 'pets_v1';
@@ -26,7 +26,7 @@ void main() {
 
   testWidgets('intro shows a gray launch paw before first page content appears',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
 
@@ -47,7 +47,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light),
+        theme: buildPetNoteTheme(Brightness.light),
         home: Scaffold(
           body: ChecklistCard(
             item: ChecklistItemViewModel(
@@ -78,11 +78,11 @@ void main() {
 
   testWidgets('checklist page shows postponed and skipped segments',
       (tester) async {
-    final store = PetCareStore.seeded();
+    final store = PetNoteStore.seeded();
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light),
+        theme: buildPetNoteTheme(Brightness.light),
         home: Scaffold(
           body: ChecklistPage(
             store: store,
@@ -104,7 +104,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light),
+        theme: buildPetNoteTheme(Brightness.light),
         home: Scaffold(
           body: PetOnboardingFlow(
             onSubmit: (_) async {},
@@ -121,7 +121,7 @@ void main() {
   testWidgets(
       'intro-entered onboarding shows a back button that returns to intro',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _enterOnboardingFromIntro(tester);
@@ -146,7 +146,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light),
+        theme: buildPetNoteTheme(Brightness.light),
         home: Scaffold(
           body: Column(
             children: [
@@ -199,7 +199,7 @@ void main() {
 
   testWidgets('intro keeps a single paw during launch without a handoff icon',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
     await tester.pump(const Duration(milliseconds: 80));
@@ -215,7 +215,7 @@ void main() {
   });
 
   testWidgets('shows first-launch intro before pet onboarding', (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('first_launch_intro_overlay')),
@@ -236,7 +236,7 @@ void main() {
   testWidgets(
       'first page footer chrome waits until intro rows finish before appearing',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pump();
     for (var i = 0; i < 20; i++) {
       if (find
@@ -322,7 +322,7 @@ void main() {
   testWidgets(
       'first page indicator stays in place when continue button appears',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pump();
     for (var i = 0; i < 20; i++) {
       if (find
@@ -363,7 +363,7 @@ void main() {
 
   testWidgets('intro page view uses page spacing without extra end padding',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     final pageView = tester.widget<PageView>(
@@ -377,7 +377,7 @@ void main() {
   testWidgets(
       'second page content reveals when first visited and stays visible',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('intro_page_1_content')), findsNothing);
@@ -408,7 +408,7 @@ void main() {
   testWidgets(
       'hero icons can differ from a shared indicator color across intro pages',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     expect(
@@ -447,7 +447,7 @@ void main() {
 
   testWidgets('second page checklist and file icons use the updated colors',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -467,7 +467,7 @@ void main() {
 
   testWidgets('intro hero icon stays anchored while switching pages',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('intro_fixed_hero_host')), findsOneWidget);
@@ -505,7 +505,7 @@ void main() {
 
   testWidgets('intro hero switch shows a visible rebound dip before settling',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -540,7 +540,7 @@ void main() {
   testWidgets(
       'intro hero stays matched when quickly returning to the previous page',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -569,7 +569,7 @@ void main() {
 
   testWidgets('intro overlay does not add outer horizontal padding',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     final overlayRect = tester.getRect(
@@ -585,7 +585,7 @@ void main() {
 
   testWidgets('intro primary CTA opens pet onboarding on final page',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _advanceIntroToFinalPage(tester);
@@ -601,7 +601,7 @@ void main() {
 
   testWidgets('final page footer reveals sequentially like the first page',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -720,7 +720,7 @@ void main() {
 
   testWidgets('final page privacy rows use animated lock icons',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _advanceIntroToFinalPage(tester);
@@ -734,7 +734,7 @@ void main() {
 
   testWidgets('final page privacy lock stays open long enough to notice',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -777,7 +777,7 @@ void main() {
 
   testWidgets('final page privacy lock reaches its enlarged state a bit sooner',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -811,7 +811,7 @@ void main() {
   testWidgets(
       'choosing explore first hides intro, persists dismissal, and still allows manual reopen',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _advanceIntroToFinalPage(tester);
@@ -826,7 +826,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(_firstLaunchIntroAutoEnabledKey), isFalse);
 
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     expect(
@@ -842,7 +842,7 @@ void main() {
   testWidgets(
       'starting onboarding from intro keeps intro briefly visible while onboarding fades in',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _advanceIntroToFinalPage(tester);
@@ -864,7 +864,7 @@ void main() {
   testWidgets(
       'starting onboarding from intro does not reset the intro back to page one during transition',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _advanceIntroToFinalPage(tester);
@@ -883,7 +883,7 @@ void main() {
   testWidgets(
       'starting onboarding keeps intro content fully visible during the hero expansion phase',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _advanceIntroToFinalPage(tester);
@@ -925,7 +925,7 @@ void main() {
   testWidgets(
       'starting onboarding begins revealing the first onboarding step before intro fully disappears',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _advanceIntroToFinalPage(tester);
@@ -960,7 +960,7 @@ void main() {
   testWidgets(
       'starting onboarding fades intro content and footer buttons together before the hero becomes tiny',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _advanceIntroToFinalPage(tester);
@@ -987,7 +987,7 @@ void main() {
   testWidgets(
       'explore first keeps intro visible briefly during the shell cross fade',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _advanceIntroToFinalPage(tester);
@@ -1006,7 +1006,7 @@ void main() {
 
   testWidgets('explore first pulls the whole intro overlay upward',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _advanceIntroToFinalPage(tester);
@@ -1038,7 +1038,7 @@ void main() {
   testWidgets(
       'deferring onboarding entered from intro closes to shell without reopening intro',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await _enterOnboardingFromIntro(tester);
@@ -1059,7 +1059,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
     await _enterOnboardingFromIntro(tester);
 
@@ -1118,7 +1118,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light),
+        theme: buildPetNoteTheme(Brightness.light),
         home: Scaffold(
           body: PetOnboardingFlow(
             onSubmit: (_) async {},
@@ -1144,7 +1144,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light),
+        theme: buildPetNoteTheme(Brightness.light),
         home: Scaffold(
           body: PetOnboardingFlow(
             onSubmit: (_) async {},
@@ -1192,7 +1192,7 @@ void main() {
   testWidgets(
       'can create the first pet through onboarding and land on checklist',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
     await _enterOnboardingFromIntro(tester);
 
@@ -1245,7 +1245,7 @@ void main() {
   testWidgets(
       'requires a custom breed before continuing when choosing other breed',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
     await _enterOnboardingFromIntro(tester);
 
@@ -1269,7 +1269,7 @@ void main() {
   testWidgets(
       'birthday step uses Chinese month text and keeps selected day visible',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
     await _enterOnboardingFromIntro(tester);
 
@@ -1305,7 +1305,7 @@ void main() {
   testWidgets(
       'birthday step does not preselect today and uses orange text for selected current day',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
     await _enterOnboardingFromIntro(tester);
 
@@ -1360,7 +1360,7 @@ void main() {
 
   testWidgets('birthday step allows dates after the current day',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
     await _enterOnboardingFromIntro(tester);
 
@@ -1391,7 +1391,7 @@ void main() {
 
   testWidgets('neuter step only shows explicit yes or no options',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
     await _enterOnboardingFromIntro(tester);
 
@@ -1431,7 +1431,7 @@ void main() {
 
   testWidgets('note step can be skipped and saves the first pet',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
     await _enterOnboardingFromIntro(tester);
 
@@ -1492,7 +1492,7 @@ void main() {
       SharedPreferences.setMockInitialValues({
         _firstLaunchIntroAutoEnabledKey: false,
       });
-      await tester.pumpWidget(const PetCareApp());
+      await tester.pumpWidget(const PetNoteApp());
       await tester.pumpAndSettle();
 
       await tester.tap(find.byIcon(Icons.add));
@@ -1528,7 +1528,7 @@ void main() {
 
   testWidgets('expanded todo form back returns to action grid', (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.add));
@@ -1554,9 +1554,9 @@ void main() {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light)
+        theme: buildPetNoteTheme(Brightness.light)
             .copyWith(platform: TargetPlatform.iOS),
-        home: PetCareRoot(
+        home: PetNoteRoot(
           iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
             return Container(
               key: const ValueKey('fake_ios_native_dock'),
@@ -1596,9 +1596,9 @@ void main() {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light)
+        theme: buildPetNoteTheme(Brightness.light)
             .copyWith(platform: TargetPlatform.iOS),
-        home: PetCareRoot(
+        home: PetNoteRoot(
           iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
             return Container(
               key: const ValueKey('fake_ios_native_dock'),
@@ -1637,7 +1637,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.add));
@@ -1665,7 +1665,7 @@ void main() {
       (tester) async {
     for (final action in ['新增提醒', '新增记录']) {
       SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-      await tester.pumpWidget(const PetCareApp());
+      await tester.pumpWidget(const PetNoteApp());
       await tester.pumpAndSettle();
 
       await tester.tap(find.byIcon(Icons.add));
@@ -1690,7 +1690,7 @@ void main() {
   testWidgets('expanded todo form time field opens a picker flow',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.add));
@@ -1709,9 +1709,9 @@ void main() {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.dark)
+        theme: buildPetNoteTheme(Brightness.dark)
             .copyWith(platform: TargetPlatform.iOS),
-        home: PetCareRoot(
+        home: PetNoteRoot(
           iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
             return Container(
               height: 84,
@@ -1757,9 +1757,9 @@ void main() {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.dark)
+        theme: buildPetNoteTheme(Brightness.dark)
             .copyWith(platform: TargetPlatform.iOS),
-        home: PetCareRoot(
+        home: PetNoteRoot(
           iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
             return Container(
               height: 84,
@@ -1797,7 +1797,7 @@ void main() {
   testWidgets('dock add pet onboarding keeps the original sheet corner radius',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.add));
@@ -1829,7 +1829,7 @@ void main() {
       'dock add pet onboarding shows a top-left back button and returns to actions',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.add));
@@ -1852,7 +1852,7 @@ void main() {
       'dock add pet transition keeps the foreground settling without revealing the action grid',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.add));
@@ -1873,7 +1873,7 @@ void main() {
       'expanded reminder transition does not leave a blur layer behind the foreground sheet',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.add));
@@ -1895,7 +1895,7 @@ void main() {
       ..._persistedSinglePetPreferences(),
       _firstLaunchIntroAutoEnabledKey: true,
     });
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.add));
@@ -1917,7 +1917,7 @@ void main() {
   testWidgets('uses immersive dock with compact centered add button',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('bottom_nav_blur')), findsOneWidget);
@@ -1944,7 +1944,7 @@ void main() {
   testWidgets('keeps blur only on the bottom dock and not on content panels',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     expect(find.byType(BackdropFilter), findsOneWidget);
@@ -1956,9 +1956,9 @@ void main() {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetCareTheme(Brightness.light)
+        theme: buildPetNoteTheme(Brightness.light)
             .copyWith(platform: TargetPlatform.iOS),
-        home: PetCareRoot(
+        home: PetNoteRoot(
           iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
             return Container(
               key: const ValueKey('fake_ios_native_dock'),
@@ -2032,7 +2032,7 @@ void main() {
   testWidgets('uses the warm pet orange theme for primary actions',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     final context = tester.element(find.byType(Scaffold));
@@ -2060,7 +2060,7 @@ void main() {
       'keeps informational highlight cards on the cooler accent palette',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     final coolAccentCards = find.byWidgetPredicate((widget) {
@@ -2078,7 +2078,7 @@ void main() {
   testWidgets('configures transparent immersive status bar wrapper',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     final annotated = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
@@ -2090,7 +2090,7 @@ void main() {
   testWidgets('shows theme settings on the me page and switches to dark mode',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('tab_me')));
@@ -2121,7 +2121,7 @@ void main() {
       ..._persistedSinglePetPreferences(),
       'app_theme_mode_v1': 'dark',
     });
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     final scaffoldContext = tester.element(find.byType(Scaffold).first);
@@ -2136,7 +2136,7 @@ void main() {
       ..._persistedSinglePetPreferences(),
       'app_theme_mode_v1': 'dark',
     });
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.add));
@@ -2148,27 +2148,27 @@ void main() {
     final shellGradient =
         (shell.decoration as BoxDecoration).gradient! as LinearGradient;
     expect(shellGradient.colors, [
-      darkPetCareTokens.pageGradientTop,
-      darkPetCareTokens.pageGradientBottom,
+      darkPetNoteTokens.pageGradientTop,
+      darkPetNoteTokens.pageGradientBottom,
     ]);
 
     final bottomSheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
-    expect(bottomSheet.backgroundColor, darkPetCareTokens.pageGradientTop);
+    expect(bottomSheet.backgroundColor, darkPetNoteTokens.pageGradientTop);
 
     final title = tester.widget<Text>(find.text('新增内容'));
-    expect(title.style?.color, darkPetCareTokens.primaryText);
+    expect(title.style?.color, darkPetNoteTokens.primaryText);
 
     final subtitle = tester.widget<Text>(find.text('今天要给毛孩子加点什么新内容？'));
-    expect(subtitle.style?.color, darkPetCareTokens.secondaryText);
+    expect(subtitle.style?.color, darkPetNoteTokens.secondaryText);
 
     final cardTitle = tester.widget<Text>(find.text('新增待办'));
-    expect(cardTitle.style?.color, darkPetCareTokens.primaryText);
+    expect(cardTitle.style?.color, darkPetNoteTokens.primaryText);
   });
 
   testWidgets('notification action buttons share the same pill layout',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('tab_me')));
@@ -2210,7 +2210,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'app_theme_mode_v1': 'dark',
     });
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     final overlayMaterial = tester.widget<Material>(
@@ -2218,7 +2218,7 @@ void main() {
     );
     expect(
       overlayMaterial.color,
-      buildPetCareTheme(Brightness.dark)
+      buildPetNoteTheme(Brightness.dark)
           .scaffoldBackgroundColor
           .withValues(alpha: 0.92),
     );
@@ -2234,12 +2234,12 @@ void main() {
     final gradient =
         (gradientBox.decoration as BoxDecoration).gradient! as LinearGradient;
     expect(gradient.colors, [
-      darkPetCareTokens.pageGradientTop,
-      darkPetCareTokens.pageGradientBottom,
+      darkPetNoteTokens.pageGradientTop,
+      darkPetNoteTokens.pageGradientBottom,
     ]);
 
     final title = tester.widget<Text>(find.text('欢迎来到宠伴'));
-    expect(title.style?.color, darkPetCareTokens.primaryText);
+    expect(title.style?.color, darkPetNoteTokens.primaryText);
   });
 
   testWidgets('restores persisted system theme preference', (tester) async {
@@ -2247,7 +2247,7 @@ void main() {
       ..._persistedSinglePetPreferences(),
       'app_theme_mode_v1': 'system',
     });
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
@@ -2256,7 +2256,7 @@ void main() {
 
   testWidgets('uses explicit insets instead of nested SafeArea wrappers',
       (tester) async {
-    await tester.pumpWidget(const PetCareApp());
+    await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
     expect(find.byType(SafeArea), findsNothing);

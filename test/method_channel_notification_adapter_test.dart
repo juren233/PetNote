@@ -1,12 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pet_care_harmony/notifications/method_channel_notification_adapter.dart';
-import 'package:pet_care_harmony/notifications/notification_models.dart';
+import 'package:petnote/notifications/method_channel_notification_adapter.dart';
+import 'package:petnote/notifications/notification_models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const channel = MethodChannel('pet_care_harmony/notifications');
+  const channel = MethodChannel('petnote/notifications');
 
   tearDown(() async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

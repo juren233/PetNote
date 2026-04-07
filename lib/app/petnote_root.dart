@@ -3,26 +3,26 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:pet_care_harmony/app/add_sheet.dart';
-import 'package:pet_care_harmony/app/app_theme.dart';
-import 'package:pet_care_harmony/app/common_widgets.dart';
-import 'package:pet_care_harmony/app/ios_native_dock.dart';
-import 'package:pet_care_harmony/app/layout_metrics.dart';
-import 'package:pet_care_harmony/app/me_page.dart';
-import 'package:pet_care_harmony/app/navigation_palette.dart';
-import 'package:pet_care_harmony/notifications/method_channel_notification_adapter.dart';
-import 'package:pet_care_harmony/notifications/notification_coordinator.dart';
-import 'package:pet_care_harmony/notifications/notification_models.dart';
-import 'package:pet_care_harmony/notifications/notification_platform_adapter.dart';
-import 'package:pet_care_harmony/app/pet_care_pages.dart' hide MePage;
-import 'package:pet_care_harmony/app/pet_edit_sheet.dart';
-import 'package:pet_care_harmony/app/pet_first_launch_intro.dart';
-import 'package:pet_care_harmony/app/pet_onboarding_overlay.dart';
-import 'package:pet_care_harmony/state/app_settings_controller.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/app/add_sheet.dart';
+import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/common_widgets.dart';
+import 'package:petnote/app/ios_native_dock.dart';
+import 'package:petnote/app/layout_metrics.dart';
+import 'package:petnote/app/me_page.dart';
+import 'package:petnote/app/navigation_palette.dart';
+import 'package:petnote/notifications/method_channel_notification_adapter.dart';
+import 'package:petnote/notifications/notification_coordinator.dart';
+import 'package:petnote/notifications/notification_models.dart';
+import 'package:petnote/notifications/notification_platform_adapter.dart';
+import 'package:petnote/app/petnote_pages.dart' hide MePage;
+import 'package:petnote/app/pet_edit_sheet.dart';
+import 'package:petnote/app/pet_first_launch_intro.dart';
+import 'package:petnote/app/pet_onboarding_overlay.dart';
+import 'package:petnote/state/app_settings_controller.dart';
+import 'package:petnote/state/petnote_store.dart';
 
-class PetCareRoot extends StatefulWidget {
-  const PetCareRoot({
+class PetNoteRoot extends StatefulWidget {
+  const PetNoteRoot({
     super.key,
     this.settingsController,
     this.iosDockBuilder,
@@ -32,20 +32,20 @@ class PetCareRoot extends StatefulWidget {
 
   final AppSettingsController? settingsController;
   final IosDockBuilder? iosDockBuilder;
-  final Future<PetCareStore> Function()? storeLoader;
+  final Future<PetNoteStore> Function()? storeLoader;
   final NotificationPlatformAdapter? notificationAdapter;
 
   @override
-  State<PetCareRoot> createState() => _PetCareRootState();
+  State<PetNoteRoot> createState() => _PetNoteRootState();
 }
 
 enum _OnboardingEntryPoint { intro, manual }
 
 enum _OverlayTransition { none, introToOnboarding, introToShell }
 
-class _PetCareRootState extends State<PetCareRoot>
+class _PetNoteRootState extends State<PetNoteRoot>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
-  PetCareStore? _store;
+  PetNoteStore? _store;
   NotificationCoordinator? _notificationCoordinator;
   String _activeChecklistKey = 'today';
   String? _highlightedChecklistItemKey;
@@ -72,7 +72,7 @@ class _PetCareRootState extends State<PetCareRoot>
   }
 
   Future<void> _loadStore() async {
-    final store = await (widget.storeLoader ?? PetCareStore.load)();
+    final store = await (widget.storeLoader ?? PetNoteStore.load)();
     if (!mounted) {
       return;
     }
@@ -93,7 +93,7 @@ class _PetCareRootState extends State<PetCareRoot>
     unawaited(_initializeNotifications(store));
   }
 
-  Future<void> _initializeNotifications(PetCareStore store) async {
+  Future<void> _initializeNotifications(PetNoteStore store) async {
     final coordinator = NotificationCoordinator(
       adapter: widget.notificationAdapter ??
           MethodChannelNotificationPlatformAdapter(),
@@ -144,7 +144,7 @@ class _PetCareRootState extends State<PetCareRoot>
       );
     }
 
-    final overlayStyle = petCareOverlayStyleForTheme(Theme.of(context));
+    final overlayStyle = petNoteOverlayStyleForTheme(Theme.of(context));
     final showBottomNavigation = !_showOnboarding &&
         (!_showFirstLaunchIntro ||
             _overlayTransition == _OverlayTransition.introToShell);
@@ -156,7 +156,7 @@ class _PetCareRootState extends State<PetCareRoot>
         ? null
         : useNativeIosDock
             ? _buildIosNativeDock(context, store)
-            : _PetCareBottomNav(
+            : _PetNoteBottomNav(
                 store: store,
                 onAdd: () => _openAddSheet(context, store),
               );
@@ -164,7 +164,7 @@ class _PetCareRootState extends State<PetCareRoot>
       value: overlayStyle,
       child: Scaffold(
         extendBody: true,
-        body: _PetCareBody(
+        body: _PetNoteBody(
           store: store,
           activeChecklistKey: _activeChecklistKey,
           showFirstLaunchIntro: _showFirstLaunchIntro,
@@ -195,7 +195,7 @@ class _PetCareRootState extends State<PetCareRoot>
     );
   }
 
-  Widget _buildIosNativeDock(BuildContext context, PetCareStore store) {
+  Widget _buildIosNativeDock(BuildContext context, PetNoteStore store) {
     return AnimatedBuilder(
       animation: store,
       builder: (context, _) {
@@ -218,8 +218,8 @@ class _PetCareRootState extends State<PetCareRoot>
     );
   }
 
-  Future<void> _openAddSheet(BuildContext context, PetCareStore store) async {
-    final tokens = context.petCareTokens;
+  Future<void> _openAddSheet(BuildContext context, PetNoteStore store) async {
+    final tokens = context.petNoteTokens;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -235,7 +235,7 @@ class _PetCareRootState extends State<PetCareRoot>
 
   Future<void> _openEditPetSheet(
     BuildContext context,
-    PetCareStore store,
+    PetNoteStore store,
     Pet pet,
   ) async {
     await showModalBottomSheet<void>(
@@ -369,7 +369,7 @@ class _PetCareRootState extends State<PetCareRoot>
     unawaited(_consumeForegroundNotificationTap(store));
   }
 
-  Future<void> _consumeForegroundNotificationTap(PetCareStore store) async {
+  Future<void> _consumeForegroundNotificationTap(PetNoteStore store) async {
     final coordinator = _notificationCoordinator;
     if (coordinator == null) {
       return;
@@ -381,7 +381,7 @@ class _PetCareRootState extends State<PetCareRoot>
   }
 
   void _applyNotificationIntent(
-    PetCareStore store,
+    PetNoteStore store,
     NotificationLaunchIntent intent,
   ) {
     final sectionKey = _sectionKeyForPayload(store, intent.payload);
@@ -397,7 +397,7 @@ class _PetCareRootState extends State<PetCareRoot>
   }
 
   String _sectionKeyForPayload(
-    PetCareStore store,
+    PetNoteStore store,
     NotificationPayload payload,
   ) {
     for (final section in store.checklistSections) {
@@ -432,8 +432,8 @@ class _PetCareRootState extends State<PetCareRoot>
   }
 }
 
-class _PetCareBody extends StatelessWidget {
-  const _PetCareBody({
+class _PetNoteBody extends StatelessWidget {
+  const _PetNoteBody({
     required this.store,
     required this.activeChecklistKey,
     required this.showFirstLaunchIntro,
@@ -454,7 +454,7 @@ class _PetCareBody extends StatelessWidget {
     this.bottomNavigationOverlay,
   });
 
-  final PetCareStore store;
+  final PetNoteStore store;
   final String activeChecklistKey;
   final bool showFirstLaunchIntro;
   final bool showOnboarding;
@@ -601,13 +601,13 @@ class _PetCareBody extends StatelessWidget {
   }
 }
 
-class _PetCareBottomNav extends StatelessWidget {
-  const _PetCareBottomNav({
+class _PetNoteBottomNav extends StatelessWidget {
+  const _PetNoteBottomNav({
     required this.store,
     required this.onAdd,
   });
 
-  final PetCareStore store;
+  final PetNoteStore store;
   final VoidCallback onAdd;
 
   @override
@@ -617,7 +617,7 @@ class _PetCareBottomNav extends StatelessWidget {
       builder: (context, _) {
         final insets = MediaQuery.viewPaddingOf(context);
         final dockLayout = dockLayoutForInsets(insets);
-        final tokens = context.petCareTokens;
+        final tokens = context.petNoteTokens;
         final activeTab = store.activeTab;
 
         return RepaintBoundary(
@@ -766,7 +766,7 @@ class _TabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Expanded(
       child: InkWell(
         borderRadius: BorderRadius.circular(24),

@@ -1,4 +1,4 @@
-# Pet Care Harmony
+# 宠记 PetNote
 
 宠物照护管理应用，当前仓库同时维护三端：
 
@@ -12,6 +12,11 @@
 - HarmonyOS 固定使用项目内 OHOS Flutter
 
 这份 README 重点说明“怎么开工程、怎么跑三端、哪些文件该提交、哪些不要提交”。
+
+## 依赖源约定
+
+- 当前项目依赖锁文件固定使用 `https://pub.flutter-io.cn`
+- 非必要不要把 [pubspec.lock](./pubspec.lock) 里的这个 URL 改成 `https://pub.dev` 或其他地址，避免产生无关锁文件噪音和团队环境不一致
 
 ## 目录结构
 

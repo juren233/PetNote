@@ -16,8 +16,8 @@ import UserNotifications
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IosNativeDockPlugin") {
       IosNativeDockPlugin.register(with: registrar)
     }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetCareNotificationPlugin") {
-      PetCareNotificationPlugin.register(with: registrar)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteNotificationPlugin") {
+      PetNoteNotificationPlugin.register(with: registrar)
     }
   }
 
@@ -26,7 +26,7 @@ import UserNotifications
     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
   ) {
     super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
-    PetCareNotificationPlugin.shared?.updatePushToken(deviceToken)
+    PetNoteNotificationPlugin.shared?.updatePushToken(deviceToken)
   }
 }
 
@@ -76,9 +76,9 @@ private enum IosNativeDockTab: Int, CaseIterable {
   }
 }
 
-final class PetCareNotificationPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate {
-  static let channelName = "pet_care_harmony/notifications"
-  static var shared: PetCareNotificationPlugin?
+final class PetNoteNotificationPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate {
+  static let channelName = "petnote/notifications"
+  static var shared: PetNoteNotificationPlugin?
 
   private let channel: FlutterMethodChannel
   private var initialLaunchIntent: [String: Any]?
@@ -96,7 +96,7 @@ final class PetCareNotificationPlugin: NSObject, FlutterPlugin, UNUserNotificati
       name: channelName,
       binaryMessenger: registrar.messenger()
     )
-    let instance = PetCareNotificationPlugin(channel: channel)
+    let instance = PetNoteNotificationPlugin(channel: channel)
     shared = instance
     registrar.addMethodCallDelegate(instance, channel: channel)
   }
@@ -279,7 +279,7 @@ final class PetCareNotificationPlugin: NSObject, FlutterPlugin, UNUserNotificati
 final class IosNativeDockPlugin: NSObject, FlutterPlugin {
   static func register(with registrar: FlutterPluginRegistrar) {
     let factory = IosNativeDockViewFactory(messenger: registrar.messenger())
-    registrar.register(factory, withId: "pet_care_harmony/ios_native_dock")
+    registrar.register(factory, withId: "petnote/ios_native_dock")
   }
 }
 
@@ -331,7 +331,7 @@ final class IosNativeDockPlatformView: NSObject, FlutterPlatformView, UITabBarCo
     centerSymbolCanvasOffset = CGFloat((args?["centerSymbolCanvasOffset"] as? Double) ?? 8)
     interfaceStyle = brightness == "dark" ? .dark : .light
     channel = FlutterMethodChannel(
-      name: "pet_care_harmony/ios_native_dock_\(viewId)",
+      name: "petnote/ios_native_dock_\(viewId)",
       binaryMessenger: messenger
     )
 

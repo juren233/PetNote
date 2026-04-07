@@ -2,10 +2,10 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
-import 'package:pet_care_harmony/app/app_theme.dart';
-import 'package:pet_care_harmony/app/common_widgets.dart';
-import 'package:pet_care_harmony/app/pet_onboarding_taxonomy.dart';
-import 'package:pet_care_harmony/state/pet_care_store.dart';
+import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/common_widgets.dart';
+import 'package:petnote/app/pet_onboarding_taxonomy.dart';
+import 'package:petnote/state/petnote_store.dart';
 
 class PetOnboardingResult {
   const PetOnboardingResult({
@@ -57,7 +57,7 @@ class _PetOnboardingOverlayState extends State<PetOnboardingOverlay> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     final isDark = theme.brightness == Brightness.dark;
     final transitionOpacity = _transitionOpacity();
 
@@ -289,7 +289,7 @@ class _PetOnboardingFlowState extends State<PetOnboardingFlow>
 
   Widget _buildTopBar(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     final isDark = theme.brightness == Brightness.dark;
     final progressFrameBorderColor = isDark
         ? tokens.primaryText.withValues(alpha: 0.24)
@@ -464,7 +464,7 @@ class _PetOnboardingFlowState extends State<PetOnboardingFlow>
               Text(
                 step.title,
                 style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      color: context.petCareTokens.primaryText,
+                      color: context.petNoteTokens.primaryText,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -1,
                     ),
@@ -473,7 +473,7 @@ class _PetOnboardingFlowState extends State<PetOnboardingFlow>
               Text(
                 step.subtitle,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: context.petCareTokens.secondaryText,
+                      color: context.petNoteTokens.secondaryText,
                       fontWeight: FontWeight.w500,
                     ),
               ),
@@ -598,7 +598,7 @@ class _PetOnboardingFlowState extends State<PetOnboardingFlow>
 
   List<Widget> _birthdayStep() {
     final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     final now = DateTime.now();
     final latestBirthday = DateTime(now.year + 25, 12, 31);
     final calendarTheme = theme.copyWith(
@@ -1056,7 +1056,7 @@ class _OptionWrap<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.petCareTokens;
+    final tokens = context.petNoteTokens;
     return Wrap(
       spacing: 10,
       runSpacing: 10,
