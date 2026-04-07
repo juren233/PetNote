@@ -165,7 +165,7 @@ final class PetNoteNotificationPlugin: NSObject, FlutterPlugin, UNUserNotificati
     }
 
     let content = UNMutableNotificationContent()
-    content.title = arguments["title"] as? String ?? "宠伴提醒"
+    content.title = arguments["title"] as? String ?? "宠记提醒"
     content.body = arguments["body"] as? String ?? ""
     content.sound = .default
     content.userInfo = payload

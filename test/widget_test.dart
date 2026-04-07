@@ -222,10 +222,10 @@ void main() {
         findsOneWidget);
     expect(find.byKey(const ValueKey('intro_launch_paw_icon')), findsNothing);
     expect(find.byKey(const ValueKey('intro_page_0_content')), findsOneWidget);
-    expect(find.text('欢迎来到宠伴'), findsOneWidget);
+    expect(find.text('欢迎来到宠记'), findsOneWidget);
     expect(find.text('照顾它的每一天，都能更从容一点'), findsNothing);
     expect(find.widgetWithText(FilledButton, '继续'), findsOneWidget);
-    expect(find.text('宠伴'), findsNothing);
+    expect(find.text('宠记'), findsNothing);
     expect(find.text('1 / 3'), findsNothing);
     expect(find.byIcon(Icons.done_rounded), findsNWidgets(3));
     expect(find.byKey(const ValueKey('first_launch_onboarding_overlay')),
@@ -2238,7 +2238,7 @@ void main() {
       darkPetNoteTokens.pageGradientBottom,
     ]);
 
-    final title = tester.widget<Text>(find.text('欢迎来到宠伴'));
+    final title = tester.widget<Text>(find.text('欢迎来到宠记'));
     expect(title.style?.color, darkPetNoteTokens.primaryText);
   });
 

@@ -11,7 +11,7 @@ class PetNoteNotificationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val key =
             intent.getStringExtra(PetNoteNotificationBridge.EXTRA_NOTIFICATION_KEY) ?: return
-        val title = intent.getStringExtra(PetNoteNotificationBridge.EXTRA_NOTIFICATION_TITLE) ?: "宠伴提醒"
+        val title = intent.getStringExtra(PetNoteNotificationBridge.EXTRA_NOTIFICATION_TITLE) ?: "宠记提醒"
         val body = intent.getStringExtra(PetNoteNotificationBridge.EXTRA_NOTIFICATION_BODY) ?: ""
         val payload = intent.getStringExtra(PetNoteNotificationBridge.EXTRA_NOTIFICATION_PAYLOAD)
 

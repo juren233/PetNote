@@ -68,7 +68,7 @@ class MePage extends StatelessWidget {
           subtitle: '设备与应用设置',
         ),
         const HeroPanel(
-          title: 'Pet Care',
+          title: 'PetNote',
           subtitle: '把提醒、记录和照护总结收在一个更轻盈的系统式界面里，方便每天顺手管理。',
           child: SizedBox.shrink(),
         ),

@@ -208,10 +208,10 @@ class PetNoteNotificationBridge(
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "宠伴提醒",
+            "宠记提醒",
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "宠伴待办和提醒通知"
+            description = "宠记待办和提醒通知"
         }
         notificationManager.createNotificationChannel(channel)
     }

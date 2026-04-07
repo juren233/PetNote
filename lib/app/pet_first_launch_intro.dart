@@ -62,7 +62,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
 
   static const _pages = [
     _IntroPageData(
-      title: '欢迎来到宠伴',
+      title: '欢迎来到宠记',
       subtitle: '把毛孩子的日常照顾、重要提醒和成长记录，放进一个更省心的小空间里。',
       icon: Icons.pets_rounded,
       accentColor: Color(0xFFF2A65A),
@@ -75,7 +75,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
     ),
     _IntroPageData(
       title: '照顾它的每一天，都能更从容一点',
-      subtitle: '从待办提醒到资料记录，宠伴会把重要的照护信息收在顺手的位置。',
+      subtitle: '从待办提醒到资料记录，宠记会把重要的照护信息收在顺手的位置。',
       icon: Icons.auto_awesome_rounded,
       accentColor: Color(0xFFD9822B),
       heroAccentColor: Color(0xFF8D63D2),
@@ -464,7 +464,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
       child: TextButton(
         key: const ValueKey('first_launch_intro_secondary_button'),
         onPressed: _isSecondaryNavigating ? null : _handleExploreFirst,
-        child: const Text('先看看宠伴'),
+        child: const Text('先看看宠记'),
       ),
     );
   }
