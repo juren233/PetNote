@@ -16,6 +16,7 @@ build/
 *.iml
 *.ipr
 *.iws
+.claude/
 
 # OS
 .DS_Store

@@ -35,6 +35,8 @@
   - [ios](./ios)
 - Harmony 平台层：
   - [ohos](./ohos)
+  - 当前有效的 Harmony 模块入口位于 [ohos/entry](./ohos/entry)
+  - 如果根目录偶发出现顶层 `entry/` 残留目录（例如只剩一个 `.gitignore`），那通常是旧结构迁移或切分支后留下的未跟踪残留，不属于当前主线工程结构，不要提交，可直接删除
 - 项目内 OHOS Flutter SDK 子模块：
   - [`.flutter_ohos_sdk_gitcode`](./.flutter_ohos_sdk_gitcode)
 - 脚本入口：
