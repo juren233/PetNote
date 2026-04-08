@@ -672,12 +672,12 @@ class _PetNoteBottomNav extends StatelessWidget {
                           onTap: () => store.setActiveTab(AppTab.overview),
                         ),
                         SizedBox(
-                          width: 56,
+                          width: 60,
                           child: Center(
                             child: SizedBox(
                               key: const ValueKey('dock_add_button'),
-                              width: 48,
-                              height: 48,
+                              width: 52,
+                              height: 52,
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
@@ -709,7 +709,7 @@ class _PetNoteBottomNav extends StatelessWidget {
                                     child: const Center(
                                       child: Icon(
                                         Icons.add,
-                                        size: 24,
+                                        size: 26,
                                         color: Colors.white,
                                       ),
                                     ),
@@ -778,23 +778,23 @@ class _TabButton extends StatelessWidget {
             AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOutCubic,
-              width: 30,
-              height: 30,
+              width: 34,
+              height: 34,
               decoration: BoxDecoration(
                 color: selected ? accent.fill : Colors.transparent,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(
                 icon,
-                size: 17,
+                size: 19,
                 color: selected ? Colors.white : tokens.navIconInactive,
               ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 3),
             Text(
               label,
               style: TextStyle(
-                fontSize: 10.5,
+                fontSize: 11.5,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                 color: selected ? accent.label : tokens.navLabelInactive,
               ),

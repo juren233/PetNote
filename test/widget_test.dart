@@ -1914,7 +1914,7 @@ void main() {
     expect(prefs.getBool(_firstLaunchIntroAutoEnabledKey), isTrue);
   });
 
-  testWidgets('uses immersive dock with compact centered add button',
+  testWidgets('uses an enlarged dock with unified 17px outer margins',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
     await tester.pumpWidget(const PetNoteApp());
@@ -1928,17 +1928,38 @@ void main() {
 
     final addButtonSize =
         tester.getSize(find.byKey(const ValueKey('dock_add_button')));
-    expect(addButtonSize.width, lessThanOrEqualTo(60));
-    expect(addButtonSize.height, lessThanOrEqualTo(60));
+    expect(addButtonSize.width, greaterThan(48));
+    expect(addButtonSize.width, lessThanOrEqualTo(56));
+    expect(addButtonSize.height, greaterThan(48));
+    expect(addButtonSize.height, lessThanOrEqualTo(56));
 
     final panelRect =
         tester.getRect(find.byKey(const ValueKey('bottom_nav_panel')));
     final addButtonRect =
         tester.getRect(find.byKey(const ValueKey('dock_add_button')));
+    expect(panelRect.height, greaterThan(66));
+    expect(panelRect.left, 17);
+    expect((tester.view.physicalSize.width / tester.view.devicePixelRatio) -
+            panelRect.right,
+        17);
     expect((panelRect.center.dx - addButtonRect.center.dx).abs(),
         lessThanOrEqualTo(0.5));
     expect(addButtonRect.top, greaterThanOrEqualTo(panelRect.top));
     expect(addButtonRect.bottom, lessThanOrEqualTo(panelRect.bottom));
+
+    final checklistTab = find.byKey(const ValueKey('tab_checklist'));
+    final checklistIcon = tester.widget<Icon>(
+      find.descendant(
+        of: checklistTab,
+        matching: find.byIcon(Icons.checklist_rounded),
+      ),
+    );
+    expect(checklistIcon.size, greaterThan(17));
+
+    final checklistLabel = tester.widget<Text>(
+      find.descendant(of: checklistTab, matching: find.text('清单')),
+    );
+    expect(checklistLabel.style?.fontSize, greaterThan(10.5));
   });
 
   testWidgets('keeps blur only on the bottom dock and not on content panels',

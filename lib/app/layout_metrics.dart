@@ -3,8 +3,8 @@ import 'package:flutter/widgets.dart';
 const double _pageHorizontalPadding = 18;
 const double _pageTopSpacing = 8;
 const double _pageBottomReserve = 122;
-const double _dockShellBaseHeight = 66;
-const double _dockPanelBaseHeight = 66;
+const double _dockShellBaseHeight = 78;
+const double _dockPanelBaseHeight = 78;
 const double _dockBottomSpacing = 17;
 const double dockBlurSigma = 6;
 
@@ -21,8 +21,8 @@ DockLayoutMetrics dockLayoutForInsets(EdgeInsets insets) {
   return DockLayoutMetrics(
     shellHeight: _dockShellBaseHeight,
     panelHeight: _dockPanelBaseHeight,
-    outerMargin: const EdgeInsets.fromLTRB(32, 0, 32, _dockBottomSpacing),
-    innerPadding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+    outerMargin: const EdgeInsets.fromLTRB(17, 0, 17, _dockBottomSpacing),
+    innerPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
   );
 }
 

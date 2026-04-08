@@ -14,18 +14,18 @@ void main() {
   });
 
   test(
-      'dock layout reserves gesture area inside the dock instead of outside it',
+      'dock layout uses unified 17px outer margins and scaled dock metrics',
       () {
     const insets = EdgeInsets.only(bottom: 24);
     final layout = dockLayoutForInsets(insets);
 
-    expect(layout.shellHeight, 66);
-    expect(layout.panelHeight, 66);
-    expect(layout.outerMargin.left, 32);
-    expect(layout.outerMargin.right, 32);
+    expect(layout.shellHeight, greaterThan(66));
+    expect(layout.panelHeight, greaterThan(66));
+    expect(layout.outerMargin.left, 17);
+    expect(layout.outerMargin.right, 17);
     expect(layout.outerMargin.bottom, 17);
-    expect(layout.innerPadding.top, 8);
-    expect(layout.innerPadding.bottom, 8);
+    expect(layout.innerPadding.top, 10);
+    expect(layout.innerPadding.bottom, 10);
   });
 
   test('dock blur sigma stays at the softer tuned value', () {
