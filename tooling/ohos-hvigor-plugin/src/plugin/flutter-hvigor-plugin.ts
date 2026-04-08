@@ -132,9 +132,57 @@ function resolvePackageRootUri(flutterProjectPath: string, rootUri: string): str
   return path.resolve(flutterProjectPath, rootUri)
 }
 
+function getFlutterProjectPackageName(flutterProjectPath: string): string | null {
+  const pubspecPath = path.join(flutterProjectPath, 'pubspec.yaml')
+  if (!fs.existsSync(pubspecPath)) {
+    return null
+  }
+
+  try {
+    const pubspecContent = fs.readFileSync(pubspecPath, 'utf-8')
+    const match = pubspecContent.match(/^name:\s*([^\s#]+)\s*$/m)
+    return match?.[1] ?? null
+  } catch (error) {
+    console.warn(`Failed to inspect pubspec.yaml for package name, refresh Flutter packages by default. ${error}`)
+    return null
+  }
+}
+
+function hasValidPackageGraphForCurrentProject(flutterProjectPath: string): boolean {
+  const packageGraphPath = path.join(flutterProjectPath, '.dart_tool', 'package_graph.json')
+  if (!fs.existsSync(packageGraphPath)) {
+    return false
+  }
+
+  const projectPackageName = getFlutterProjectPackageName(flutterProjectPath)
+  if (!projectPackageName) {
+    return false
+  }
+
+  try {
+    const packageGraph = JSON.parse(fs.readFileSync(packageGraphPath, 'utf-8'))
+    const roots = Array.isArray(packageGraph.roots) ? packageGraph.roots : []
+    const packages = Array.isArray(packageGraph.packages) ? packageGraph.packages : []
+    const projectPackage = packages.find((pkg: { name?: string }) => pkg.name === projectPackageName)
+
+    return (
+      roots.includes(projectPackageName) &&
+      !!projectPackage &&
+      Array.isArray(projectPackage.dependencies)
+    )
+  } catch (error) {
+    console.warn(`Failed to inspect package_graph.json, refresh Flutter packages by default. ${error}`)
+    return false
+  }
+}
+
 function shouldRefreshFlutterPackages(flutterProjectPath: string, sdkPath: string): boolean {
   const packageConfigPath = path.join(flutterProjectPath, '.dart_tool', 'package_config.json')
   if (!fs.existsSync(packageConfigPath)) {
+    return true
+  }
+
+  if (!hasValidPackageGraphForCurrentProject(flutterProjectPath)) {
     return true
   }
 

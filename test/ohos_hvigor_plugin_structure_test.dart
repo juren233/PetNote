@@ -130,6 +130,21 @@ void main() {
         isTrue);
   });
 
+  test('OHOS hvigor plugin refreshes stale package_graph snapshots for the current app package', () {
+    final ownedPlugin = File(
+      'tooling/ohos-hvigor-plugin/src/plugin/flutter-hvigor-plugin.ts',
+    ).readAsStringSync();
+
+    expect(ownedPlugin.contains('function getFlutterProjectPackageName('), isTrue);
+    expect(ownedPlugin.contains("const packageGraphPath = path.join(flutterProjectPath, '.dart_tool', 'package_graph.json')"), isTrue);
+    expect(ownedPlugin.contains('const projectPackageName = getFlutterProjectPackageName(flutterProjectPath)'), isTrue);
+    expect(ownedPlugin.contains("const packageGraph = JSON.parse(fs.readFileSync(packageGraphPath, 'utf-8'))"), isTrue);
+    expect(ownedPlugin.contains('const roots = Array.isArray(packageGraph.roots) ? packageGraph.roots : []'), isTrue);
+    expect(ownedPlugin.contains('roots.includes(projectPackageName)'), isTrue);
+    expect(ownedPlugin.contains('pkg.name === projectPackageName'), isTrue);
+    expect(ownedPlugin.contains('Array.isArray(projectPackage.dependencies)'), isTrue);
+  });
+
   test('README documents the repo-owned OHOS hvigor plugin workflow', () {
     final readme = File('README.md').readAsStringSync();
 
