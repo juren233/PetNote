@@ -2152,6 +2152,42 @@ void main() {
     );
   });
 
+  testWidgets('add sheet route chrome follows system brightness changes while open',
+      (tester) async {
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+    addTearDown(binding.platformDispatcher.clearPlatformBrightnessTestValue);
+
+    SharedPreferences.setMockInitialValues({
+      ..._persistedSinglePetPreferences(),
+      'app_theme_mode_v1': 'system',
+    });
+    await tester.pumpWidget(const PetNoteApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+
+    var bottomSheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
+    expect(bottomSheet.backgroundColor, lightPetNoteTokens.pageGradientTop);
+
+    binding.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    await tester.pumpAndSettle();
+
+    final shell = tester.widget<Container>(
+      find.byKey(const ValueKey('add_sheet_surface')),
+    );
+    final shellGradient =
+        (shell.decoration as BoxDecoration).gradient! as LinearGradient;
+    expect(shellGradient.colors, [
+      darkPetNoteTokens.pageGradientTop,
+      darkPetNoteTokens.pageGradientBottom,
+    ]);
+
+    bottomSheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
+    expect(bottomSheet.backgroundColor, darkPetNoteTokens.pageGradientTop);
+  });
+
   testWidgets('adapts add sheet surfaces to dark mode', (tester) async {
     SharedPreferences.setMockInitialValues({
       ..._persistedSinglePetPreferences(),
@@ -2260,6 +2296,229 @@ void main() {
     ]);
 
     final title = tester.widget<Text>(find.text('欢迎来到宠记'));
+    expect(title.style?.color, darkPetNoteTokens.primaryText);
+  });
+
+  testWidgets(
+      'material date picker follows system brightness changes while open',
+      (tester) async {
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+    addTearDown(binding.platformDispatcher.clearPlatformBrightnessTestValue);
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    SharedPreferences.setMockInitialValues({
+      ..._persistedSinglePetPreferences(),
+      'app_theme_mode_v1': 'system',
+    });
+    await tester.pumpWidget(const PetNoteApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('爱宠'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('edit_pet_button')));
+    await tester.pumpAndSettle();
+    final birthdayButton = find.byKey(const ValueKey('edit_pet_birthday_button'));
+    final editSheetScrollable = find
+        .descendant(
+          of: find.byType(BottomSheet),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(
+      birthdayButton,
+      120,
+      scrollable: editSheetScrollable,
+    );
+    await tester.tap(birthdayButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    var dialogContext = tester.element(find.byType(DatePickerDialog));
+    expect(Theme.of(dialogContext).brightness, Brightness.light);
+
+    binding.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    await tester.pumpAndSettle();
+
+    dialogContext = tester.element(find.byType(DatePickerDialog));
+    expect(Theme.of(dialogContext).brightness, Brightness.dark);
+  });
+
+  testWidgets(
+      'material time picker follows system brightness changes while open',
+      (tester) async {
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+    addTearDown(binding.platformDispatcher.clearPlatformBrightnessTestValue);
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    SharedPreferences.setMockInitialValues({
+      ..._persistedSinglePetPreferences(),
+      'app_theme_mode_v1': 'system',
+    });
+    await tester.pumpWidget(const PetNoteApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增提醒'));
+    await tester.pumpAndSettle();
+    final reminderDateTimeField =
+        find.byKey(const ValueKey('reminder_scheduled_at_field'));
+    final addSheetScrollable = find
+        .descendant(
+          of: find.byType(BottomSheet),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(
+      reminderDateTimeField,
+      120,
+      scrollable: addSheetScrollable,
+    );
+    await tester.tap(reminderDateTimeField);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    final dateDialogContext = tester.element(find.byType(DatePickerDialog));
+    final okLabel = MaterialLocalizations.of(dateDialogContext).okButtonLabel;
+    await tester.tap(
+      find.descendant(
+        of: find.byType(DatePickerDialog),
+        matching: find.text(okLabel),
+      ).last,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TimePickerDialog), findsOneWidget);
+    var timeDialogContext = tester.element(find.byType(TimePickerDialog));
+    expect(Theme.of(timeDialogContext).brightness, Brightness.light);
+
+    binding.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    await tester.pumpAndSettle();
+
+    timeDialogContext = tester.element(find.byType(TimePickerDialog));
+    expect(Theme.of(timeDialogContext).brightness, Brightness.dark);
+  });
+
+  testWidgets(
+      'cupertino picker popup follows system brightness changes while open',
+      (tester) async {
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+    addTearDown(binding.platformDispatcher.clearPlatformBrightnessTestValue);
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light)
+            .copyWith(platform: TargetPlatform.iOS),
+        darkTheme: buildPetNoteTheme(Brightness.dark)
+            .copyWith(platform: TargetPlatform.iOS),
+        themeMode: ThemeMode.system,
+        home: PetNoteRoot(
+          iosDockBuilder: (context, selectedTab, onTabSelected, onAddTap) {
+            return Container(
+              height: 84,
+              color: Colors.black12,
+              child: Row(
+                children: [
+                  IconButton(
+                    key: const ValueKey('fake_ios_add_button_for_picker_theme'),
+                    onPressed: onAddTap,
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('fake_ios_add_button_for_picker_theme')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增提醒'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('reminder_scheduled_date_field')),
+    );
+    await tester.tap(find.byKey(const ValueKey('reminder_scheduled_date_field')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CupertinoDatePicker), findsOneWidget);
+    var pickerShell = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.byType(CupertinoDatePicker),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Container &&
+                  widget.decoration is BoxDecoration &&
+                  (widget.decoration as BoxDecoration).color != null,
+            ),
+          )
+          .first,
+    );
+    var pickerDecoration = pickerShell.decoration as BoxDecoration;
+    expect(pickerDecoration.color, Colors.white);
+
+    binding.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    await tester.pumpAndSettle();
+
+    pickerShell = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.byType(CupertinoDatePicker),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Container &&
+                  widget.decoration is BoxDecoration &&
+                  (widget.decoration as BoxDecoration).color != null,
+            ),
+          )
+          .first,
+    );
+    pickerDecoration = pickerShell.decoration as BoxDecoration;
+    expect(pickerDecoration.color, const Color(0xFF1C1C1E));
+  });
+
+  testWidgets(
+      'pet edit sheet route chrome follows system brightness changes while open',
+      (tester) async {
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+    addTearDown(binding.platformDispatcher.clearPlatformBrightnessTestValue);
+
+    SharedPreferences.setMockInitialValues({
+      ..._persistedSinglePetPreferences(),
+      'app_theme_mode_v1': 'system',
+    });
+    await tester.pumpWidget(const PetNoteApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('爱宠'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('edit_pet_button')));
+    await tester.pumpAndSettle();
+
+    var bottomSheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
+    expect(bottomSheet.backgroundColor, lightPetNoteTokens.pageGradientTop);
+
+    binding.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    await tester.pumpAndSettle();
+
+    bottomSheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
+    expect(bottomSheet.backgroundColor, darkPetNoteTokens.pageGradientTop);
+
+    final title = tester.widget<Text>(find.text('编辑爱宠资料'));
     expect(title.style?.color, darkPetNoteTokens.primaryText);
   });
 

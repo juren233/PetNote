@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:petnote/app/app_theme.dart';
 import 'package:petnote/app/common_widgets.dart';
 import 'package:petnote/state/petnote_store.dart';
 
@@ -88,14 +89,24 @@ class _PetEditSheetState extends State<PetEditSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = context.petNoteTokens;
+    final titleStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
+          color: tokens.primaryText,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.8,
+        );
+    final subtitleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: tokens.secondaryText,
+        );
+
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFF9F4EE), Color(0xFFF4F5F8)],
+          colors: [tokens.pageGradientTop, tokens.pageGradientBottom],
         ),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
       ),
       child: SafeArea(
         top: false,
@@ -116,7 +127,7 @@ class _PetEditSheetState extends State<PetEditSheet> {
                     width: 52,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: const Color(0x22000000),
+                      color: tokens.secondaryText.withValues(alpha: 0.22),
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
@@ -130,24 +141,12 @@ class _PetEditSheetState extends State<PetEditSheet> {
                         children: [
                           Text(
                             '编辑爱宠资料',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(
-                                  color: const Color(0xFF17181C),
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.8,
-                                ),
+                            style: titleStyle,
                           ),
                           const SizedBox(height: 6),
                           Text(
                             '更新名字、基础资料和照护备注，保存后会立刻同步到当前档案。',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: const Color(0xFF6C7280),
-                                ),
+                            style: subtitleStyle,
                           ),
                         ],
                       ),

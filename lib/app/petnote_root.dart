@@ -219,13 +219,11 @@ class _PetNoteRootState extends State<PetNoteRoot>
   }
 
   Future<void> _openAddSheet(BuildContext context, PetNoteStore store) async {
-    final tokens = context.petNoteTokens;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      backgroundColor: tokens.pageGradientTop,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
       ),

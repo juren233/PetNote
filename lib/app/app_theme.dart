@@ -314,6 +314,14 @@ ThemeData buildPetNoteTheme(Brightness brightness) {
       bodyColor: tokens.primaryText,
       displayColor: tokens.primaryText,
     ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: tokens.pageGradientTop,
+      modalBackgroundColor: tokens.pageGradientTop,
+      surfaceTintColor: Colors.transparent,
+      dragHandleColor: tokens.secondaryText.withValues(
+        alpha: isDark ? 0.34 : 0.22,
+      ),
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: _accent,
