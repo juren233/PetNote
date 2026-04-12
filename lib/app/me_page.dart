@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:petnote/ai/ai_provider_config.dart';
+import 'package:petnote/ai/ai_settings_coordinator.dart';
 import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/ai_settings_page.dart';
 import 'package:petnote/app/common_widgets.dart';
+import 'package:petnote/app/data_storage_page.dart';
 import 'package:petnote/app/layout_metrics.dart';
+import 'package:petnote/app/log_center_page.dart';
+import 'package:petnote/data/data_storage_coordinator.dart';
+import 'package:petnote/logging/app_log_controller.dart';
 import 'package:petnote/notifications/notification_models.dart';
 import 'package:petnote/app/theme_settings_copy.dart';
 import 'package:petnote/state/app_settings_controller.dart';
@@ -15,6 +22,10 @@ class MePage extends StatelessWidget {
     required this.notificationPushToken,
     required this.onRequestNotificationPermission,
     required this.onOpenNotificationSettings,
+    required this.settingsController,
+    required this.aiSettingsCoordinator,
+    required this.dataStorageCoordinator,
+    this.appLogController,
   });
 
   final AppThemePreference themePreference;
@@ -23,43 +34,15 @@ class MePage extends StatelessWidget {
   final String? notificationPushToken;
   final Future<void> Function()? onRequestNotificationPermission;
   final Future<void> Function()? onOpenNotificationSettings;
+  final AppSettingsController? settingsController;
+  final AppLogController? appLogController;
+  final AiSettingsCoordinator? aiSettingsCoordinator;
+  final DataStorageCoordinator? dataStorageCoordinator;
 
   @override
   Widget build(BuildContext context) {
     final pagePadding =
         pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
-    final theme = Theme.of(context);
-    final tokens = context.petNoteTokens;
-    final sharedNotificationButtonShape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(999),
-    );
-    final sharedNotificationButtonTextStyle =
-        theme.textTheme.labelLarge?.copyWith(
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.1,
-    );
-    final requestNotificationButtonStyle = FilledButton.styleFrom(
-      minimumSize: const Size(0, 52),
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-      shape: sharedNotificationButtonShape,
-      textStyle: sharedNotificationButtonTextStyle,
-      backgroundColor: theme.colorScheme.primary,
-      foregroundColor: Colors.white,
-    );
-    final notificationSettingsButtonStyle = OutlinedButton.styleFrom(
-      minimumSize: const Size(0, 52),
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-      shape: sharedNotificationButtonShape,
-      textStyle: sharedNotificationButtonTextStyle,
-      foregroundColor: tokens.primaryText,
-      side: BorderSide(
-        color: theme.brightness == Brightness.dark
-            ? tokens.primaryText.withValues(alpha: 0.22)
-            : const Color(0xFFB08D56),
-        width: 1.2,
-      ),
-      backgroundColor: Colors.transparent,
-    );
     return ListView(
       padding: pagePadding,
       children: [
@@ -110,6 +93,43 @@ class MePage extends StatelessWidget {
           ],
         ),
         SectionCard(
+          title: 'AI 功能',
+          children: [
+            ListRow(
+              title: '当前 AI 提供商',
+              subtitle: _aiProviderSummary(
+                  settingsController?.activeAiProviderConfig),
+            ),
+            const ListRow(
+              title: 'AI 使用说明',
+              subtitle: 'API Key 由你自行提供，仅用于调用你选择的 AI 服务。',
+            ),
+            const ListRow(
+              title: '隐私说明',
+              subtitle: '你启用 AI 后，相关记录摘要或内容可能会发送给所选服务商。',
+            ),
+            SettingsActionButtonGroup(
+              children: [
+                SettingsActionButton(
+                  buttonKey: const ValueKey('me_manage_ai_button'),
+                  label: '管理 AI 配置',
+                  onPressed: settingsController == null ||
+                          aiSettingsCoordinator == null
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (context) => AiSettingsPage(
+                                settingsController: settingsController!,
+                                coordinator: aiSettingsCoordinator!,
+                              ),
+                            ),
+                          ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        SectionCard(
           key: const ValueKey('notification_settings_section'),
           title: '通知与提醒',
           children: [
@@ -124,23 +144,29 @@ class MePage extends StatelessWidget {
                   ? '当前使用本地提醒调度，推送 token 尚未注册。'
                   : '已记录推送 token，后续可接远程推送下发。',
             ),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
+            SettingsActionButtonGroup(
               children: [
-                FilledButton(
-                  style: requestNotificationButtonStyle,
-                  onPressed: onRequestNotificationPermission == null
-                      ? null
-                      : () => onRequestNotificationPermission!(),
-                  child: const Text('请求通知权限'),
-                ),
-                OutlinedButton(
-                  style: notificationSettingsButtonStyle,
+                if (_isNotificationPermissionGranted(
+                    notificationPermissionState))
+                  _NotificationPermissionGrantedBadge(
+                    state: notificationPermissionState,
+                  )
+                else
+                  SettingsActionButton(
+                    buttonKey: const ValueKey('me_request_notification_button'),
+                    priority: SettingsActionPriority.primary,
+                    label: '请求通知权限',
+                    onPressed: onRequestNotificationPermission == null
+                        ? null
+                        : () => onRequestNotificationPermission!(),
+                  ),
+                SettingsActionButton(
+                  buttonKey:
+                      const ValueKey('me_open_notification_settings_button'),
+                  label: '打开系统设置',
                   onPressed: onOpenNotificationSettings == null
                       ? null
                       : () => onOpenNotificationSettings!(),
-                  child: const Text('打开系统设置'),
                 ),
               ],
             ),
@@ -148,14 +174,60 @@ class MePage extends StatelessWidget {
         ),
         SectionCard(
           title: '数据与存储',
-          children: const [
+          children: [
             ListRow(
-              title: '备份与恢复',
-              subtitle: '预留本地备份、迁移与恢复入口。',
+              title: '本地数据概览',
+              subtitle: dataStorageCoordinator?.dataSummary ?? '数据中心暂不可用。',
             ),
+            const ListRow(
+              title: '备份与恢复',
+              subtitle: '统一管理完整备份、备份恢复和本地数据清理。',
+            ),
+            SettingsActionButtonGroup(
+              children: [
+                SettingsActionButton(
+                  buttonKey: const ValueKey('me_open_data_storage_button'),
+                  label: '打开数据与存储',
+                  onPressed: dataStorageCoordinator == null
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (context) => DataStoragePage(
+                                coordinator: dataStorageCoordinator!,
+                                appLogController: appLogController,
+                              ),
+                            ),
+                          ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        SectionCard(
+          title: '日志中心',
+          children: [
             ListRow(
-              title: '导出与分享',
-              subtitle: '后续支持导出宠物交接卡和记录摘要。',
+              title: appLogController == null
+                  ? '日志中心暂不可用'
+                  : '最近 ${appLogController!.entries.length} 条本地日志',
+              subtitle: '统一查看 AI、数据与存储、原生桥接和通知日志，便于复制给我排查。',
+            ),
+            SettingsActionButtonGroup(
+              children: [
+                SettingsActionButton(
+                  buttonKey: const ValueKey('me_open_log_center_button'),
+                  label: '打开日志中心',
+                  onPressed: appLogController == null
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (context) => LogCenterPage(
+                                controller: appLogController!,
+                              ),
+                            ),
+                          ),
+                ),
+              ],
             ),
           ],
         ),
@@ -177,6 +249,15 @@ class MePage extends StatelessWidget {
   }
 }
 
+String _aiProviderSummary(AiProviderConfig? config) {
+  if (config == null) {
+    return '尚未配置 AI 服务，配置后可用于周报、记录整理等 AI 功能。';
+  }
+  final connectionMessage = config.lastConnectionMessage ??
+      aiConnectionStatusLabel(config.lastConnectionStatus);
+  return '${config.displayName} · ${aiProviderLabel(config.providerType)} · ${config.model}\n$connectionMessage';
+}
+
 String _notificationPermissionLabel(NotificationPermissionState state) {
   return switch (state) {
     NotificationPermissionState.authorized => '已授权，可展示系统通知与提醒。',
@@ -185,6 +266,103 @@ String _notificationPermissionLabel(NotificationPermissionState state) {
     NotificationPermissionState.unsupported => '当前平台暂未接入系统通知能力。',
     NotificationPermissionState.unknown => '尚未读取通知权限状态。',
   };
+}
+
+bool _isNotificationPermissionGranted(NotificationPermissionState state) {
+  return state == NotificationPermissionState.authorized ||
+      state == NotificationPermissionState.provisional;
+}
+
+class _NotificationPermissionGrantedBadge extends StatelessWidget {
+  const _NotificationPermissionGrantedBadge({
+    required this.state,
+  });
+
+  final NotificationPermissionState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final copy = _notificationPermissionGrantedCopy(state);
+    final backgroundColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF223127)
+        : const Color(0xFFF1F8EE);
+    final borderColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF4D6C53)
+        : const Color(0xFFA3C4A3);
+    final foregroundColor = theme.brightness == Brightness.dark
+        ? const Color(0xFFBEE2BF)
+        : const Color(0xFF285B2A);
+    final textStyle = theme.textTheme.labelLarge?.copyWith(
+      color: foregroundColor,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.1,
+      height: 1,
+      leadingDistribution: TextLeadingDistribution.even,
+    );
+
+    return ConstrainedBox(
+      key: const ValueKey('me_notification_permission_badge'),
+      constraints: const BoxConstraints(
+        minHeight: SettingsActionButton.height,
+        minWidth: SettingsActionButton.minWidth,
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: borderColor, width: 1.2),
+        ),
+        child: SizedBox(
+          height: SettingsActionButton.height,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: SettingsActionButton.horizontalPadding,
+            ),
+            child: Center(
+              child: Text(
+                copy.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                textHeightBehavior: const TextHeightBehavior(
+                  applyHeightToFirstAscent: false,
+                  applyHeightToLastDescent: false,
+                ),
+                style: textStyle,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+_NotificationPermissionGrantedCopy _notificationPermissionGrantedCopy(
+  NotificationPermissionState state,
+) {
+  return switch (state) {
+    NotificationPermissionState.provisional =>
+      const _NotificationPermissionGrantedCopy(
+        title: '已临时授权',
+      ),
+    NotificationPermissionState.authorized ||
+    NotificationPermissionState.denied ||
+    NotificationPermissionState.unsupported ||
+    NotificationPermissionState.unknown =>
+      const _NotificationPermissionGrantedCopy(
+        title: '已授权',
+      ),
+  };
+}
+
+class _NotificationPermissionGrantedCopy {
+  const _NotificationPermissionGrantedCopy({
+    required this.title,
+  });
+
+  final String title;
 }
 
 class _ThemePreferenceTile extends StatelessWidget {

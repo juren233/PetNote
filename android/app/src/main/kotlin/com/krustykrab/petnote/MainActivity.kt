@@ -10,6 +10,9 @@ import io.flutter.embedding.android.FlutterFragmentActivity
 
 class MainActivity : FlutterFragmentActivity() {
     private var notificationBridge: PetNoteNotificationBridge? = null
+    private var aiSecretStoreBridge: PetNoteAiSecretStoreBridge? = null
+    private var dataPackageFileAccessBridge: PetNoteDataPackageFileAccessBridge? = null
+    private var nativeOptionPickerBridge: PetNoteNativeOptionPickerBridge? = null
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,6 +29,18 @@ class MainActivity : FlutterFragmentActivity() {
                 AndroidLiquidGlassDockFactory(flutterEngine.dartExecutor.binaryMessenger),
             )
         notificationBridge = PetNoteNotificationBridge(
+            activity = this,
+            messenger = flutterEngine.dartExecutor.binaryMessenger,
+        )
+        aiSecretStoreBridge = PetNoteAiSecretStoreBridge(
+            context = applicationContext,
+            messenger = flutterEngine.dartExecutor.binaryMessenger,
+        )
+        dataPackageFileAccessBridge = PetNoteDataPackageFileAccessBridge(
+            activity = this,
+            messenger = flutterEngine.dartExecutor.binaryMessenger,
+        )
+        nativeOptionPickerBridge = PetNoteNativeOptionPickerBridge(
             activity = this,
             messenger = flutterEngine.dartExecutor.binaryMessenger,
         )
@@ -51,6 +66,17 @@ class MainActivity : FlutterFragmentActivity() {
             return
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: android.content.Intent?,
+    ) {
+        if (dataPackageFileAccessBridge?.handleActivityResult(requestCode, resultCode, data) == true) {
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     private fun requestHighRefreshRate() {

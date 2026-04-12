@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:petnote/ai/ai_insights_models.dart';
+import 'package:petnote/ai/ai_insights_service.dart';
 import 'package:petnote/app/app_theme.dart';
 import 'package:petnote/app/common_widgets.dart';
 import 'package:petnote/app/layout_metrics.dart';
@@ -143,113 +145,288 @@ ChecklistSection _sectionByKey(
   );
 }
 
-class OverviewPage extends StatelessWidget {
+class OverviewPage extends StatefulWidget {
   const OverviewPage({
     super.key,
     required this.store,
     required this.onAddFirstPet,
+    this.aiInsightsService,
   });
 
   final PetNoteStore store;
   final VoidCallback onAddFirstPet;
+  final AiInsightsService? aiInsightsService;
+
+  @override
+  State<OverviewPage> createState() => _OverviewPageState();
+}
+
+class _OverviewPageState extends State<OverviewPage> {
+  bool _hasActiveProvider = false;
+  int _providerCheckSerial = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshProviderAvailability();
+  }
+
+  @override
+  void didUpdateWidget(covariant OverviewPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.aiInsightsService, widget.aiInsightsService)) {
+      _refreshProviderAvailability();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final pagePadding =
-        pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
-    if (store.pets.isEmpty) {
-      return ListView(
-        padding: pagePadding,
-        children: [
-          const PageHeader(
-            title: '总览',
-            subtitle: '先添加宠物，AI 照护总结才会开始积累',
-          ),
-          const HeroPanel(
-            title: '等第一份档案建立后再开始总结',
-            subtitle: '当前还没有宠物资料、提醒或记录。先完成第一只爱宠建档，后续的照护观察会自动收拢到这里。',
-            child: SizedBox.shrink(),
-          ),
-          EmptyCard(
-            title: '先添加第一只爱宠',
-            subtitle: '有了基础档案后，这里才会生成更贴近日常的总结内容。',
-            actionLabel: '开始添加宠物',
-            onAction: onAddFirstPet,
-          ),
-        ],
-      );
-    }
-
-    final snapshot = store.overviewSnapshot;
-    return ListView(
-      padding: pagePadding,
-      children: [
-        const PageHeader(
-          title: '总览',
-          subtitle: 'AI 照护总结',
-        ),
-        HeroPanel(
-          title: _overviewTitle(snapshot.range),
-          subtitle: '根据最近的待办、提醒和资料记录，用更接近系统报告页的方式整理你的照护观察。',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return AnimatedBuilder(
+      animation: widget.store,
+      builder: (context, _) {
+        final pagePadding =
+            pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
+        if (widget.store.pets.isEmpty) {
+          return ListView(
+            padding: pagePadding,
             children: [
-              HyperSegmentedControl(
-                items: const [
-                  SegmentItem(key: 'sevenDays', label: '7天'),
-                  SegmentItem(key: 'oneMonth', label: '1个月'),
-                  SegmentItem(key: 'threeMonths', label: '3个月'),
-                  SegmentItem(key: 'sixMonths', label: '6个月'),
-                  SegmentItem(key: 'oneYear', label: '1年'),
-                ],
-                selectedKey: snapshot.range.name,
-                onChanged: (value) =>
-                    store.setOverviewRange(_rangeFromKey(value)),
+              const PageHeader(
+                title: '总览',
+                subtitle: '先添加宠物，AI 照护总结才会开始积累',
+              ),
+              const HeroPanel(
+                title: '等第一份档案建立后再开始总结',
+                subtitle: '当前还没有宠物资料、提醒或记录。先完成第一只爱宠建档，后续的照护观察会自动收拢到这里。',
+                child: SizedBox.shrink(),
+              ),
+              EmptyCard(
+                title: '先添加第一只爱宠',
+                subtitle: '有了基础档案后，这里才会生成更贴近日常的总结内容。',
+                actionLabel: '开始添加宠物',
+                onAction: widget.onAddFirstPet,
               ),
             ],
-          ),
-        ),
-        ...snapshot.sections.map(
-          (section) => SectionCard(
-            title: section.title,
-            children:
-                section.items.map((item) => BulletText(text: item)).toList(),
-          ),
-        ),
-        SectionCard(
-          title: '说明',
+          );
+        }
+
+        final snapshot = widget.store.overviewSnapshot;
+        final reportState = widget.store.overviewAiReportState;
+        return ListView(
+          padding: pagePadding,
           children: [
-            Text(
-              snapshot.disclaimer,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: context.petNoteTokens.secondaryText,
-                    height: 1.6,
+            const PageHeader(
+              title: '总览',
+              subtitle: 'AI 照护总结',
+            ),
+            HeroPanel(
+              title: _overviewTitle(snapshot.range),
+              subtitle: '根据最近的待办、提醒和资料记录，用更接近系统报告页的方式整理你的照护观察。',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  HyperSegmentedControl(
+                    items: const [
+                      SegmentItem(key: 'sevenDays', label: '7天'),
+                      SegmentItem(key: 'oneMonth', label: '1个月'),
+                      SegmentItem(key: 'threeMonths', label: '3个月'),
+                      SegmentItem(key: 'sixMonths', label: '6个月'),
+                      SegmentItem(key: 'oneYear', label: '1年'),
+                    ],
+                    selectedKey: snapshot.range.name,
+                    onChanged: (value) =>
+                        widget.store.setOverviewRange(_rangeFromKey(value)),
                   ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (_hasActiveProvider)
+                        OutlinedButton(
+                          onPressed: reportState.isLoading
+                              ? null
+                              : () => _generateCareReport(
+                                    forceRefresh: reportState.hasReport,
+                                  ),
+                          child: Text(
+                            reportState.hasReport ? '重新生成 AI 总览' : '生成 AI 总览',
+                          ),
+                        ),
+                      Text(
+                        _overviewStatusText(reportState),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: context.petNoteTokens.secondaryText,
+                              height: 1.5,
+                            ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (reportState.isLoading && !reportState.hasReport)
+              const SectionCard(
+                title: 'AI 总览',
+                children: [
+                  _AiLoadingState(
+                    message: '正在根据当前时间范围生成结构化照护总结…',
+                  ),
+                ],
+              ),
+            if (reportState.report != null)
+              ..._buildCareReportCards(reportState.report!),
+            if (reportState.hasRequested && reportState.errorMessage != null)
+              SectionCard(
+                title: 'AI 总览',
+                children: [
+                  Text(
+                    reportState.errorMessage!,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: const Color(0xFFC7533E),
+                          height: 1.6,
+                        ),
+                  ),
+                  Text(
+                    '已自动回退到本地规则总结，方便你先继续查看当前周期的照护概况。',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.petNoteTokens.secondaryText,
+                          height: 1.6,
+                        ),
+                  ),
+                ],
+              ),
+            if (!reportState.hasReport)
+              ...snapshot.sections.map(
+                (section) => SectionCard(
+                  title: section.title,
+                  children: section.items
+                      .map((item) => BulletText(text: item))
+                      .toList(),
+                ),
+              ),
+            SectionCard(
+              title: '说明',
+              children: [
+                Text(
+                  snapshot.disclaimer,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.petNoteTokens.secondaryText,
+                        height: 1.6,
+                      ),
+                ),
+              ],
             ),
           ],
-        ),
-      ],
+        );
+      },
+    );
+  }
+
+  String _overviewStatusText(OverviewAiReportState reportState) {
+    if (reportState.isLoading) {
+      return 'AI 正在生成新的专业分析报告…';
+    }
+    if (reportState.hasReport) {
+      return '当前正在展示专业分析报告与综合评分，仅供照护参考，不替代兽医建议。';
+    }
+    if (reportState.hasRequested && reportState.errorMessage != null) {
+      return 'AI 总览生成失败，当前展示本地规则总结。';
+    }
+    if (_hasActiveProvider) {
+      return '已检测到 AI 配置；点击按钮后才会生成专业分析报告。';
+    }
+    return '未检测到可用 AI 配置，当前展示本地规则总结。';
+  }
+
+  Future<void> _refreshProviderAvailability() async {
+    final service = widget.aiInsightsService;
+    if (service == null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _hasActiveProvider = false;
+      });
+      return;
+    }
+
+    final requestSerial = ++_providerCheckSerial;
+    bool hasProvider = false;
+    try {
+      hasProvider = await service.hasActiveProvider();
+    } catch (_) {
+      hasProvider = false;
+    }
+    if (!mounted || requestSerial != _providerCheckSerial) {
+      return;
+    }
+    setState(() {
+      _hasActiveProvider = hasProvider;
+    });
+  }
+
+  Future<void> _generateCareReport({required bool forceRefresh}) async {
+    final service = widget.aiInsightsService;
+    if (service == null || widget.store.overviewAiReportState.isLoading) {
+      return;
+    }
+
+    await widget.store.generateOverviewAiReport(
+      (context, {forceRefresh = false}) => service.generateCareReport(
+        context,
+        forceRefresh: forceRefresh,
+      ),
+      forceRefresh: forceRefresh,
     );
   }
 }
 
-class PetsPage extends StatelessWidget {
+class PetsPage extends StatefulWidget {
   const PetsPage({
     super.key,
     required this.store,
     required this.onAddFirstPet,
     required this.onEditPet,
+    this.aiInsightsService,
   });
 
   final PetNoteStore store;
   final VoidCallback onAddFirstPet;
   final ValueChanged<Pet> onEditPet;
+  final AiInsightsService? aiInsightsService;
+
+  @override
+  State<PetsPage> createState() => _PetsPageState();
+}
+
+class _PetsPageState extends State<PetsPage> {
+  _VisitSummaryRange _selectedVisitRange = _VisitSummaryRange.thirtyDays;
+  DateTimeRange? _customDateRange;
+  AiVisitSummary? _visitSummary;
+  String? _visitErrorMessage;
+  bool _visitLoading = false;
+  bool _hasActiveProvider = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshProviderAvailability();
+  }
+
+  @override
+  void didUpdateWidget(covariant PetsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.aiInsightsService, widget.aiInsightsService)) {
+      _refreshProviderAvailability();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final pet = store.selectedPet;
-    final remindersForSelectedPet = store.remindersForSelectedPet;
-    final recordsForSelectedPet = store.recordsForSelectedPet;
+    final pet = widget.store.selectedPet;
+    final remindersForSelectedPet = widget.store.remindersForSelectedPet;
+    final recordsForSelectedPet = widget.store.recordsForSelectedPet;
     final pagePadding =
         pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
     return ListView(
@@ -263,13 +440,13 @@ class PetsPage extends StatelessWidget {
           height: 76,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: store.pets.length,
+            itemCount: widget.store.pets.length,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
-              final item = store.pets[index];
+              final item = widget.store.pets[index];
               final selected = pet?.id == item.id;
               return GestureDetector(
-                onTap: () => store.selectPet(item.id),
+                onTap: () => widget.store.selectPet(item.id),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
@@ -339,7 +516,7 @@ class PetsPage extends StatelessWidget {
             title: '先添加第一只爱宠',
             subtitle: '建好第一份宠物档案后，提醒、记录和照护观察都会围绕它展开。',
             actionLabel: '开始添加宠物',
-            onAction: onAddFirstPet,
+            onAction: widget.onAddFirstPet,
           )
         else ...[
           HeroPanel(
@@ -373,7 +550,7 @@ class PetsPage extends StatelessWidget {
             title: '基础信息',
             trailing: TextButton(
               key: const ValueKey('edit_pet_button'),
-              onPressed: () => onEditPet(pet),
+              onPressed: () => widget.onEditPet(pet),
               child: const Text('编辑信息'),
             ),
             children: [
@@ -461,9 +638,241 @@ class PetsPage extends StatelessWidget {
                     )
                     .toList(),
           ),
+          SectionCard(
+            title: 'AI 看诊摘要',
+            children: [
+              HyperSegmentedControl(
+                items: const [
+                  SegmentItem(key: 'thirtyDays', label: '近30天'),
+                  SegmentItem(key: 'ninetyDays', label: '近90天'),
+                  SegmentItem(key: 'custom', label: '自定义'),
+                ],
+                selectedKey: _selectedVisitRange.name,
+                onChanged: _onVisitRangeChanged,
+              ),
+              if (_selectedVisitRange == _VisitSummaryRange.custom)
+                ListRow(
+                  title: '自定义区间',
+                  subtitle: _customDateRange == null
+                      ? '尚未选择时间范围'
+                      : '${formatDate(_customDateRange!.start, withTime: false)} 至 ${formatDate(_customDateRange!.end, withTime: false)}',
+                  trailing: TextButton(
+                    onPressed: _pickCustomDateRange,
+                    child: const Text('选择区间'),
+                  ),
+                )
+              else
+                Text(
+                  _selectedVisitRange == _VisitSummaryRange.thirtyDays
+                      ? '按最近 30 天的提醒、待办和资料记录生成摘要。'
+                      : '按最近 90 天的提醒、待办和资料记录生成摘要。',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.petNoteTokens.secondaryText,
+                        height: 1.55,
+                      ),
+                ),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  FilledButton(
+                    onPressed: _canGenerateVisitSummary(pet)
+                        ? _generateVisitSummary
+                        : null,
+                    child: Text(
+                      _visitSummary == null ? '生成看诊摘要' : '重新生成看诊摘要',
+                    ),
+                  ),
+                  Text(
+                    _visitStatusText(),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.petNoteTokens.secondaryText,
+                          height: 1.5,
+                        ),
+                  ),
+                ],
+              ),
+              if (_visitLoading)
+                const _AiLoadingState(message: '正在整理时间线、检查结果和就诊问题…'),
+              if (_visitErrorMessage != null)
+                Text(
+                  _visitErrorMessage!,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFFC7533E),
+                        height: 1.6,
+                      ),
+                ),
+              if (_visitSummary != null) ...[
+                Text(
+                  _visitSummary!.visitReason,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.petNoteTokens.primaryText,
+                        height: 1.6,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                _InlineBulletGroup(
+                  title: '关键时间线',
+                  items: _visitSummary!.timeline,
+                ),
+                _InlineBulletGroup(
+                  title: '用药 / 护理 / 处置',
+                  items: _visitSummary!.medicationsAndTreatments,
+                ),
+                _InlineBulletGroup(
+                  title: '检查与结果',
+                  items: _visitSummary!.testsAndResults,
+                ),
+                _InlineBulletGroup(
+                  title: '建议问医生',
+                  items: _visitSummary!.questionsToAskVet,
+                ),
+              ],
+            ],
+          ),
         ],
       ],
     );
+  }
+
+  bool _canGenerateVisitSummary(Pet? pet) {
+    if (pet == null || _visitLoading || !_hasActiveProvider) {
+      return false;
+    }
+    if (_selectedVisitRange == _VisitSummaryRange.custom) {
+      return _customDateRange != null;
+    }
+    return true;
+  }
+
+  String _visitStatusText() {
+    if (_visitLoading) {
+      return 'AI 正在整理当前宠物的就诊摘要…';
+    }
+    if (_visitSummary != null) {
+      return '摘要仅供就诊准备和记录整理参考，不替代专业诊疗建议。';
+    }
+    if (_hasActiveProvider) {
+      return '支持近 30 天、近 90 天和自定义区间。';
+    }
+    return '配置 AI 后可生成可读的时间线和就诊问题清单。';
+  }
+
+  Future<void> _refreshProviderAvailability() async {
+    final service = widget.aiInsightsService;
+    if (service == null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _hasActiveProvider = false;
+      });
+      return;
+    }
+    bool hasProvider = false;
+    try {
+      hasProvider = await service.hasActiveProvider();
+    } catch (_) {
+      hasProvider = false;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _hasActiveProvider = hasProvider;
+    });
+  }
+
+  Future<void> _onVisitRangeChanged(String key) async {
+    final nextRange = switch (key) {
+      'ninetyDays' => _VisitSummaryRange.ninetyDays,
+      'custom' => _VisitSummaryRange.custom,
+      _ => _VisitSummaryRange.thirtyDays,
+    };
+    if (nextRange == _VisitSummaryRange.custom) {
+      await _pickCustomDateRange();
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedVisitRange = nextRange;
+      _visitSummary = null;
+      _visitErrorMessage = null;
+    });
+  }
+
+  Future<void> _pickCustomDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 2, 1, 1),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      initialDateRange: _customDateRange,
+      locale: const Locale('zh', 'CN'),
+    );
+    if (!mounted || picked == null) {
+      return;
+    }
+    setState(() {
+      _selectedVisitRange = _VisitSummaryRange.custom;
+      _customDateRange = picked;
+      _visitSummary = null;
+      _visitErrorMessage = null;
+    });
+  }
+
+  Future<void> _generateVisitSummary() async {
+    final service = widget.aiInsightsService;
+    final pet = widget.store.selectedPet;
+    if (service == null || pet == null) {
+      return;
+    }
+
+    final context = _buildVisitContext(
+      widget.store,
+      pet,
+      _selectedVisitRange,
+      customDateRange: _customDateRange,
+    );
+    setState(() {
+      _visitLoading = true;
+      _visitErrorMessage = null;
+    });
+
+    try {
+      final summary = await service.generateVisitSummary(
+        context,
+        forceRefresh: _visitSummary != null,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _visitSummary = summary;
+        _visitLoading = false;
+      });
+    } on AiGenerationException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _visitSummary = null;
+        _visitErrorMessage = error.message;
+        _visitLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _visitSummary = null;
+        _visitErrorMessage = 'AI 看诊摘要暂时无法生成，请稍后重试。';
+        _visitLoading = false;
+      });
+    }
   }
 }
 
@@ -649,3 +1058,299 @@ String _recordTypeLabel(PetRecordType type) => switch (type) {
       PetRecordType.testResult => '检查结果',
       PetRecordType.other => '其他',
     };
+
+enum _VisitSummaryRange { thirtyDays, ninetyDays, custom }
+
+List<Widget> _buildCareReportCards(AiCareReport report) {
+  return [
+    SectionCard(
+      title: '综合评分',
+      children: [
+        Text(
+          '${report.overallScore} 分 · ${report.overallScoreLabel}',
+          style: const TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          aiScoreConfidenceLabel(report.scoreConfidence),
+          style: const TextStyle(
+            height: 1.6,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF6C7484),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          report.executiveSummary,
+          style: const TextStyle(height: 1.6, fontWeight: FontWeight.w600),
+        ),
+      ],
+    ),
+    SectionCard(
+      title: '执行总评',
+      children: report.overallAssessment
+          .map((item) => BulletText(text: item))
+          .toList(),
+    ),
+    SectionCard(
+      title: '评分拆解',
+      children: [
+        ...report.scoreBreakdown.map(
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${item.label} · ${item.score}/25',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.reason,
+                  style: const TextStyle(height: 1.6),
+                ),
+              ],
+            ),
+          ),
+        ),
+        ...report.scoreReasons.take(1).map((item) => BulletText(text: item)),
+      ],
+    ),
+    SectionCard(
+      title: '关键发现',
+      children:
+          report.keyFindings.map((item) => BulletText(text: item)).toList(),
+    ),
+    SectionCard(
+      title: '趋势变化',
+      children:
+          report.trendAnalysis.map((item) => BulletText(text: item)).toList(),
+    ),
+    SectionCard(
+      title: '风险评估',
+      children: report.riskAssessment.isEmpty
+          ? const [BulletText(text: '当前没有需要额外放大的风险项，继续观察即可。')]
+          : report.riskAssessment
+              .map((item) => BulletText(text: item))
+              .toList(),
+    ),
+    SectionCard(
+      title: '优先行动',
+      children:
+          report.priorityActions.map((item) => BulletText(text: item)).toList(),
+    ),
+    SectionCard(
+      title: '数据完整性说明',
+      children: report.dataQualityNotes
+          .map((item) => BulletText(text: item))
+          .toList(),
+    ),
+    ...report.perPetReports.map(
+      (petReport) => SectionCard(
+        title: '${petReport.petName} 专项报告',
+        children: [
+          Text(
+            '${petReport.score} 分 · ${petReport.scoreLabel} · ${aiScoreConfidenceLabel(petReport.scoreConfidence)}',
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            petReport.summary,
+            style: const TextStyle(
+              height: 1.6,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '照护重点',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              height: 1.5,
+            ),
+          ),
+          Text(
+            petReport.careFocus,
+            style: const TextStyle(height: 1.6),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '关键事件',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              height: 1.5,
+            ),
+          ),
+          ...petReport.keyEvents.map((item) => BulletText(text: item)),
+          const SizedBox(height: 8),
+          const Text(
+            '趋势分析',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              height: 1.5,
+            ),
+          ),
+          ...petReport.trendAnalysis.map((item) => BulletText(text: item)),
+          const SizedBox(height: 8),
+          const Text(
+            '风险评估',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              height: 1.5,
+            ),
+          ),
+          ...(petReport.riskAssessment.isEmpty
+              ? const [BulletText(text: '当前暂无需要额外放大的专项风险。')]
+              : petReport.riskAssessment.map((item) => BulletText(text: item))),
+          const SizedBox(height: 8),
+          const Text(
+            '建议行动',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              height: 1.5,
+            ),
+          ),
+          ...petReport.recommendedActions.map((item) => BulletText(text: item)),
+          const SizedBox(height: 8),
+          const Text(
+            '后续观察重点',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              height: 1.5,
+            ),
+          ),
+          Text(
+            petReport.followUpFocus,
+            style: const TextStyle(height: 1.6),
+          ),
+        ],
+      ),
+    ),
+  ];
+}
+
+AiGenerationContext _buildVisitContext(
+  PetNoteStore store,
+  Pet pet,
+  _VisitSummaryRange range, {
+  DateTimeRange? customDateRange,
+}) {
+  final now = store.referenceNow;
+  final start = switch (range) {
+    _VisitSummaryRange.thirtyDays => now.subtract(const Duration(days: 30)),
+    _VisitSummaryRange.ninetyDays => now.subtract(const Duration(days: 90)),
+    _VisitSummaryRange.custom =>
+      customDateRange?.start ?? now.subtract(const Duration(days: 30)),
+  };
+  final end = switch (range) {
+    _VisitSummaryRange.custom => customDateRange?.end ?? now,
+    _ => now,
+  };
+
+  final todos = store.todos
+      .where(
+        (todo) =>
+            todo.petId == pet.id &&
+            !todo.dueAt.isBefore(start) &&
+            !todo.dueAt.isAfter(end),
+      )
+      .toList(growable: false);
+  final reminders = store.reminders
+      .where(
+        (reminder) =>
+            reminder.petId == pet.id &&
+            !reminder.scheduledAt.isBefore(start) &&
+            !reminder.scheduledAt.isAfter(end),
+      )
+      .toList(growable: false);
+  final records = store.records
+      .where(
+        (record) =>
+            record.petId == pet.id &&
+            !record.recordDate.isBefore(start) &&
+            !record.recordDate.isAfter(end),
+      )
+      .toList(growable: false);
+
+  return AiGenerationContext(
+    title: '${pet.name} 的看诊摘要',
+    rangeLabel: range == _VisitSummaryRange.custom
+        ? '自定义区间'
+        : (range == _VisitSummaryRange.thirtyDays ? '最近 30 天' : '最近 90 天'),
+    rangeStart: start,
+    rangeEnd: end,
+    languageTag: 'zh-CN',
+    pets: [pet],
+    todos: todos,
+    reminders: reminders,
+    records: records,
+  );
+}
+
+class _AiLoadingState extends StatelessWidget {
+  const _AiLoadingState({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2.2),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            message,
+            style:
+                Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.6),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InlineBulletGroup extends StatelessWidget {
+  const _InlineBulletGroup({
+    required this.title,
+    required this.items,
+  });
+
+  final String title;
+  final List<String> items;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: 8),
+        ...items.map((item) => BulletText(text: item)),
+      ],
+    );
+  }
+}

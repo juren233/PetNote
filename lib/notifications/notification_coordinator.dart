@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:petnote/logging/app_log_controller.dart';
 import 'package:petnote/notifications/notification_models.dart';
 import 'package:petnote/notifications/notification_platform_adapter.dart';
 import 'package:petnote/state/petnote_store.dart';
@@ -7,11 +8,13 @@ class NotificationCoordinator extends ChangeNotifier {
   NotificationCoordinator({
     required NotificationPlatformAdapter adapter,
     DateTime Function()? nowProvider,
+    this.appLogController,
   })  : _adapter = adapter,
         _nowProvider = nowProvider ?? DateTime.now;
 
   final NotificationPlatformAdapter _adapter;
   final DateTime Function() _nowProvider;
+  final AppLogController? appLogController;
   final Set<String> _scheduledKeys = <String>{};
 
   NotificationPermissionState _permissionState =
@@ -31,11 +34,22 @@ class NotificationCoordinator extends ChangeNotifier {
     _permissionState = await _adapter.getPermissionState();
     _pushToken = await _adapter.registerPushToken();
     _initialized = true;
+    appLogController?.info(
+      category: AppLogCategory.notifications,
+      title: '通知中心初始化',
+      message: '通知初始化完成，权限状态：${_permissionState.name}',
+      details: _pushToken == null ? null : 'pushToken: 已注册',
+    );
     notifyListeners();
   }
 
   Future<NotificationPermissionState> requestPermission() async {
     _permissionState = await _adapter.requestPermission();
+    appLogController?.info(
+      category: AppLogCategory.notifications,
+      title: '通知权限更新',
+      message: '通知权限请求结果：${_permissionState.name}',
+    );
     notifyListeners();
     return _permissionState;
   }
@@ -55,6 +69,11 @@ class NotificationCoordinator extends ChangeNotifier {
     _scheduledKeys
       ..clear()
       ..addAll(nextKeys);
+    appLogController?.info(
+      category: AppLogCategory.notifications,
+      title: '同步通知任务',
+      message: '已同步 ${jobs.length} 条通知任务，取消 ${staleKeys.length} 条旧任务。',
+    );
   }
 
   Future<NotificationLaunchIntent?> consumeLaunchIntent() {
@@ -66,6 +85,11 @@ class NotificationCoordinator extends ChangeNotifier {
   }
 
   Future<NotificationSettingsOpenResult> openNotificationSettings() {
+    appLogController?.info(
+      category: AppLogCategory.notifications,
+      title: '打开通知设置',
+      message: '准备打开系统通知设置。',
+    );
     return _adapter.openNotificationSettings();
   }
 

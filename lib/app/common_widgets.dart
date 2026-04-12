@@ -371,6 +371,280 @@ class SectionCard extends StatelessWidget {
   }
 }
 
+enum SettingsActionPriority {
+  primary,
+  secondary,
+  dangerSecondary,
+}
+
+class SettingsActionButton extends StatelessWidget {
+  const SettingsActionButton({
+    super.key,
+    this.buttonKey,
+    required this.label,
+    this.onPressed,
+    this.priority = SettingsActionPriority.secondary,
+    this.icon,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final SettingsActionPriority priority;
+  final IconData? icon;
+  final Key? buttonKey;
+
+  static const double height = 52;
+  static const double minWidth = 148;
+  static const double horizontalPadding = 20;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = _styleFor(context, priority);
+    final child = Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+    return switch (priority) {
+      SettingsActionPriority.primary => FilledButton(
+          key: buttonKey,
+          onPressed: onPressed,
+          style: style,
+          child: child,
+        ),
+      SettingsActionPriority.secondary ||
+      SettingsActionPriority.dangerSecondary =>
+        OutlinedButton(
+          key: buttonKey,
+          onPressed: onPressed,
+          style: style,
+          child: child,
+        ),
+    };
+  }
+
+  ButtonStyle _styleFor(
+    BuildContext context,
+    SettingsActionPriority priority,
+  ) {
+    final theme = Theme.of(context);
+    final tokens = context.petNoteTokens;
+    final textStyle = theme.textTheme.labelLarge?.copyWith(
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.1,
+    );
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(999),
+    );
+    final primaryColor = theme.colorScheme.primary;
+    final secondaryColor = theme.brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.86)
+        : const Color(0xFF8E6B34);
+    final secondaryBorderColor = theme.brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.22)
+        : const Color(0xFFB08D56);
+    final dangerColor = theme.colorScheme.error;
+
+    return ButtonStyle(
+      minimumSize: const WidgetStatePropertyAll(
+        Size(minWidth, height),
+      ),
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: 14,
+        ),
+      ),
+      alignment: Alignment.center,
+      textStyle: WidgetStatePropertyAll(textStyle),
+      shape: WidgetStatePropertyAll(shape),
+      side: WidgetStateProperty.resolveWith((states) {
+        if (priority == SettingsActionPriority.primary) {
+          return BorderSide.none;
+        }
+        final disabled = states.contains(WidgetState.disabled);
+        final color = switch (priority) {
+          SettingsActionPriority.secondary => disabled
+              ? secondaryBorderColor.withValues(alpha: 0.34)
+              : secondaryBorderColor,
+          SettingsActionPriority.dangerSecondary => disabled
+              ? dangerColor.withValues(alpha: 0.20)
+              : dangerColor.withValues(alpha: 0.56),
+          SettingsActionPriority.primary => Colors.transparent,
+        };
+        return BorderSide(color: color, width: 1.2);
+      }),
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        final disabled = states.contains(WidgetState.disabled);
+        return switch (priority) {
+          SettingsActionPriority.primary =>
+            disabled ? primaryColor.withValues(alpha: 0.32) : primaryColor,
+          SettingsActionPriority.secondary ||
+          SettingsActionPriority.dangerSecondary =>
+            Colors.transparent,
+        };
+      }),
+      foregroundColor: WidgetStateProperty.resolveWith((states) {
+        final disabled = states.contains(WidgetState.disabled);
+        return switch (priority) {
+          SettingsActionPriority.primary =>
+            disabled ? Colors.white.withValues(alpha: 0.78) : Colors.white,
+          SettingsActionPriority.secondary => disabled
+              ? tokens.secondaryText.withValues(alpha: 0.54)
+              : secondaryColor,
+          SettingsActionPriority.dangerSecondary =>
+            disabled ? dangerColor.withValues(alpha: 0.34) : dangerColor,
+        };
+      }),
+      overlayColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.pressed)) {
+          return switch (priority) {
+            SettingsActionPriority.primary =>
+              Colors.white.withValues(alpha: 0.08),
+            SettingsActionPriority.secondary =>
+              secondaryColor.withValues(alpha: 0.08),
+            SettingsActionPriority.dangerSecondary =>
+              dangerColor.withValues(alpha: 0.08),
+          };
+        }
+        return null;
+      }),
+      visualDensity: VisualDensity.standard,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+}
+
+class SettingsActionButtonGroup extends StatelessWidget {
+  const SettingsActionButtonGroup({
+    super.key,
+    required this.children,
+    this.spacing = 12,
+    this.runSpacing = 12,
+    this.adaptiveTwoColumn = true,
+  });
+
+  final List<Widget> children;
+  final double spacing;
+  final double runSpacing;
+  final bool adaptiveTwoColumn;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    if (!adaptiveTwoColumn) {
+      return Wrap(
+        spacing: spacing,
+        runSpacing: runSpacing,
+        children: children,
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useTwoColumns = children.length > 1 &&
+            constraints.maxWidth >= SettingsActionButton.minWidth * 2 + spacing;
+        final itemWidth =
+            useTwoColumns ? (constraints.maxWidth - spacing) / 2 : null;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: runSpacing,
+          children: children
+              .map(
+                (child) => itemWidth == null
+                    ? child
+                    : SizedBox(width: itemWidth, child: child),
+              )
+              .toList(growable: false),
+        );
+      },
+    );
+  }
+}
+
+enum PageFeedbackTone {
+  success,
+  error,
+}
+
+class PageFeedbackBanner extends StatelessWidget {
+  const PageFeedbackBanner({
+    super.key,
+    required this.message,
+    required this.tone,
+  });
+
+  final String message;
+  final PageFeedbackTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isError = tone == PageFeedbackTone.error;
+    final backgroundColor = isError
+        ? const Color(0xFFF8E8E5)
+        : theme.brightness == Brightness.dark
+            ? const Color(0xFF253127)
+            : const Color(0xFFEEF6EA);
+    final foregroundColor = isError
+        ? const Color(0xFF9D3B2D)
+        : theme.brightness == Brightness.dark
+            ? const Color(0xFFBEE2BF)
+            : const Color(0xFF285B2A);
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isError
+                  ? Icons.error_outline_rounded
+                  : Icons.check_circle_rounded,
+              color: foregroundColor,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: foregroundColor,
+                  fontWeight: FontWeight.w600,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class EmptyCard extends StatelessWidget {
   const EmptyCard({
     super.key,

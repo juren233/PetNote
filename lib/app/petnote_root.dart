@@ -3,6 +3,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:petnote/ai/ai_insights_service.dart';
+import 'package:petnote/ai/ai_settings_coordinator.dart';
 import 'package:petnote/app/add_sheet.dart';
 import 'package:petnote/app/android_native_dock.dart';
 import 'package:petnote/app/app_theme.dart';
@@ -11,6 +13,8 @@ import 'package:petnote/app/ios_native_dock.dart';
 import 'package:petnote/app/layout_metrics.dart';
 import 'package:petnote/app/me_page.dart';
 import 'package:petnote/app/navigation_palette.dart';
+import 'package:petnote/data/data_storage_coordinator.dart';
+import 'package:petnote/logging/app_log_controller.dart';
 import 'package:petnote/notifications/method_channel_notification_adapter.dart';
 import 'package:petnote/notifications/notification_coordinator.dart';
 import 'package:petnote/notifications/notification_models.dart';
@@ -26,12 +30,18 @@ class PetNoteRoot extends StatefulWidget {
   const PetNoteRoot({
     super.key,
     this.settingsController,
+    this.aiSettingsCoordinator,
+    this.aiInsightsService,
+    this.appLogController,
     this.iosDockBuilder,
     this.storeLoader,
     this.notificationAdapter,
   });
 
   final AppSettingsController? settingsController;
+  final AiSettingsCoordinator? aiSettingsCoordinator;
+  final AiInsightsService? aiInsightsService;
+  final AppLogController? appLogController;
   final IosDockBuilder? iosDockBuilder;
   final Future<PetNoteStore> Function()? storeLoader;
   final NotificationPlatformAdapter? notificationAdapter;
@@ -48,6 +58,7 @@ class _PetNoteRootState extends State<PetNoteRoot>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   PetNoteStore? _store;
   NotificationCoordinator? _notificationCoordinator;
+  DataStorageCoordinator? _dataStorageCoordinator;
   String _activeChecklistKey = 'today';
   String? _highlightedChecklistItemKey;
   bool _showFirstLaunchIntro = false;
@@ -72,6 +83,24 @@ class _PetNoteRootState extends State<PetNoteRoot>
     _loadStore();
   }
 
+  @override
+  void didUpdateWidget(covariant PetNoteRoot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final store = _store;
+    if (store == null) {
+      return;
+    }
+    if (!identical(oldWidget.settingsController, widget.settingsController)) {
+      _dataStorageCoordinator = widget.settingsController == null
+          ? null
+          : DataStorageCoordinator(
+              store: store,
+              settingsController: widget.settingsController!,
+              appLogController: widget.appLogController,
+            );
+    }
+  }
+
   Future<void> _loadStore() async {
     final store = await (widget.storeLoader ?? PetNoteStore.load)();
     if (!mounted) {
@@ -82,6 +111,13 @@ class _PetNoteRootState extends State<PetNoteRoot>
     store.addListener(_handleStoreChanged);
     setState(() {
       _store = store;
+      _dataStorageCoordinator = widget.settingsController == null
+          ? null
+          : DataStorageCoordinator(
+              store: store,
+              settingsController: widget.settingsController!,
+              appLogController: widget.appLogController,
+            );
       _notificationCoordinator = null;
       _showFirstLaunchIntro =
           store.pets.isEmpty && store.shouldAutoShowFirstLaunchIntro;
@@ -97,7 +133,10 @@ class _PetNoteRootState extends State<PetNoteRoot>
   Future<void> _initializeNotifications(PetNoteStore store) async {
     final coordinator = NotificationCoordinator(
       adapter: widget.notificationAdapter ??
-          MethodChannelNotificationPlatformAdapter(),
+          MethodChannelNotificationPlatformAdapter(
+            appLogController: widget.appLogController,
+          ),
+      appLogController: widget.appLogController,
     );
     await coordinator.init();
     await coordinator.syncFromStore(store);
@@ -125,9 +164,24 @@ class _PetNoteRootState extends State<PetNoteRoot>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && mounted) {
-      setState(() {});
+    final appLogController = widget.appLogController;
+    if (state == AppLifecycleState.resumed) {
+      appLogController?.updateCrashMonitoringHeartbeat(reason: 'resumed');
+      if (mounted) {
+        setState(() {});
+      }
+      return;
     }
+    if (state == AppLifecycleState.inactive) {
+      appLogController?.updateCrashMonitoringHeartbeat(reason: 'inactive');
+      return;
+    }
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      appLogController?.updateCrashMonitoringHeartbeat(reason: 'paused');
+      return;
+    }
+    appLogController?.endCrashMonitoringSession(reason: 'detached');
   }
 
   @override
@@ -161,11 +215,11 @@ class _PetNoteRootState extends State<PetNoteRoot>
         : useNativeAndroidDock
             ? _buildAndroidNativeDock(context, store)
             : useNativeIosDock
-            ? _buildIosNativeDock(context, store)
-            : _PetNoteBottomNav(
-                store: store,
-                onAdd: () => _openAddSheet(context, store),
-              );
+                ? _buildIosNativeDock(context, store)
+                : _PetNoteBottomNav(
+                    store: store,
+                    onAdd: () => _openAddSheet(context, store),
+                  );
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlayStyle,
       child: Scaffold(
@@ -178,8 +232,12 @@ class _PetNoteRootState extends State<PetNoteRoot>
           overlayTransition: _overlayTransition,
           overlayTransitionProgress: _overlayTransitionController.value,
           settingsController: widget.settingsController,
+          aiSettingsCoordinator: widget.aiSettingsCoordinator,
+          aiInsightsService: widget.aiInsightsService,
+          appLogController: widget.appLogController,
           notificationCoordinator: _notificationCoordinator,
           highlightedChecklistItemKey: _highlightedChecklistItemKey,
+          dataStorageCoordinator: _dataStorageCoordinator,
           onSectionChanged: (value) =>
               setState(() => _activeChecklistKey = value),
           onAddFirstPet: _openManualOnboarding,
@@ -431,6 +489,7 @@ class _PetNoteRootState extends State<PetNoteRoot>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.appLogController?.endCrashMonitoringSession(reason: 'dispose');
     _timeRefreshTimer?.cancel();
     _store?.removeListener(_handleStoreChanged);
     _notificationCoordinator?.dispose();
@@ -458,8 +517,12 @@ class _PetNoteBody extends StatelessWidget {
     required this.overlayTransition,
     required this.overlayTransitionProgress,
     required this.settingsController,
+    required this.aiSettingsCoordinator,
+    required this.aiInsightsService,
+    required this.appLogController,
     required this.notificationCoordinator,
     required this.highlightedChecklistItemKey,
+    required this.dataStorageCoordinator,
     required this.onSectionChanged,
     required this.onAddFirstPet,
     required this.onStartOnboardingFromIntro,
@@ -478,8 +541,12 @@ class _PetNoteBody extends StatelessWidget {
   final _OverlayTransition overlayTransition;
   final double overlayTransitionProgress;
   final AppSettingsController? settingsController;
+  final AiSettingsCoordinator? aiSettingsCoordinator;
+  final AiInsightsService? aiInsightsService;
+  final AppLogController? appLogController;
   final NotificationCoordinator? notificationCoordinator;
   final String? highlightedChecklistItemKey;
+  final DataStorageCoordinator? dataStorageCoordinator;
   final ValueChanged<String> onSectionChanged;
   final VoidCallback onAddFirstPet;
   final Future<void> Function() onStartOnboardingFromIntro;
@@ -524,17 +591,23 @@ class _PetNoteBody extends StatelessWidget {
                   AppTab.overview => OverviewPage(
                       store: store,
                       onAddFirstPet: onAddFirstPet,
+                      aiInsightsService: aiInsightsService,
                     ),
                   AppTab.pets => PetsPage(
                       store: store,
                       onAddFirstPet: onAddFirstPet,
                       onEditPet: onEditPet,
+                      aiInsightsService: aiInsightsService,
                     ),
                   AppTab.me => MePage(
                       themePreference: settingsController?.themePreference ??
                           AppThemePreference.system,
                       onThemePreferenceChanged: (value) =>
                           settingsController?.setThemePreference(value),
+                      settingsController: settingsController,
+                      appLogController: appLogController,
+                      aiSettingsCoordinator: aiSettingsCoordinator,
+                      dataStorageCoordinator: dataStorageCoordinator,
                       notificationPermissionState:
                           notificationCoordinator?.permissionState ??
                               NotificationPermissionState.unknown,

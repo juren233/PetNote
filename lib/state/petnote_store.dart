@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:petnote/ai/ai_insights_models.dart';
+import 'package:petnote/data/data_storage_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum ReminderKind { vaccine, deworming, medication, review, grooming, custom }
@@ -27,6 +29,13 @@ enum AppTab { checklist, overview, pets, me }
 enum PetType { cat, dog, rabbit, bird, other }
 
 enum PetNeuterStatus { neutered, notNeutered, unknown }
+
+enum OverviewAiReportStatus { idle, loading, ready, error }
+
+typedef OverviewAiReportGenerator = Future<AiCareReport> Function(
+  AiGenerationContext context, {
+  bool forceRefresh,
+});
 
 class Pet {
   Pet({
@@ -300,6 +309,27 @@ class OverviewSnapshot {
   final String disclaimer;
 }
 
+class OverviewAiReportState {
+  const OverviewAiReportState({
+    this.status = OverviewAiReportStatus.idle,
+    this.requestKey,
+    this.report,
+    this.errorMessage,
+    this.hasRequested = false,
+    this.activeRequestToken = 0,
+  });
+
+  final OverviewAiReportStatus status;
+  final String? requestKey;
+  final AiCareReport? report;
+  final String? errorMessage;
+  final bool hasRequested;
+  final int activeRequestToken;
+
+  bool get isLoading => status == OverviewAiReportStatus.loading;
+  bool get hasReport => report != null;
+}
+
 class PetNoteStore extends ChangeNotifier {
   PetNoteStore._({
     List<Pet>? pets,
@@ -507,6 +537,8 @@ class PetNoteStore extends ChangeNotifier {
   List<ReminderItem>? _remindersForSelectedPetCache;
   String? _recordsForSelectedPetCachePetId;
   List<PetRecord>? _recordsForSelectedPetCache;
+  OverviewAiReportState _overviewAiReportState = const OverviewAiReportState();
+  int _overviewAiRequestToken = 0;
 
   AppTab _activeTab = AppTab.checklist;
   OverviewRange _overviewRange = OverviewRange.sevenDays;
@@ -515,12 +547,14 @@ class PetNoteStore extends ChangeNotifier {
 
   AppTab get activeTab => _activeTab;
   OverviewRange get overviewRange => _overviewRange;
+  OverviewAiReportState get overviewAiReportState => _overviewAiReportState;
   List<Pet> get pets => List<Pet>.unmodifiable(_pets);
   List<TodoItem> get todos => List<TodoItem>.unmodifiable(_todos);
   List<ReminderItem> get reminders =>
       List<ReminderItem>.unmodifiable(_reminders);
   List<PetRecord> get records => List<PetRecord>.unmodifiable(_records);
   bool get shouldAutoShowFirstLaunchIntro => _shouldAutoShowFirstLaunchIntro;
+  DateTime get referenceNow => _referenceNow;
 
   Pet? get selectedPet {
     for (final pet in _pets) {
@@ -731,6 +765,103 @@ class PetNoteStore extends ChangeNotifier {
     _overviewSnapshotCache = snapshot;
     _overviewSnapshotCacheMinuteStamp = minuteStamp;
     return snapshot;
+  }
+
+  AiGenerationContext buildOverviewAiGenerationContext() {
+    final now = _referenceNow;
+    final days = switch (_overviewRange) {
+      OverviewRange.sevenDays => 7,
+      OverviewRange.oneMonth => 30,
+      OverviewRange.threeMonths => 90,
+      OverviewRange.sixMonths => 180,
+      OverviewRange.oneYear => 365,
+    };
+    final rangeStart = now.subtract(Duration(days: days));
+    final todos = _todos
+        .where((todo) => !todo.dueAt.isBefore(rangeStart))
+        .toList(growable: false);
+    final reminders = _reminders
+        .where((reminder) => !reminder.scheduledAt.isBefore(rangeStart))
+        .toList(growable: false);
+    final records = _records
+        .where((record) => !record.recordDate.isBefore(rangeStart))
+        .toList(growable: false);
+
+    return AiGenerationContext(
+      title: _overviewTitle(_overviewRange),
+      rangeLabel: _overviewTitle(_overviewRange),
+      rangeStart: rangeStart,
+      rangeEnd: now,
+      languageTag: 'zh-CN',
+      pets: pets,
+      todos: todos,
+      reminders: reminders,
+      records: records,
+    );
+  }
+
+  Future<void> generateOverviewAiReport(
+    OverviewAiReportGenerator generate, {
+    bool forceRefresh = false,
+  }) async {
+    if (_overviewAiReportState.isLoading) {
+      return;
+    }
+
+    final context = buildOverviewAiGenerationContext();
+    final requestKey = context.cacheKey;
+    final requestToken = ++_overviewAiRequestToken;
+    final previousReport = _overviewAiReportState.report;
+    _overviewAiReportState = OverviewAiReportState(
+      status: OverviewAiReportStatus.loading,
+      requestKey: requestKey,
+      report: previousReport,
+      hasRequested: true,
+      activeRequestToken: requestToken,
+    );
+    notifyListeners();
+
+    try {
+      final report = await generate(context, forceRefresh: forceRefresh);
+      if (_overviewAiRequestToken != requestToken ||
+          _overviewAiReportState.requestKey != requestKey) {
+        return;
+      }
+      _overviewAiReportState = OverviewAiReportState(
+        status: OverviewAiReportStatus.ready,
+        requestKey: requestKey,
+        report: report,
+        hasRequested: true,
+        activeRequestToken: requestToken,
+      );
+      notifyListeners();
+    } on AiGenerationException catch (error) {
+      if (_overviewAiRequestToken != requestToken ||
+          _overviewAiReportState.requestKey != requestKey) {
+        return;
+      }
+      _overviewAiReportState = OverviewAiReportState(
+        status: OverviewAiReportStatus.error,
+        requestKey: requestKey,
+        errorMessage: error.message,
+        hasRequested: true,
+        activeRequestToken: requestToken,
+      );
+      notifyListeners();
+    } catch (_) {
+      if (_overviewAiRequestToken != requestToken ||
+          _overviewAiReportState.requestKey != requestKey) {
+        return;
+      }
+      _overviewAiReportState = OverviewAiReportState(
+        status: OverviewAiReportStatus.error,
+        requestKey: requestKey,
+        errorMessage: 'AI 总览暂时无法生成，请稍后重试。',
+        hasRequested: true,
+        activeRequestToken: requestToken,
+      );
+      notifyListeners();
+    }
   }
 
   void setActiveTab(AppTab tab) {
@@ -975,6 +1106,83 @@ class PetNoteStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  PetNoteDataState exportDataState() {
+    return PetNoteDataState(
+      pets: List<Pet>.from(_pets),
+      todos: List<TodoItem>.from(_todos),
+      reminders: List<ReminderItem>.from(_reminders),
+      records: List<PetRecord>.from(_records),
+    );
+  }
+
+  Future<void> replaceAllData(PetNoteDataState state) async {
+    _validateDataState(state);
+    _pets
+      ..clear()
+      ..addAll(state.pets);
+    _todos
+      ..clear()
+      ..addAll(state.todos);
+    _reminders
+      ..clear()
+      ..addAll(state.reminders);
+    _records
+      ..clear()
+      ..addAll(state.records);
+    _selectedPetId = _pets.isEmpty ? '' : _pets.first.id;
+    _activeTab = _pets.isEmpty ? AppTab.checklist : AppTab.pets;
+    _invalidateAllDerivedData();
+    notifyListeners();
+    await _saveState();
+  }
+
+  Future<void> appendData(PetNoteDataState state) async {
+    _validateDataState(state);
+    _ensureNoConflicts(
+      currentIds: _pets.map((pet) => pet.id),
+      incomingIds: state.pets.map((pet) => pet.id),
+      label: '宠物',
+    );
+    _ensureNoConflicts(
+      currentIds: _todos.map((item) => item.id),
+      incomingIds: state.todos.map((item) => item.id),
+      label: '待办',
+    );
+    _ensureNoConflicts(
+      currentIds: _reminders.map((item) => item.id),
+      incomingIds: state.reminders.map((item) => item.id),
+      label: '提醒',
+    );
+    _ensureNoConflicts(
+      currentIds: _records.map((item) => item.id),
+      incomingIds: state.records.map((item) => item.id),
+      label: '记录',
+    );
+
+    _pets.addAll(state.pets);
+    _todos.addAll(state.todos);
+    _reminders.addAll(state.reminders);
+    _records.addAll(state.records);
+    if (_selectedPetId.isEmpty && _pets.isNotEmpty) {
+      _selectedPetId = _pets.first.id;
+    }
+    _invalidateAllDerivedData();
+    notifyListeners();
+    await _saveState();
+  }
+
+  Future<void> clearAllData() async {
+    _pets.clear();
+    _todos.clear();
+    _reminders.clear();
+    _records.clear();
+    _selectedPetId = '';
+    _activeTab = AppTab.checklist;
+    _invalidateAllDerivedData();
+    notifyListeners();
+    await _saveState();
+  }
+
   void _invalidateAllDerivedData() {
     _invalidateChecklistDerivedData();
     _invalidateOverviewDerivedData();
@@ -989,6 +1197,14 @@ class PetNoteStore extends ChangeNotifier {
   void _invalidateOverviewDerivedData() {
     _overviewSnapshotCache = null;
     _overviewSnapshotCacheMinuteStamp = null;
+    _invalidateOverviewAiReportState();
+  }
+
+  void _invalidateOverviewAiReportState() {
+    _overviewAiRequestToken += 1;
+    _overviewAiReportState = OverviewAiReportState(
+      activeRequestToken: _overviewAiRequestToken,
+    );
   }
 
   void _invalidateSelectedPetReminders() {
@@ -1203,6 +1419,58 @@ class PetNoteStore extends ChangeNotifier {
         ReminderStatus.overdue => '已逾期',
         ReminderStatus.pending => '待提醒',
       };
+
+  void _validateDataState(PetNoteDataState state) {
+    _ensureUniqueIds(state.pets.map((pet) => pet.id), '宠物');
+    _ensureUniqueIds(state.todos.map((item) => item.id), '待办');
+    _ensureUniqueIds(state.reminders.map((item) => item.id), '提醒');
+    _ensureUniqueIds(state.records.map((item) => item.id), '记录');
+
+    final petIds = state.pets.map((pet) => pet.id).toSet();
+    final invalidTodo = state.todos
+        .where((item) => !petIds.contains(item.petId))
+        .map((item) => item.title)
+        .toList();
+    if (invalidTodo.isNotEmpty) {
+      throw StateError('待办引用了不存在的宠物。');
+    }
+    final invalidReminder = state.reminders
+        .where((item) => !petIds.contains(item.petId))
+        .map((item) => item.title)
+        .toList();
+    if (invalidReminder.isNotEmpty) {
+      throw StateError('提醒引用了不存在的宠物。');
+    }
+    final invalidRecord = state.records
+        .where((item) => !petIds.contains(item.petId))
+        .map((item) => item.title)
+        .toList();
+    if (invalidRecord.isNotEmpty) {
+      throw StateError('记录引用了不存在的宠物。');
+    }
+  }
+
+  void _ensureUniqueIds(Iterable<String> ids, String label) {
+    final seen = <String>{};
+    for (final id in ids) {
+      if (!seen.add(id)) {
+        throw StateError('$label 数据包内存在重复 ID。');
+      }
+    }
+  }
+
+  void _ensureNoConflicts({
+    required Iterable<String> currentIds,
+    required Iterable<String> incomingIds,
+    required String label,
+  }) {
+    final current = currentIds.toSet();
+    for (final id in incomingIds) {
+      if (current.contains(id)) {
+        throw StateError('$label 存在重复 ID，无法追加导入。');
+      }
+    }
+  }
 }
 
 PetType _petTypeFromName(String? value) => switch (value) {
@@ -1282,6 +1550,14 @@ String notificationLeadTimeLabel(NotificationLeadTime leadTime) =>
       NotificationLeadTime.fifteenMinutes => '提前15分钟',
       NotificationLeadTime.oneHour => '提前1小时',
       NotificationLeadTime.oneDay => '提前1天',
+    };
+
+String _overviewTitle(OverviewRange range) => switch (range) {
+      OverviewRange.sevenDays => '最近 7 天 AI 照护总结',
+      OverviewRange.oneMonth => '最近 1 个月 AI 照护总结',
+      OverviewRange.threeMonths => '最近 3 个月 AI 照护总结',
+      OverviewRange.sixMonths => '最近 6 个月 AI 照护总结',
+      OverviewRange.oneYear => '最近 1 年 AI 照护总结',
     };
 
 PetRecordType _petRecordTypeFromName(String? value) => switch (value) {
