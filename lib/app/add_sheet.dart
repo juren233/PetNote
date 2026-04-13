@@ -29,9 +29,10 @@ class _AddSheetState extends State<AddActionSheet>
   static const _compactSheetHeight = 448.0;
   static const _sheetRadius = 36.0;
   static const _expandedTransitionDuration = Duration(milliseconds: 360);
-  static const _actionsRevealStart = 0.24;
+  static const _actionsRevealStart = 0.62;
   static const _headerOverlayHeight = 112.0;
   static const _actionsContentTopInset = 74.0;
+  static const _actionsHorizontalInset = 18.0;
   static const _expandedContentTopInset = 112.0;
 
   late final AnimationController _transitionController;
@@ -88,9 +89,20 @@ class _AddSheetState extends State<AddActionSheet>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _transitionController,
-      builder: (context, _) {
+    return PopScope(
+      canPop: !_hasExpandedStage || _isCollapsing || _isPetOnboarding,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+        if (_isPetOnboarding) {
+          return;
+        }
+        _beginCollapseToActions();
+      },
+      child: AnimatedBuilder(
+        animation: _transitionController,
+        builder: (context, _) {
         final mediaQuery = MediaQuery.of(context);
         final availableHeight =
             mediaQuery.size.height - mediaQuery.padding.top - 12;
@@ -117,8 +129,12 @@ class _AddSheetState extends State<AddActionSheet>
               top: false,
               child: Padding(
                 padding: EdgeInsets.only(
-                  left: _stage == _AddSheetStage.petOnboarding ? 0 : 18,
-                  right: _stage == _AddSheetStage.petOnboarding ? 0 : 18,
+                  left: _stage == _AddSheetStage.petOnboarding
+                      ? 0
+                      : _actionsHorizontalInset,
+                  right: _stage == _AddSheetStage.petOnboarding
+                      ? 0
+                      : _actionsHorizontalInset,
                   top: 4,
                   bottom: mediaQuery.viewInsets.bottom + 18,
                 ),
@@ -128,13 +144,11 @@ class _AddSheetState extends State<AddActionSheet>
           ),
         );
       },
+    ),
     );
   }
 
   Widget _buildSheetContent(BuildContext context) {
-    if (_stage == _AddSheetStage.petOnboarding) {
-      return _buildBody();
-    }
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -150,37 +164,44 @@ class _AddSheetState extends State<AddActionSheet>
   }
 
   Widget _buildHeaderTransition(BuildContext context) {
-    final showExpandedHeader = _hasExpandedStage || _isCollapsing;
+    final showExpandedHeader = (_hasExpandedStage || _isCollapsing) && !_isPetOnboarding;
     final showActionsHeader = !_hasExpandedStage || _shouldRevealActions;
     final expandedOpacity =
         _isCollapsing ? (1 - _actionsRevealOpacity).clamp(0.0, 1.0) : 1.0;
     final actionsOpacity =
         _hasExpandedStage ? _actionsRevealOpacity.clamp(0.0, 1.0) : 1.0;
 
-    return SizedBox(
-      key: const ValueKey('add_sheet_header_transition'),
-      height: _headerOverlayHeight,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (showActionsHeader)
-            _HeaderTransitionLayer(
-              key: const ValueKey('add_sheet_actions_header_transition'),
-              opacity: actionsOpacity,
-              translateY: 10 * (1 - actionsOpacity),
-              child: _ActionsHeader(),
-            ),
-          if (showExpandedHeader)
-            _HeaderTransitionLayer(
-              key: const ValueKey('add_sheet_expanded_header_transition'),
-              opacity: expandedOpacity,
-              translateY: -8 * _actionsRevealOpacity,
-              child: _ExpandedHeader(
-                title: _sheetTitle(_transitionAction),
-                onBack: _beginCollapseToActions,
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: _stage == _AddSheetStage.petOnboarding
+            ? _actionsHorizontalInset
+            : 0,
+      ),
+      child: SizedBox(
+        key: const ValueKey('add_sheet_header_transition'),
+        height: _headerOverlayHeight,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (showActionsHeader)
+              _HeaderTransitionLayer(
+                key: const ValueKey('add_sheet_actions_header_transition'),
+                opacity: actionsOpacity,
+                translateY: 10 * (1 - actionsOpacity),
+                child: const _ActionsHeader(),
               ),
-            ),
-        ],
+            if (showExpandedHeader)
+              _HeaderTransitionLayer(
+                key: const ValueKey('add_sheet_expanded_header_transition'),
+                opacity: expandedOpacity,
+                translateY: -8 * _actionsRevealOpacity,
+                child: _ExpandedHeader(
+                  title: _sheetTitle(_transitionAction),
+                  onBack: _beginCollapseToActions,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -306,7 +327,14 @@ class _AddSheetState extends State<AddActionSheet>
             key: const ValueKey('add_actions_boundary'),
             alignment: Alignment.topCenter,
             child: RepaintBoundary(
-              child: actionsContent,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: _stage == _AddSheetStage.petOnboarding
+                      ? _actionsHorizontalInset
+                      : 0,
+                ),
+                child: actionsContent,
+              ),
             ),
           ),
         ),
