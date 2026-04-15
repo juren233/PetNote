@@ -201,10 +201,14 @@ class _PetNoteRootState extends State<PetNoteRoot>
 
     final overlayStyle = petNoteOverlayStyleForTheme(Theme.of(context));
     final platform = Theme.of(context).platform;
+    final useAndroidDockOverlay = 
+        !_showOnboarding && supportsAndroidLiquidGlassDock(platform);
     final showBottomNavigation = !_showOnboarding &&
-        (!_showFirstLaunchIntro ||
+        (useAndroidDockOverlay ||
+            !_showFirstLaunchIntro ||
             _overlayTransition == _OverlayTransition.introToShell);
     final showBottomNavigationInBody =
+        useAndroidDockOverlay ||
         _overlayTransition == _OverlayTransition.introToShell;
     final useNativeAndroidDock =
         showBottomNavigation && supportsAndroidLiquidGlassDock(platform);
@@ -635,7 +639,9 @@ class _PetNoteBody extends StatelessWidget {
                   right: 0,
                   bottom: 0,
                   child: IgnorePointer(
-                    ignoring: true,
+                    ignoring: showFirstLaunchIntro ||
+                        showOnboarding ||
+                        overlayTransition != _OverlayTransition.none,
                     child: bottomNavigationOverlay!,
                   ),
                 ),
