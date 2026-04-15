@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final rootSource = File('lib/app/petnote_root.dart').readAsStringSync();
-  final sheetSource = File('lib/app/add_sheet.dart').readAsStringSync();
+  final addSheetEntrySource = File('lib/app/add_sheet.dart').readAsStringSync();
+  final sheetSource =
+      File('lib/app/add_sheet/add_action_sheet_shell.dart').readAsStringSync();
 
   test(
       'add sheet relies on the system drag handle instead of rendering a duplicate one',
@@ -16,6 +18,10 @@ void main() {
   test(
       'add sheet avoids default close text and reuses one transition controller for collapse',
       () {
+    expect(
+      addSheetEntrySource,
+      contains("export 'add_sheet/add_action_sheet_shell.dart';"),
+    );
     expect(
       sheetSource,
       isNot(contains("child: Text(_action == AddAction.none ? '关闭' : '返回')")),

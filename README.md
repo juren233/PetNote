@@ -114,9 +114,19 @@ git submodule update --init --recursive
 
 当前仓库对 DevEco / Harmony 的协作约定补充如下：
 
+- [ohos/build-profile.json5](./ohos/build-profile.json5) 是**共享签名基线文件**，提交时必须保持仓库约定的相对路径和配套密文；不要因为某台机器的 DevEco / IDE 自动刷新了本地 Signing Config，就把它改成本机绝对路径，或只替换其中的 `storePassword` / `keyPassword`
+- [ohos/build-profile.json5](./ohos/build-profile.json5) 里的 `storePassword` / `keyPassword` 不是随便一段字符串，也不是“谁本机能编过就提交谁的”；它们和本机 `ohos/sign/material` 解密材料是一一对应的。只改这两个密文、却不保证配套材料一致，会直接导致其他机器在 `SignHap` 阶段报 `Signature material verification failed`
 - [ohos/sign/debug-profile.json](./ohos/sign/debug-profile.json) 现在作为“共享调试 profile 基线文件”提交到仓库，用来保证 bundle name 与仓库内应用配置保持一致，并作为本地设备绑定 profile 的生成基线
 - `ohos/local.properties` 仍然是本地文件，不进仓库；它由 `scripts/flutter-ohos.ps1 -Mode init` 按当前机器的 DevEco SDK、Node.js 和项目内 OHOS Flutter 路径自动生成 / 校正
 - `ohos/sign/` 目录下其余证书、签名链、`p7b`、`cer`、设备绑定 profile 等内容，仍然属于本地生成物，不要提交
+
+Harmony 签名协作时，额外遵守下面这组硬规则：
+
+- 新机器、切换 DevEco / SDK、或本地签名突然异常后，先执行一次 `powershell -ExecutionPolicy Bypass -File .\scripts\flutter-ohos.ps1 -Mode init`
+- 如果只是为了恢复本机 DevEco 一键编译 / 运行，不要手改 [ohos/build-profile.json5](./ohos/build-profile.json5) 里的密文，更不要把 IDE 自动写入的本机绝对路径提交进仓库
+- 如果 [ohos/build-profile.json5](./ohos/build-profile.json5) 的 diff 只体现为 `storePassword` / `keyPassword` 变化，或 `storeFile` / `profile` / `certpath` 变成了 `C:\Users\...` 之类本机路径，默认把它视为本地环境噪音，不要提交
+- 如果确实要调整共享签名基线，必须把“为什么要改、改了哪些成套材料、如何验证”的说明一起补进提交说明或评审说明，不能只提交一份孤立的 [ohos/build-profile.json5](./ohos/build-profile.json5) 密文变化
+- 任何涉及 [ohos/build-profile.json5](./ohos/build-profile.json5) 的改动，提交前至少执行一次 `powershell -ExecutionPolicy Bypass -File .\scripts\flutter-ohos.ps1 -Mode build -TargetPlatform x64`，确认不是只在当前 IDE 表面可见、而是命令行签名链路也真实可用
 
 你在 `ohos` 子工程里通常会看到：
 
@@ -533,6 +543,8 @@ open -a "DevEco Studio" .
 - 如果 [`.flutter_ohos_sdk_gitcode`](./.flutter_ohos_sdk_gitcode) 在主仓库里显示为 `dirty`，先清掉子模块内部的本地改动再提主仓库。
 - 根目录 [pubspec.lock](./pubspec.lock) 提交前应保持“官方 Flutter 默认状态”。
 - 如果需要改 DevEco 直跑逻辑，请优先改 [tooling/ohos-hvigor-plugin](./tooling/ohos-hvigor-plugin)，不要去改子模块里的 upstream hvigor 插件源码。
+- 如果 diff 里出现 [ohos/build-profile.json5](./ohos/build-profile.json5)，先肉眼检查是否只改了 `storePassword` / `keyPassword` 或签名文件路径；这类改动默认不该提交，除非你正在做一次经过验证的共享签名基线升级。
+- 不要把“本机能在 DevEco 里点运行”当成 [ohos/build-profile.json5](./ohos/build-profile.json5) 可提交的依据；必须以脚本构建通过为准，再决定是否允许进入评审。
 
 ## 团队协作建议
 
@@ -565,5 +577,7 @@ open -a "DevEco Studio" .
   因为 hvigor 插件会在构建前自动备份共享状态、切换到 OHOS Flutter、必要时刷新 `package_config`，构建后再恢复。
 - “为什么 DevEco 运行前有时仍然建议先跑一次 Harmony 脚本？”
   因为脚本会顺手完成子模块初始化、本机 `ohos/local.properties` 校正、签名修复和 hvigor 补丁兜底，适合首次拉仓库或本地环境刚变化之后使用。
+- “为什么我只改了 `ohos/build-profile.json5` 里的密文，自己机器能跑，别人却在 `SignHap` 报 `Signature material verification failed`？”
+  因为这两个密文和本机 `ohos/sign/material` 是配套关系，不是通用密码。只提密文、不带成套材料，其他机器大概率无法解密通过；这种 diff 默认应视为本地签名噪音，而不是共享改动。
 - “为什么不要直接把 OHOS Flutter SDK 当普通目录提交？”
   因为体积太大，而且不利于升级和团队同步，子模块更可控。
