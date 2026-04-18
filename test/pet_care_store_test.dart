@@ -284,6 +284,37 @@ void main() {
           'Mochi 的照护节奏基本稳定，下一步先补齐周期检查。');
     });
 
+    test('overview analysis config preserves empty selected pets after reload',
+        () async {
+      final store = await PetNoteStore.load();
+
+      await store.addPet(
+        name: 'Mochi',
+        type: PetType.cat,
+        breed: '英短',
+        sex: '母',
+        birthday: '2024-02-12',
+        weightKg: 4.2,
+        neuterStatus: PetNeuterStatus.neutered,
+        feedingPreferences: '未填写',
+        allergies: '未填写',
+        note: '未填写',
+      );
+
+      store.updateOverviewAnalysisConfig(
+        range: OverviewRange.oneMonth,
+        selectedPetIds: const [],
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(store.overviewSelectedPetIds, isEmpty);
+
+      final reloaded = await PetNoteStore.load();
+
+      expect(reloaded.overviewRange, OverviewRange.oneMonth);
+      expect(reloaded.overviewSelectedPetIds, isEmpty);
+    });
+
     test('overview report is cleared after related data changes and reload',
         () async {
       final store = await PetNoteStore.load();

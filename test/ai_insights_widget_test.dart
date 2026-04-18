@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:petnote/ai/ai_client_factory.dart';
 import 'package:petnote/ai/ai_connection_tester.dart';
@@ -11,10 +11,9 @@ import 'package:petnote/ai/ai_settings_coordinator.dart';
 import 'package:petnote/ai/ai_secret_store.dart';
 import 'package:petnote/app/ai_settings_page.dart';
 import 'package:petnote/app/app_theme.dart';
-import 'package:petnote/app/ios_native_overview_range_button.dart';
 import 'package:petnote/app/layout_metrics.dart';
-import 'package:petnote/app/native_option_picker.dart';
 import 'package:petnote/app/navigation_palette.dart';
+import 'package:petnote/app/pet_photo_widgets.dart';
 import 'package:petnote/app/petnote_pages.dart';
 import 'package:petnote/app/petnote_root.dart';
 import 'package:petnote/state/app_settings_controller.dart';
@@ -24,6 +23,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    debugPetPhotoImageBuilder = null;
+    debugHasPetPhotoOverride = null;
+  });
+
+  tearDown(() {
+    debugPetPhotoImageBuilder = null;
+    debugHasPetPhotoOverride = null;
   });
 
   testWidgets(
@@ -168,6 +174,123 @@ void main() {
     expect(find.text('为什么是这个分数？'), findsOneWidget);
     expect(find.text('你漏了什么重要信息？'), findsOneWidget);
     expect(find.text('后续怎么跟进？'), findsOneWidget);
+  });
+
+  testWidgets(
+      'overview page prefers pet photo and uses emoji or abbreviation fallback',
+      (tester) async {
+    final photoPath =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}petnote-overview-avatar-${DateTime.now().microsecondsSinceEpoch}.bin';
+    debugHasPetPhotoOverride = (path) => path == photoPath;
+    debugPetPhotoImageBuilder = ({
+      required String photoPath,
+      required BoxFit fit,
+      required Widget fallback,
+    }) {
+      return SizedBox.expand(
+        key: ValueKey('debug-pet-photo-$photoPath'),
+      );
+    };
+
+    final store = PetNoteStore.seeded();
+    await store.updatePet(
+      petId: 'pet-1',
+      name: 'Luna',
+      type: PetType.cat,
+      photoPath: photoPath,
+      breed: 'British Shorthair',
+      sex: 'Female',
+      birthday: '2023-04-18',
+      weightKg: 4.6,
+      neuterStatus: PetNeuterStatus.neutered,
+      feedingPreferences: '早晚各一餐，冻干拌主粮',
+      allergies: '对鸡肉敏感',
+      note: '洗澡后容易紧张，需要安抚。',
+    );
+    await store.addPet(
+      name: '龙宝',
+      type: PetType.other,
+      photoPath: null,
+      breed: '其他',
+      sex: 'Unknown',
+      birthday: '2024-01-01',
+      weightKg: 2.4,
+      neuterStatus: PetNeuterStatus.unknown,
+      feedingPreferences: '保持环境湿度稳定',
+      allergies: '未填写',
+      note: '异宠，需要单独观察。',
+    );
+    final otherPet = store.pets.firstWhere((pet) => pet.name == '龙宝');
+    store.setActiveTab(AppTab.overview);
+
+    final service = _FakeAiInsightsService(
+      careReport: _buildDetailedCareReport(),
+      isConfigured: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: Scaffold(
+          body: OverviewPage(
+            store: store,
+            onAddFirstPet: () {},
+            aiInsightsService: service,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('overview-pet-option-pet-1')),
+        matching: find.byKey(ValueKey('debug-pet-photo-$photoPath')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('overview-pet-option-pet-2')),
+        matching: find.text('🐶'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(ValueKey('overview-pet-option-${otherPet.id}')),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Text &&
+              widget.data == otherPet.avatarText &&
+              widget.textAlign == null,
+        ),
+      ),
+      findsOneWidget,
+    );
+
+    await tester
+        .tap(find.byKey(const ValueKey('overview-floating-generate-button')));
+    await tester.pumpAndSettle();
+
+    expect(service.generateCareReportCalls, 1);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('ai-pet-tab-pet-1')),
+        matching: find.byKey(ValueKey('debug-pet-photo-$photoPath')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('ai-pet-tab-pet-2')),
+        matching: find.text('🐶'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets(
@@ -668,7 +791,7 @@ void main() {
     );
   });
 
-  testWidgets('overview page uses native iOS range button host on iOS',
+  testWidgets('overview setup allows clearing all pets and disables generate button',
       (tester) async {
     final store = PetNoteStore.seeded();
     final service = _FakeAiInsightsService(
@@ -678,19 +801,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetNoteTheme(Brightness.light).copyWith(
-          platform: TargetPlatform.iOS,
-        ),
-        locale: const Locale('zh', 'CN'),
-        supportedLocales: const [
-          Locale('zh', 'CN'),
-          Locale('en', 'US'),
-        ],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+        theme: buildPetNoteTheme(Brightness.light),
         home: Scaffold(
           body: OverviewPage(
             store: store,
@@ -702,131 +813,89 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-        find.byKey(const ValueKey('overview-range-menu-button')), findsNothing);
-    expect(find.byKey(const ValueKey('ios-overview-range-button-host')),
+    expect(find.byKey(const ValueKey('overview-pet-selected-overlay-pet-1')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-pet-selected-check-pet-2')),
         findsOneWidget);
 
-    final platformView = tester.widget<UiKitView>(find.byType(UiKitView));
-    final creationParams =
-        platformView.creationParams! as Map<Object?, Object?>;
-    expect(creationParams['label'], '7天');
-    expect(creationParams['brightness'], 'light');
+    await tester.tap(find.byKey(const ValueKey('overview-pet-option-pet-2')),
+        warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(store.overviewSelectedPetIds, ['pet-1']);
+    expect(find.byKey(const ValueKey('overview-pet-selected-overlay-pet-2')),
+        findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('overview-pet-option-pet-1')),
+        warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(store.overviewSelectedPetIds, isEmpty);
+    expect(find.byKey(const ValueKey('overview-pet-selected-check-pet-1')),
+        findsNothing);
+
+    final generateButton = tester.widget<FilledButton>(
+      find.byKey(const ValueKey('overview-floating-generate-button')),
+    );
+    expect(generateButton.onPressed, isNull);
+
+    await tester.tap(find.byKey(const ValueKey('overview-floating-generate-button')),
+        warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(service.generateCareReportCalls, 0);
   });
 
-  testWidgets('overview page updates range through native host callback on iOS',
+  testWidgets(
+      'overview header generate button stays disabled when report exists but no pets are selected',
       (tester) async {
     final store = PetNoteStore.seeded();
     final service = _FakeAiInsightsService(
-      careReport: _buildDetailedCareReport(
-        oneLineSummary: 'iOS 原生按钮选择后的总览已生成。',
-      ),
+      careReport: _buildDetailedCareReport(),
       isConfigured: true,
     );
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildPetNoteTheme(Brightness.light).copyWith(
-          platform: TargetPlatform.iOS,
-        ),
-        locale: const Locale('zh', 'CN'),
-        supportedLocales: const [
-          Locale('zh', 'CN'),
-          Locale('en', 'US'),
-        ],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+        theme: buildPetNoteTheme(Brightness.light),
         home: Scaffold(
           body: OverviewPage(
             store: store,
             onAddFirstPet: () {},
             aiInsightsService: service,
-            nativeOptionPicker: _FakeNativeOptionPicker(
-              result: const NativeOptionPickerResult.success(
-                selectedValue: 'oneMonth',
-              ),
-            ),
-            iosRangeButtonBuilder: _buildFakeIosOverviewRangeMenu,
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
-
-    await tester
-        .tap(find.byKey(const ValueKey('fake_ios_overview_range_button')));
-    await tester.pumpAndSettle();
-
-    expect(store.overviewAnalysisConfig.range, OverviewRange.oneMonth);
 
     await tester
         .tap(find.byKey(const ValueKey('overview-floating-generate-button')));
     await tester.pumpAndSettle();
 
-    expect(service.lastCareContext, isNotNull);
-    expect(
-      service.lastCareContext!.rangeEnd
-          .difference(service.lastCareContext!.rangeStart)
-          .inDays,
-      30,
-    );
-  });
+    expect(service.generateCareReportCalls, 1);
 
-  testWidgets(
-      'overview page opens existing custom range flow through native host callback on iOS',
-      (tester) async {
-    final store = PetNoteStore.seeded();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildPetNoteTheme(Brightness.light).copyWith(
-          platform: TargetPlatform.iOS,
-        ),
-        locale: const Locale('zh', 'CN'),
-        supportedLocales: const [
-          Locale('zh', 'CN'),
-          Locale('en', 'US'),
-        ],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: _FakeAiInsightsService(
-              careReport: _buildDetailedCareReport(),
-              isConfigured: true,
-            ),
-            nativeOptionPicker: _FakeNativeOptionPicker(
-              result: const NativeOptionPickerResult.success(
-                selectedValue: 'custom',
-              ),
-            ),
-            iosRangeButtonBuilder: _buildFakeIosOverviewCustomButton,
-          ),
-        ),
-      ),
+    final currentConfig = store.overviewAnalysisConfig;
+    store.updateOverviewAnalysisConfig(
+      range: currentConfig.range,
+      selectedPetIds: const [],
+      customRangeStart: currentConfig.customRangeStart,
+      customRangeEnd: currentConfig.customRangeEnd,
     );
     await tester.pumpAndSettle();
 
-    await tester
-        .tap(find.byKey(const ValueKey('fake_ios_overview_custom_button')));
+    final headerGenerateButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '生成总览'),
+    );
+    expect(headerGenerateButton.onPressed, isNull);
+
+    await tester.tap(
+      find.widgetWithText(FilledButton, '生成总览'),
+      warnIfMissed: false,
+    );
     await tester.pumpAndSettle();
 
-    expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget.runtimeType.toString().contains('DateRangePickerDialog'),
-      ),
-      findsOneWidget,
-    );
-    expect(store.overviewAnalysisConfig.range, OverviewRange.sevenDays);
+    expect(service.generateCareReportCalls, 1);
   });
 
   testWidgets(
@@ -853,7 +922,16 @@ void main() {
 
     expect(find.text('正在分析'), findsOneWidget);
     expect(find.text('AI 正在生成新的专业分析报告…'), findsNothing);
-    expect(find.text('AI总览生成中'), findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-generating-title-label')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-generating-title-shimmer')),
+        findsOneWidget);
+    final overviewContext = tester.element(find.byType(OverviewPage));
+    final generatingTitle = tester.widget<Text>(
+      find.byKey(const ValueKey('overview-generating-title-label')),
+    );
+    expect(generatingTitle.style?.color,
+        overviewContext.petNoteTokens.primaryText);
     expect(find.byKey(const ValueKey('overview-generating-experience')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('overview-generating-pet-carousel')),
@@ -870,11 +948,75 @@ void main() {
     expect(service.generateCareReportCalls, 1);
     expect(service.forceRefreshValues, <bool>[false]);
 
-    await tester.pump(const Duration(milliseconds: 2400));
-    await tester.pump(const Duration(milliseconds: 320));
+    final initialBreathingScale = tester.widget<Transform>(
+      find.byKey(const ValueKey('overview-generating-pet-breath-group-pet-1')),
+    );
+    expect(initialBreathingScale.transform.storage[0], closeTo(1.0, 0.001));
+    expect(initialBreathingScale.transform.storage[5], closeTo(1.0, 0.001));
+    expect(
+      find.byKey(const ValueKey('overview-generating-pet-breath-group-pet-1')),
+      findsOneWidget,
+    );
+
+    await tester.pump(const Duration(milliseconds: 700));
+    final expandedBreathingScale = tester.widget<Transform>(
+      find.byKey(const ValueKey('overview-generating-pet-breath-group-pet-1')),
+    );
+    expect(expandedBreathingScale.transform.storage[0], greaterThan(1.1));
+    expect(expandedBreathingScale.transform.storage[5], greaterThan(1.1));
+
+    await tester.pump(const Duration(milliseconds: 260));
+    final generatingTransitionTop = tester
+        .getTopLeft(
+            find.byKey(const ValueKey('overview-generating-title-label')))
+        .dy;
+    await tester.pump(const Duration(milliseconds: 520));
+    final generatingSettledTop = tester
+        .getTopLeft(
+            find.byKey(const ValueKey('overview-generating-title-label')))
+        .dy;
+    expect(generatingTransitionTop, lessThanOrEqualTo(generatingSettledTop));
+
+    await tester.pump(const Duration(milliseconds: 2100));
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(find.byKey(const ValueKey('overview-generating-pet-avatar-pet-1')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-generating-pet-avatar-pet-2')),
+        findsNothing);
+    final switchingAvatarScale = tester.widget<Transform>(
+      find.byKey(const ValueKey('overview-generating-pet-avatar-scale-pet-1')),
+    );
+    expect(switchingAvatarScale.transform.storage[0], greaterThan(1.0));
+    expect(switchingAvatarScale.transform.storage[5], greaterThan(1.0));
+
+    await tester.pump(const Duration(milliseconds: 90));
     await tester.pump();
     expect(find.byKey(const ValueKey('overview-generating-pet-avatar-pet-2')),
         findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-generating-pet-avatar-pet-1')),
+        findsNothing);
+
+    final switchedAvatarScale = tester.widget<Transform>(
+      find.byKey(const ValueKey('overview-generating-pet-avatar-scale-pet-2')),
+    );
+    expect(switchedAvatarScale.transform.storage[0], lessThan(1.0));
+    expect(switchedAvatarScale.transform.storage[5], lessThan(1.0));
+
+    await tester.pump(const Duration(milliseconds: 140));
+    await tester.pump();
+    final reboundingAvatarScale = tester.widget<Transform>(
+      find.byKey(const ValueKey('overview-generating-pet-avatar-scale-pet-2')),
+    );
+    expect(reboundingAvatarScale.transform.storage[0], greaterThan(0.8));
+    expect(reboundingAvatarScale.transform.storage[0], lessThan(0.98));
+    expect(reboundingAvatarScale.transform.storage[5], greaterThan(0.8));
+    expect(reboundingAvatarScale.transform.storage[5], lessThan(0.98));
+
+    final contractedBreathingScale = tester.widget<Transform>(
+      find.byKey(const ValueKey('overview-generating-pet-breath-group-pet-2')),
+    );
+    expect(contractedBreathingScale.transform.storage[0], lessThan(0.9));
+    expect(contractedBreathingScale.transform.storage[5], lessThan(0.9));
 
     store.setActiveTab(AppTab.checklist);
     await tester.pumpAndSettle();
@@ -882,7 +1024,8 @@ void main() {
 
     store.setActiveTab(AppTab.overview);
     await tester.pump();
-    expect(find.text('AI总览生成中'), findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-generating-title-label')),
+        findsOneWidget);
 
     service.completeCareReport(_buildDetailedCareReport());
     await tester.pumpAndSettle();
@@ -939,7 +1082,8 @@ void main() {
 
     expect(find.text('正在分析'), findsOneWidget);
     expect(find.text('AI 正在生成新的专业分析报告…'), findsNothing);
-    expect(find.text('AI总览生成中'), findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-generating-title-label')),
+        findsOneWidget);
     expect(find.byKey(const ValueKey('overview-generating-pet-carousel')),
         findsOneWidget);
     final refreshAnalyzingButton = tester.widget<FilledButton>(
@@ -1046,7 +1190,7 @@ void main() {
   });
 
   testWidgets(
-      'overview page keeps error state and fallback summary after switching tabs',
+      'overview page keeps error experience and can return to setup for retry',
       (tester) async {
     final store = PetNoteStore.seeded();
     store.setActiveTab(AppTab.overview);
@@ -1065,9 +1209,31 @@ void main() {
 
     await tester
         .tap(find.byKey(const ValueKey('overview-floating-generate-button')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('overview-generation-error-experience')),
+        findsOneWidget);
+    expect(find.text('喵喵喵？！好像出错了...'), findsOneWidget);
     expect(find.text('服务暂时不可用'), findsOneWidget);
-    expect(find.text('关键变化'), findsOneWidget);
+    final errorIcon = tester.widget<Icon>(
+      find.byIcon(Icons.sentiment_dissatisfied_rounded),
+    );
+    expect(errorIcon.size, 72);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SizedBox && widget.height == 560,
+      ),
+      findsNothing,
+    );
+    expect(find.text('关键变化'), findsNothing);
+    expect(find.widgetWithText(FilledButton, '返回重试'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 360));
+    expect(find.widgetWithText(FilledButton, '返回重试'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, '返回重试'), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
 
     store.setActiveTab(AppTab.checklist);
     await tester.pumpAndSettle();
@@ -1075,9 +1241,119 @@ void main() {
 
     store.setActiveTab(AppTab.overview);
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('overview-generation-error-experience')),
+        findsOneWidget);
+    expect(find.text('喵喵喵？！好像出错了...'), findsOneWidget);
     expect(find.text('服务暂时不可用'), findsOneWidget);
-    expect(find.text('关键变化'), findsOneWidget);
+    expect(find.text('关键变化'), findsNothing);
     expect(service.generateCareReportCalls, 1);
+    expect(find.widgetWithText(FilledButton, '返回重试'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 360));
+    expect(find.widgetWithText(FilledButton, '返回重试'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, '返回重试'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, '返回重试'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('overview-generation-error-experience')),
+        findsNothing);
+    expect(find.text('喵喵喵？！好像出错了...'), findsNothing);
+    expect(find.text('服务暂时不可用'), findsNothing);
+    expect(find.text('你的AI关怀助理'), findsOneWidget);
+    expect(find.text('右上角选好时间范围后，在此处选择你的爱宠即可生成总览'), findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-floating-generate-button')),
+        findsOneWidget);
+    expect(service.generateCareReportCalls, 1);
+  });
+
+  testWidgets(
+      'overview page keeps outgoing content moving downward across state transitions',
+      (tester) async {
+    double transitionOpacity(Finder finder) {
+      final opacityWidgets = tester
+          .widgetList<Opacity>(
+            find.ancestor(of: finder, matching: find.byType(Opacity)),
+          )
+          .toList(growable: false);
+      return opacityWidgets
+          .map((widget) => widget.opacity)
+          .firstWhere((opacity) => opacity < 1, orElse: () => 1);
+    }
+
+    final store = PetNoteStore.seeded();
+    store.setActiveTab(AppTab.overview);
+    final service = _DeferredAiInsightsService(
+      isConfigured: true,
+      careReportFuture: Completer<AiCareReport>(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: _OverviewTabHarness(store: store, service: service),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final setupPromptFinder =
+        find.byKey(const ValueKey('overview-generation-prompt-row'));
+    final setupPromptTop = tester.getTopLeft(setupPromptFinder).dy;
+    final generatingTitleFinder =
+        find.byKey(const ValueKey('overview-generating-title-label'));
+    final errorTitleFinder = find.text('喵喵喵？！好像出错了...');
+
+    await tester
+        .tap(find.byKey(const ValueKey('overview-floating-generate-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+
+    expect(setupPromptFinder, findsOneWidget);
+    expect(generatingTitleFinder, findsOneWidget);
+    expect(transitionOpacity(generatingTitleFinder), 0);
+    final setupOutgoingTop = tester.getTopLeft(setupPromptFinder).dy;
+    expect(setupOutgoingTop, greaterThan(setupPromptTop));
+
+    await tester.pump(const Duration(milliseconds: 580));
+    expect(setupPromptFinder, findsNothing);
+    expect(generatingTitleFinder, findsOneWidget);
+    final generatingTitleTop = tester.getTopLeft(generatingTitleFinder).dy;
+
+    service.completeCareReportError(const AiGenerationException('服务暂时不可用'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+
+    expect(generatingTitleFinder, findsOneWidget);
+    expect(errorTitleFinder, findsOneWidget);
+    expect(transitionOpacity(errorTitleFinder), 0);
+    final generatingOutgoingTop = tester.getTopLeft(generatingTitleFinder).dy;
+    expect(generatingOutgoingTop, greaterThan(generatingTitleTop));
+
+    await tester.pump(const Duration(milliseconds: 580));
+    expect(generatingTitleFinder, findsNothing);
+    expect(errorTitleFinder, findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(find.widgetWithText(FilledButton, '返回重试'), findsOneWidget);
+    final errorTitleTop = tester.getTopLeft(errorTitleFinder).dy;
+
+    await tester.tap(find.widgetWithText(FilledButton, '返回重试'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+
+    expect(errorTitleFinder, findsOneWidget);
+    expect(setupPromptFinder, findsOneWidget);
+    expect(transitionOpacity(setupPromptFinder), 0);
+    final errorOutgoingTop = tester.getTopLeft(errorTitleFinder).dy;
+    expect(errorOutgoingTop, greaterThan(errorTitleTop));
+
+    await tester.pump(const Duration(milliseconds: 580));
+
+    expect(errorTitleFinder, findsNothing);
+    expect(setupPromptFinder, findsOneWidget);
   });
 
   testWidgets('overview page clears stale report when overview range changes',
@@ -1134,11 +1410,13 @@ void main() {
     await tester
         .tap(find.byKey(const ValueKey('overview-floating-generate-button')));
     await tester.pump();
-    expect(find.text('AI总览生成中'), findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-generating-title-label')),
+        findsOneWidget);
 
     store.setOverviewRange(OverviewRange.oneMonth);
     await tester.pumpAndSettle();
-    expect(find.text('AI总览生成中'), findsNothing);
+    expect(find.byKey(const ValueKey('overview-generating-title-label')),
+        findsNothing);
 
     service.completeCareReport(_buildDetailedCareReport());
     await tester.pumpAndSettle();
@@ -1172,7 +1450,8 @@ void main() {
     await tester
         .tap(find.byKey(const ValueKey('overview-floating-generate-button')));
     await tester.pump();
-    expect(find.text('AI总览生成中'), findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-generating-title-label')),
+        findsOneWidget);
 
     await store.addTodo(
       title: '补充新的观察记录',
@@ -1417,6 +1696,12 @@ class _DeferredAiInsightsService implements AiInsightsService {
     }
   }
 
+  void completeCareReportError(Object error) {
+    if (!careReportFuture.isCompleted) {
+      careReportFuture.completeError(error);
+    }
+  }
+
   @override
   Future<AiCareReport> generateCareReport(
     AiGenerationContext context, {
@@ -1517,46 +1802,5 @@ class _UnexpectedNetworkTransport implements AiHttpTransport {
   Future<AiHttpResponse> send(AiHttpRequest request) {
     fail(
         'overview should not hit the remote AI provider before user requests it');
-  }
-}
-
-Widget _buildFakeIosOverviewRangeMenu(
-  BuildContext context,
-  String label,
-  Future<void> Function() onPressed,
-) {
-  return TextButton(
-    key: const ValueKey('fake_ios_overview_range_button'),
-    onPressed: () {
-      unawaited(onPressed());
-    },
-    child: Text(label),
-  );
-}
-
-Widget _buildFakeIosOverviewCustomButton(
-  BuildContext context,
-  String label,
-  Future<void> Function() onPressed,
-) {
-  return TextButton(
-    key: const ValueKey('fake_ios_overview_custom_button'),
-    onPressed: () {
-      unawaited(onPressed());
-    },
-    child: Text(label),
-  );
-}
-
-class _FakeNativeOptionPicker implements NativeOptionPicker {
-  const _FakeNativeOptionPicker({required this.result});
-
-  final NativeOptionPickerResult result;
-
-  @override
-  Future<NativeOptionPickerResult> pickSingleOption(
-    NativeOptionPickerRequest request,
-  ) async {
-    return result;
   }
 }

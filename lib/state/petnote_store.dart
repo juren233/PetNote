@@ -432,6 +432,7 @@ class ChecklistItemViewModel {
     required this.petId,
     required this.petName,
     required this.petAvatarText,
+    required this.petAvatarPhotoPath,
     required this.title,
     required this.dueLabel,
     required this.statusLabel,
@@ -444,12 +445,21 @@ class ChecklistItemViewModel {
   final String petId;
   final String petName;
   final String petAvatarText;
+  final String? petAvatarPhotoPath;
   final String title;
   final String dueLabel;
   final String statusLabel;
   final String kindLabel;
   final String note;
 }
+
+String petAvatarFallbackForPet(Pet pet) => switch (pet.type) {
+      PetType.cat => '🐱',
+      PetType.dog => '🐶',
+      PetType.rabbit => '🐰',
+      PetType.bird => '🐦',
+      PetType.other => pet.avatarText,
+    };
 
 class ChecklistSection {
   ChecklistSection({
@@ -491,6 +501,7 @@ class OverviewAiReportState {
   const OverviewAiReportState({
     this.status = OverviewAiReportStatus.idle,
     this.requestKey,
+    this.rangeLabel,
     this.report,
     this.errorMessage,
     this.hasRequested = false,
@@ -499,6 +510,7 @@ class OverviewAiReportState {
 
   final OverviewAiReportStatus status;
   final String? requestKey;
+  final String? rangeLabel;
   final AiCareReport? report;
   final String? errorMessage;
   final bool hasRequested;
@@ -506,6 +518,18 @@ class OverviewAiReportState {
 
   bool get isLoading => status == OverviewAiReportStatus.loading;
   bool get hasReport => report != null;
+}
+
+class OverviewAiHistoryEntry {
+  const OverviewAiHistoryEntry({
+    required this.requestKey,
+    required this.rangeLabel,
+    required this.report,
+  });
+
+  final String requestKey;
+  final String rangeLabel;
+  final AiCareReport report;
 }
 
 class OverviewAnalysisConfig {
@@ -556,7 +580,7 @@ class PetNoteStore extends ChangeNotifier {
     }
     if (_pets.isNotEmpty) {
       _selectedPetId = _pets.first.id;
-      if (_overviewSelectedPetIds.isEmpty) {
+      if (overviewAnalysisConfig == null && _overviewSelectedPetIds.isEmpty) {
         _overviewSelectedPetIds.addAll(_pets.map((pet) => pet.id));
       }
     }
@@ -781,6 +805,21 @@ class PetNoteStore extends ChangeNotifier {
         customRangeEnd: _overviewCustomRangeEnd,
       );
   OverviewAiReportState get overviewAiReportState => _overviewAiReportState;
+  List<OverviewAiHistoryEntry> get overviewAiHistory {
+    final requestKey = _overviewAiReportState.requestKey;
+    final report = _overviewAiReportState.report;
+    if (requestKey == null || requestKey.isEmpty || report == null) {
+      return const <OverviewAiHistoryEntry>[];
+    }
+    return <OverviewAiHistoryEntry>[
+      OverviewAiHistoryEntry(
+        requestKey: requestKey,
+        rangeLabel: _overviewAiHistoryLabelFromRequestKey(requestKey),
+        report: report,
+      ),
+    ];
+  }
+
   List<Pet> get pets => List<Pet>.unmodifiable(_pets);
   List<TodoItem> get todos => List<TodoItem>.unmodifiable(_todos);
   List<ReminderItem> get reminders =>
@@ -1141,6 +1180,15 @@ class PetNoteStore extends ChangeNotifier {
     }
   }
 
+  Future<void> clearOverviewAiHistory() async {
+    _overviewAiRequestToken += 1;
+    _overviewAiReportState = OverviewAiReportState(
+      activeRequestToken: _overviewAiRequestToken,
+    );
+    notifyListeners();
+    await _saveState();
+  }
+
   void setActiveTab(AppTab tab) {
     if (_activeTab == tab) {
       return;
@@ -1169,11 +1217,9 @@ class PetNoteStore extends ChangeNotifier {
     DateTime? customRangeStart,
     DateTime? customRangeEnd,
   }) {
-    final nextSelectedPetIds = selectedPetIds.isEmpty
-        ? _pets.map((pet) => pet.id).toList(growable: false)
-        : selectedPetIds
-            .where((petId) => _findPet(petId) != null)
-            .toList(growable: false);
+    final nextSelectedPetIds = selectedPetIds
+        .where((petId) => _findPet(petId) != null)
+        .toList(growable: false);
     _overviewRange = range;
     _overviewSelectedPetIds
       ..clear()
@@ -1606,6 +1652,7 @@ class PetNoteStore extends ChangeNotifier {
       petId: item.petId,
       petName: _petName(item.petId),
       petAvatarText: _petAvatar(item.petId),
+      petAvatarPhotoPath: _petPhotoPath(item.petId),
       title: item.title,
       dueLabel: _formatDate(item.dueAt),
       statusLabel: _todoStatusLabel(effectiveStatus),
@@ -1622,6 +1669,7 @@ class PetNoteStore extends ChangeNotifier {
       petId: item.petId,
       petName: _petName(item.petId),
       petAvatarText: _petAvatar(item.petId),
+      petAvatarPhotoPath: _petPhotoPath(item.petId),
       title: item.title,
       dueLabel: _formatDate(item.scheduledAt),
       statusLabel: _reminderStatusLabel(effectiveStatus),
@@ -1670,17 +1718,10 @@ class PetNoteStore extends ChangeNotifier {
   }
 
   List<String> _effectiveOverviewSelectedPetIds() {
-    if (_overviewSelectedPetIds.isEmpty) {
-      return _pets.map((pet) => pet.id).toList(growable: false);
-    }
     final existingPetIds = _pets.map((pet) => pet.id).toSet();
-    final selected = _overviewSelectedPetIds
+    return _overviewSelectedPetIds
         .where((petId) => existingPetIds.contains(petId))
         .toList(growable: false);
-    if (selected.isEmpty) {
-      return _pets.map((pet) => pet.id).toList(growable: false);
-    }
-    return selected;
   }
 
   int _minuteStamp(DateTime value) => DateTime(
@@ -1725,7 +1766,11 @@ class PetNoteStore extends ChangeNotifier {
 
   String _petAvatar(String petId) {
     final pet = _findPet(petId);
-    return pet?.avatarText ?? 'PA';
+    return pet == null ? 'PA' : petAvatarFallbackForPet(pet);
+  }
+
+  String? _petPhotoPath(String petId) {
+    return _findPet(petId)?.photoPath;
   }
 
   Pet? _findPet(String petId) {
@@ -1906,6 +1951,27 @@ class PetNoteStore extends ChangeNotifier {
       hasRequested: true,
       activeRequestToken: _overviewAiRequestToken,
     );
+  }
+
+  static String _overviewAiHistoryLabelFromRequestKey(String requestKey) {
+    try {
+      final decoded = jsonDecode(requestKey);
+      if (decoded is! Map) {
+        return 'AI 照护总结';
+      }
+      final json = Map<String, dynamic>.from(decoded);
+      final title = json['title'] as String?;
+      if (title != null && title.trim().isNotEmpty) {
+        return title.trim();
+      }
+      final rangeLabel = json['rangeLabel'] as String?;
+      if (rangeLabel != null && rangeLabel.trim().isNotEmpty) {
+        return rangeLabel.trim();
+      }
+    } catch (_) {
+      // 历史 requestKey 不是有效 JSON 时，退回统一文案。
+    }
+    return 'AI 照护总结';
   }
 
   static OverviewRange _overviewRangeFromName(String? value) => switch (value) {

@@ -7,16 +7,12 @@ class OverviewPage extends StatefulWidget {
     required this.onAddFirstPet,
     this.aiInsightsService,
     this.onOpenAiSettings,
-    this.nativeOptionPicker,
-    this.iosRangeButtonBuilder,
   });
 
   final PetNoteStore store;
   final VoidCallback onAddFirstPet;
   final AiInsightsService? aiInsightsService;
   final FutureOr<void> Function()? onOpenAiSettings;
-  final NativeOptionPicker? nativeOptionPicker;
-  final IosOverviewRangeButtonBuilder? iosRangeButtonBuilder;
 
   @override
   State<OverviewPage> createState() => _OverviewPageState();
@@ -25,9 +21,13 @@ class OverviewPage extends StatefulWidget {
 class _OverviewPageState extends State<OverviewPage> {
   static final Expando<bool> _providerAvailabilityCache =
       Expando<bool>('overview_provider_availability');
+  static const Duration _errorRetryButtonDelay = Duration(milliseconds: 480);
 
   bool _hasActiveProvider = false;
   int _providerCheckSerial = 0;
+  Timer? _errorRetryButtonTimer;
+  String? _pendingErrorRetryKey;
+  bool _showErrorRetryButton = false;
 
   @override
   void initState() {
@@ -47,6 +47,12 @@ class _OverviewPageState extends State<OverviewPage> {
     if (!identical(oldWidget.aiInsightsService, widget.aiInsightsService)) {
       _refreshProviderAvailability();
     }
+  }
+
+  @override
+  void dispose() {
+    _errorRetryButtonTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -80,11 +86,20 @@ class _OverviewPageState extends State<OverviewPage> {
         final reportState = widget.store.overviewAiReportState;
         final showGenerationSetup =
             _shouldShowOverviewGenerationSetup(reportState);
-        final showGeneratingExperience = reportState.isLoading &&
-            _hasActiveProvider &&
-            widget.store.overviewAnalysisConfig.selectedPetIds.isNotEmpty;
         final viewPadding = MediaQuery.viewPaddingOf(context);
         final dockLayout = dockLayoutForInsets(viewPadding);
+        final showGenerationError = _shouldShowOverviewGenerationError(
+          reportState,
+        );
+        _syncErrorRetryButtonVisibility(
+          showGenerationError: showGenerationError,
+          requestKey: reportState.requestKey,
+        );
+        final selectedPetIds =
+            widget.store.overviewAnalysisConfig.selectedPetIds.toSet();
+        final hasSelectedPets = selectedPetIds.isNotEmpty;
+        final showGeneratingExperience =
+            reportState.isLoading && _hasActiveProvider && hasSelectedPets;
         final floatingButtonBottom =
             Theme.of(context).platform == TargetPlatform.iOS
                 ? viewPadding.bottom +
@@ -94,11 +109,8 @@ class _OverviewPageState extends State<OverviewPage> {
                     dockLayout.shellHeight +
                     dockLayout.outerMargin.bottom -
                     4;
-        final listBottomPadding = showGenerationSetup ? 116.0 : 0.0;
-        final selectedPetIds =
-            widget.store.overviewAnalysisConfig.selectedPetIds.isEmpty
-                ? widget.store.pets.map((pet) => pet.id).toSet()
-                : widget.store.overviewAnalysisConfig.selectedPetIds.toSet();
+        final listBottomPadding =
+            showGenerationSetup || showGenerationError ? 116.0 : 0.0;
         final selectedPets = widget.store.pets
             .where((pet) => selectedPetIds.contains(pet.id))
             .toList(growable: false);
@@ -110,6 +122,32 @@ class _OverviewPageState extends State<OverviewPage> {
           showGeneratingExperience: showGeneratingExperience,
           selectedPets: selectedPets,
         );
+        final overviewHeader = PageHeader(
+          title: '总览',
+          subtitle:
+              showGenerationSetup ? '你的AI关怀助理' : _overviewTitle(snapshot.range),
+          trailing: showGenerationSetup
+              ? _OverviewRangeMenuButton(
+                  config: widget.store.overviewAnalysisConfig,
+                  onSelectRange: _selectOverviewRangeFromSetup,
+                )
+              : reportState.isLoading
+                  ? _OverviewGeneratingHeaderActions(
+                      onOpenConfig: _openOverviewConfig,
+                    )
+                  : showGenerationError
+                      ? null
+                      : _hasActiveProvider
+                          ? _OverviewHeaderActions(
+                              isLoading: reportState.isLoading,
+                              canGenerate: hasSelectedPets,
+                              onOpenConfig: _openOverviewConfig,
+                              onGenerate: () => _generateCareReport(
+                                forceRefresh: reportState.hasReport,
+                              ),
+                            )
+                          : null,
+        );
         return Stack(
           children: [
             ListView(
@@ -117,55 +155,61 @@ class _OverviewPageState extends State<OverviewPage> {
                 bottom: pagePadding.bottom + listBottomPadding,
               ),
               children: [
-                PageHeader(
-                  title: '总览',
-                  subtitle: showGenerationSetup
-                      ? '你的AI关怀助理'
-                      : _overviewTitle(snapshot.range),
-                  trailing: showGenerationSetup
-                      ? _OverviewRangeActionButton(
-                          config: widget.store.overviewAnalysisConfig,
-                          nativeOptionPicker: widget.nativeOptionPicker,
-                          iosRangeButtonBuilder: widget.iosRangeButtonBuilder,
-                          onSelectRange: _selectOverviewRangeFromSetup,
-                        )
-                      : reportState.isLoading
-                          ? _OverviewGeneratingHeaderActions(
-                              onOpenConfig: _openOverviewConfig,
-                            )
-                          : _hasActiveProvider
-                              ? _OverviewHeaderActions(
-                                  isLoading: reportState.isLoading,
-                                  onOpenConfig: _openOverviewConfig,
-                                  onGenerate: () => _generateCareReport(
-                                    forceRefresh: reportState.hasReport,
-                                  ),
-                                )
-                              : null,
-                ),
+                overviewHeader,
                 _OverviewBodyTransition(child: overviewBody),
               ],
             ),
-            if (showGenerationSetup)
+            if (showGenerationSetup || showGenerationError)
               Positioned(
                 left: 22,
                 right: 22,
                 bottom: floatingButtonBottom,
-                child: FilledButton.icon(
-                  key: const ValueKey('overview-floating-generate-button'),
-                  onPressed: _hasActiveProvider
-                      ? () => _generateCareReport(forceRefresh: false)
-                      : null,
-                  style: FilledButton.styleFrom(
-                    elevation: 0,
-                    backgroundColor:
-                        tabAccentFor(context, AppTab.overview).label,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: const Color(0xFFB8BCC6),
-                    disabledForegroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.auto_awesome_rounded, size: 18),
-                  label: const Text('生成总览'),
+                child: SafeArea(
+                  top: false,
+                  child: showGenerationError && !_showErrorRetryButton
+                      ? const SizedBox.shrink()
+                      : TweenAnimationBuilder<double>(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          tween: Tween<double>(
+                            begin: showGenerationError ? 0 : 1,
+                            end: 1,
+                          ),
+                          child: FilledButton.icon(
+                            key: const ValueKey(
+                                'overview-floating-generate-button'),
+                            onPressed: showGenerationError
+                                ? _returnToOverviewSetup
+                                : _hasActiveProvider && hasSelectedPets
+                                    ? () => _generateCareReport(
+                                          forceRefresh: false,
+                                        )
+                                    : null,
+                            style: FilledButton.styleFrom(
+                              elevation: 0,
+                              backgroundColor:
+                                  tabAccentFor(context, AppTab.overview).label,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: const Color(0xFFB8BCC6),
+                              disabledForegroundColor: Colors.white,
+                            ),
+                            icon: Icon(
+                              showGenerationError
+                                  ? Icons.arrow_back_rounded
+                                  : Icons.auto_awesome_rounded,
+                              size: 18,
+                            ),
+                            label: Text(
+                              showGenerationError ? '返回重试' : '生成总览',
+                            ),
+                          ),
+                          builder: (context, opacity, child) {
+                            return Opacity(
+                              opacity: opacity,
+                              child: child,
+                            );
+                          },
+                        ),
                 ),
               ),
           ],
@@ -180,6 +224,15 @@ class _OverviewPageState extends State<OverviewPage> {
     return !reportState.hasReport &&
         !reportState.isLoading &&
         !(reportState.hasRequested && reportState.errorMessage != null);
+  }
+
+  bool _shouldShowOverviewGenerationError(
+    OverviewAiReportState reportState,
+  ) {
+    return !reportState.hasReport &&
+        !reportState.isLoading &&
+        reportState.hasRequested &&
+        reportState.errorMessage != null;
   }
 
   Widget _buildOverviewBody({
@@ -223,55 +276,82 @@ class _OverviewPageState extends State<OverviewPage> {
       return _OverviewBodySection(
         key: const ValueKey('overview-body-report'),
         children: [
-          _AiCareReportOverview(report: reportState.report!),
+          _AiCareReportOverview(
+            report: reportState.report!,
+            pets: widget.store.pets,
+          ),
         ],
+      );
+    }
+
+    if (reportState.hasRequested && reportState.errorMessage != null) {
+      return _OverviewGeneratingExperience(
+        key: const ValueKey('overview-generation-error-experience'),
+        pets: selectedPets,
+        mode: _OverviewGenerationExperienceMode.error,
+        errorMessage: reportState.errorMessage,
       );
     }
 
     final theme = Theme.of(context);
     final tokens = context.petNoteTokens;
-    if (reportState.hasRequested && reportState.errorMessage != null) {
-      return _OverviewBodySection(
-        key: const ValueKey('overview-body-error'),
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Text(
-              _overviewStatusText(reportState),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: tokens.secondaryText,
-                height: 1.5,
-              ),
-            ),
-          ),
-          SectionCard(
-            title: 'AI 总览',
-            children: [
-              Text(
-                reportState.errorMessage!,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFFC7533E),
-                  height: 1.6,
-                ),
-              ),
-              Text(
-                '已自动回退到本地规则总结，方便你先继续查看当前周期的照护概况。',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: tokens.secondaryText,
-                  height: 1.6,
-                ),
-              ),
-            ],
-          ),
-          ..._buildOverviewFallbackSections(snapshot, theme, tokens),
-        ],
-      );
-    }
-
     return _OverviewBodySection(
       key: const ValueKey('overview-body-fallback'),
       children: _buildOverviewFallbackSections(snapshot, theme, tokens),
     );
+  }
+
+  Future<void> _returnToOverviewSetup() async {
+    await widget.store.clearOverviewAiHistory();
+  }
+
+  void _syncErrorRetryButtonVisibility({
+    required bool showGenerationError,
+    required String? requestKey,
+  }) {
+    final errorKey = showGenerationError ? requestKey ?? 'error' : null;
+    if (errorKey != null) {
+      if (_pendingErrorRetryKey == errorKey) {
+        return;
+      }
+      _pendingErrorRetryKey = errorKey;
+      _errorRetryButtonTimer?.cancel();
+      if (_showErrorRetryButton) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _pendingErrorRetryKey != errorKey) {
+            return;
+          }
+          setState(() {
+            _showErrorRetryButton = false;
+          });
+        });
+      }
+      _errorRetryButtonTimer = Timer(_errorRetryButtonDelay, () {
+        if (!mounted || _pendingErrorRetryKey != errorKey) {
+          return;
+        }
+        setState(() {
+          _showErrorRetryButton = true;
+        });
+      });
+      return;
+    }
+
+    if (_pendingErrorRetryKey == null && !_showErrorRetryButton) {
+      return;
+    }
+    _pendingErrorRetryKey = null;
+    _errorRetryButtonTimer?.cancel();
+    if (_showErrorRetryButton) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _pendingErrorRetryKey != null) {
+          return;
+        }
+        setState(() {
+          _showErrorRetryButton = false;
+        });
+      });
+    }
   }
 
   List<Widget> _buildOverviewFallbackSections(
@@ -300,22 +380,6 @@ class _OverviewPageState extends State<OverviewPage> {
         ],
       ),
     ];
-  }
-
-  String _overviewStatusText(OverviewAiReportState reportState) {
-    if (reportState.isLoading) {
-      return '';
-    }
-    if (reportState.hasReport) {
-      return '当前展示的是已选宠物与当前时间范围下的综合总览，仅供照护参考。';
-    }
-    if (reportState.hasRequested && reportState.errorMessage != null) {
-      return 'AI 总览生成失败，当前展示本地规则总结。';
-    }
-    if (_hasActiveProvider) {
-      return '先用配置按钮确认时间范围和宠物，再生成高密度总览。';
-    }
-    return '未检测到可用 AI 配置，当前展示本地规则总结。';
   }
 
   Future<void> _openOverviewConfig() async {
@@ -397,7 +461,7 @@ class _OverviewPageState extends State<OverviewPage> {
                           setDialogState(() {
                             if (value ?? false) {
                               selectedPetIds.add(pet.id);
-                            } else if (selectedPetIds.length > 1) {
+                            } else {
                               selectedPetIds.remove(pet.id);
                             }
                           });
@@ -435,7 +499,7 @@ class _OverviewPageState extends State<OverviewPage> {
 
   Future<void> _selectOverviewRangeFromSetup(OverviewRange range) async {
     final currentConfig = widget.store.overviewAnalysisConfig;
-    final selectedPetIds = _effectiveOverviewSelectedPetIds(currentConfig);
+    final selectedPetIds = currentConfig.selectedPetIds;
     if (range == OverviewRange.custom) {
       final picked = await _pickCustomOverviewDateRange(
         currentConfig.customRangeStart,
@@ -462,11 +526,10 @@ class _OverviewPageState extends State<OverviewPage> {
 
   void _toggleOverviewPetFromSetup(String petId, bool selected) {
     final currentConfig = widget.store.overviewAnalysisConfig;
-    final selectedPetIds =
-        _effectiveOverviewSelectedPetIds(currentConfig).toSet();
+    final selectedPetIds = currentConfig.selectedPetIds.toSet();
     if (selected) {
       selectedPetIds.add(petId);
-    } else if (selectedPetIds.length > 1) {
+    } else {
       selectedPetIds.remove(petId);
     }
     widget.store.updateOverviewAnalysisConfig(
@@ -488,24 +551,12 @@ class _OverviewPageState extends State<OverviewPage> {
       );
       return;
     }
-    if (widget.store.pets.isEmpty) {
-      return;
-    }
     widget.store.updateOverviewAnalysisConfig(
       range: widget.store.overviewAnalysisConfig.range,
-      selectedPetIds: [widget.store.pets.first.id],
+      selectedPetIds: const [],
       customRangeStart: widget.store.overviewAnalysisConfig.customRangeStart,
       customRangeEnd: widget.store.overviewAnalysisConfig.customRangeEnd,
     );
-  }
-
-  List<String> _effectiveOverviewSelectedPetIds(
-    OverviewAnalysisConfig config,
-  ) {
-    if (config.selectedPetIds.isEmpty) {
-      return widget.store.pets.map((pet) => pet.id).toList(growable: false);
-    }
-    return config.selectedPetIds;
   }
 
   Future<DateTimeRange?> _pickCustomOverviewDateRange(
@@ -569,6 +620,9 @@ class _OverviewPageState extends State<OverviewPage> {
   Future<void> _generateCareReport({required bool forceRefresh}) async {
     final service = widget.aiInsightsService;
     if (service == null || widget.store.overviewAiReportState.isLoading) {
+      return;
+    }
+    if (widget.store.overviewAnalysisConfig.selectedPetIds.isEmpty) {
       return;
     }
 

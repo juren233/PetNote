@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/pet_photo_widgets.dart';
 import 'package:petnote/state/petnote_store.dart';
 
 class HyperPageBackground extends StatelessWidget {
@@ -940,22 +941,17 @@ class ChecklistCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: accent.background,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                  child: Text(
-                    item.petAvatarText,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              PetPhotoAvatar(
+                photoPath: item.petAvatarPhotoPath,
+                fallbackText: item.petAvatarText,
+                radius: 23,
+                backgroundColor: accent.background,
+                foregroundColor: tokens.primaryText,
+                fallbackTextStyle:
+                    Theme.of(context).textTheme.labelLarge?.copyWith(
                           color: tokens.primaryText,
                           fontWeight: FontWeight.w800,
                         ),
-                  ),
-                ),
               ),
               const SizedBox(width: 12),
               Expanded(

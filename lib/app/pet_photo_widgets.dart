@@ -10,7 +10,19 @@ const Color petPhotoPlaceholderPressedIconColor = Color(0xFFF2A65A);
 const Color petPhotoPlaceholderIdleSurfaceColor = Color(0xFFF6F7FA);
 const Color petPhotoPlaceholderPressedSurfaceColor = Color(0xFFFBE8D8);
 
+Widget Function({
+  required String photoPath,
+  required BoxFit fit,
+  required Widget fallback,
+})? debugPetPhotoImageBuilder;
+
+bool Function(String? photoPath)? debugHasPetPhotoOverride;
+
 bool hasPetPhoto(String? photoPath) {
+  final override = debugHasPetPhotoOverride;
+  if (override != null) {
+    return override(photoPath);
+  }
   if (photoPath == null || photoPath.trim().isEmpty) {
     return false;
   }
@@ -21,6 +33,13 @@ bool hasPetPhoto(String? photoPath) {
   }
 }
 
+bool _isAnimalEmojiFallback(String text) {
+  return switch (text.trim()) {
+    '🐱' || '🐶' || '🐰' || '🐦' => true,
+    _ => false,
+  };
+}
+
 class PetPhotoAvatar extends StatelessWidget {
   const PetPhotoAvatar({
     super.key,
@@ -29,6 +48,7 @@ class PetPhotoAvatar extends StatelessWidget {
     required this.radius,
     required this.backgroundColor,
     required this.foregroundColor,
+    this.fallbackTextStyle,
   });
 
   final String? photoPath;
@@ -36,34 +56,64 @@ class PetPhotoAvatar extends StatelessWidget {
   final double radius;
   final Color backgroundColor;
   final Color foregroundColor;
+  final TextStyle? fallbackTextStyle;
 
   @override
   Widget build(BuildContext context) {
     final size = radius * 2;
+    final fallback = _buildFallback();
     return ClipOval(
       child: Container(
         width: size,
         height: size,
         color: backgroundColor,
         child: hasPetPhoto(photoPath)
-            ? Image.file(
-                File(photoPath!),
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildFallback(),
-              )
-            : _buildFallback(),
+            ? _buildPhoto(photoPath!, fallback)
+            : fallback,
       ),
     );
   }
 
+  Widget _buildPhoto(String resolvedPhotoPath, Widget fallback) {
+    final imageBuilder = debugPetPhotoImageBuilder;
+    if (imageBuilder != null) {
+      return imageBuilder(
+        photoPath: resolvedPhotoPath,
+        fit: BoxFit.cover,
+        fallback: fallback,
+      );
+    }
+    return Image.file(
+      File(resolvedPhotoPath),
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => fallback,
+    );
+  }
+
   Widget _buildFallback() {
-    return Center(
-      child: Text(
-        fallbackText,
-        style: TextStyle(
+    final isAnimalEmoji = _isAnimalEmojiFallback(fallbackText);
+    final effectiveStyle = fallbackTextStyle ??
+        TextStyle(
           color: foregroundColor,
           fontWeight: FontWeight.w800,
           fontSize: 12,
+        );
+    final contentPadding = isAnimalEmoji ? radius * 0.04 : radius * 0.18;
+    final emojiScale = isAnimalEmoji ? 1.55 : 1.0;
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(contentPadding),
+        child: FittedBox(
+          fit: BoxFit.contain,
+          child: Transform.scale(
+            scale: emojiScale,
+            child: Text(
+              fallbackText,
+              maxLines: 1,
+              softWrap: false,
+              style: effectiveStyle,
+            ),
+          ),
         ),
       ),
     );
@@ -84,19 +134,32 @@ class PetPhotoSquare extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fallback = const SizedBox.shrink();
     return ClipRRect(
       borderRadius: borderRadius,
       child: SizedBox(
         width: size,
         height: size,
         child: hasPetPhoto(photoPath)
-            ? Image.file(
-                File(photoPath!),
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-              )
-            : const SizedBox.shrink(),
+            ? _buildPhoto(photoPath!, fallback)
+            : fallback,
       ),
+    );
+  }
+
+  Widget _buildPhoto(String resolvedPhotoPath, Widget fallback) {
+    final imageBuilder = debugPetPhotoImageBuilder;
+    if (imageBuilder != null) {
+      return imageBuilder(
+        photoPath: resolvedPhotoPath,
+        fit: BoxFit.cover,
+        fallback: fallback,
+      );
+    }
+    return Image.file(
+      File(resolvedPhotoPath),
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => fallback,
     );
   }
 }

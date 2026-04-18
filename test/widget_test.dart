@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import 'package:petnote/app/intro_haptics.dart';
 import 'package:petnote/app/ios_native_dock.dart';
 import 'package:petnote/app/me_page.dart' as settings_page;
 import 'package:petnote/app/pet_first_launch_intro.dart';
+import 'package:petnote/app/pet_photo_widgets.dart';
 import 'package:petnote/app/petnote_app.dart';
 import 'package:petnote/app/petnote_pages.dart';
 import 'package:petnote/app/pet_onboarding_overlay.dart';
@@ -28,6 +30,13 @@ const _firstLaunchIntroAutoEnabledKey = 'first_launch_intro_auto_enabled_v1';
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    debugPetPhotoImageBuilder = null;
+    debugHasPetPhotoOverride = null;
+  });
+
+  tearDown(() {
+    debugPetPhotoImageBuilder = null;
+    debugHasPetPhotoOverride = null;
   });
 
   testWidgets('intro shows a gray launch paw before first page content appears',
@@ -521,6 +530,7 @@ void main() {
               petId: 'pet-1',
               petName: 'Luna',
               petAvatarText: 'LU',
+              petAvatarPhotoPath: null,
               title: '体内驱虫',
               dueLabel: '03/27 18:00',
               statusLabel: '已逾期',
@@ -539,6 +549,83 @@ void main() {
     expect(find.text('延后'), findsOneWidget);
     expect(find.text('跳过'), findsOneWidget);
     expect(find.text('Luna · 提醒 · 03/27 18:00'), findsOneWidget);
+  });
+
+  testWidgets('checklist card prefers pet photo and fallback avatar text',
+      (tester) async {
+    final photoPath =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}petnote-checklist-avatar-${DateTime.now().microsecondsSinceEpoch}.bin';
+    debugHasPetPhotoOverride = (path) => path == photoPath;
+    debugPetPhotoImageBuilder = ({
+      required String photoPath,
+      required BoxFit fit,
+      required Widget fallback,
+    }) {
+      return SizedBox.expand(
+        key: ValueKey('debug-pet-photo-$photoPath'),
+      );
+    };
+
+    final store = PetNoteStore.seeded();
+    await store.updatePet(
+      petId: 'pet-1',
+      name: 'Luna',
+      type: PetType.cat,
+      photoPath: photoPath,
+      breed: 'British Shorthair',
+      sex: 'Female',
+      birthday: '2023-04-18',
+      weightKg: 4.6,
+      neuterStatus: PetNeuterStatus.neutered,
+      feedingPreferences: '早晚各一餐，冻干拌主粮',
+      allergies: '对鸡肉敏感',
+      note: '洗澡后容易紧张，需要安抚。',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: Scaffold(
+          body: Column(
+            children: [
+              ChecklistCard(
+                item: store.checklistSections.first.items
+                    .firstWhere((item) => item.petId == 'pet-1'),
+                onComplete: () {},
+                onPostpone: () {},
+                onSkip: () {},
+              ),
+              ChecklistCard(
+                item: ChecklistItemViewModel(
+                  id: 'todo-other',
+                  sourceType: 'todo',
+                  petId: 'pet-other',
+                  petName: '龙宝',
+                  petAvatarText: '龙',
+                  petAvatarPhotoPath: null,
+                  title: '补充加湿',
+                  dueLabel: '03/27 18:00',
+                  statusLabel: '待处理',
+                  kindLabel: '待办',
+                  note: '',
+                ),
+                onComplete: () {},
+                onPostpone: () {},
+                onSkip: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(ValueKey('debug-pet-photo-$photoPath')), findsOneWidget);
+    expect(find.text('🐱'), findsNothing);
+    expect(find.text('龙'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets('checklist page shows postponed and skipped segments',
@@ -622,6 +709,7 @@ void main() {
                   petId: 'pet-1',
                   petName: 'Luna',
                   petAvatarText: 'LU',
+                  petAvatarPhotoPath: null,
                   title: '补货主粮',
                   dueLabel: '03/27 18:00',
                   statusLabel: '待处理',
@@ -639,6 +727,7 @@ void main() {
                   petId: 'pet-1',
                   petName: 'Luna',
                   petAvatarText: 'LU',
+                  petAvatarPhotoPath: null,
                   title: '体内驱虫',
                   dueLabel: '03/27 18:00',
                   statusLabel: '待提醒',

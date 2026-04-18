@@ -214,8 +214,7 @@ class NetworkAiInsightsService implements AiInsightsService {
         appLogController?.warning(
           category: AppLogCategory.ai,
           title: 'AI 总览降载重试',
-          message:
-              '当前服务在${plan.label}上下文下未稳定返回，改用${nextPlan.label}上下文重试。',
+          message: '当前服务在${plan.label}上下文下未稳定返回，改用${nextPlan.label}上下文重试。',
           details: error.message,
         );
       }
@@ -740,10 +739,10 @@ JSON schema:
   "overallScore": 0,
   "statusLabel": "必须严格遵守分数档位映射",
   "oneLineSummary": "一句话总结，直接告诉用户当前最值得关注的结论",
-  "executiveSummary": "120-220字的完整自然段，概括当前周期执行质量、变化趋势和主要关注点",
-  "overallAssessment": ["2-4条总体判断"],
-  "keyFindings": ["3-6条关键事实或发现"],
-  "trendAnalysis": ["2-5条趋势分析"],
+  "executiveSummary": "80-140字的完整自然段，概括当前周期执行质量、变化趋势和主要关注点",
+  "overallAssessment": ["1-3条总体判断"],
+  "keyFindings": ["2-4条关键事实或发现"],
+  "trendAnalysis": ["1-3条趋势分析"],
   "riskAssessment": ["0-4条风险说明，必须写清依据与建议"],
   "priorityActions": ["3-5条优先行动"],
   "dataQualityNotes": ["1-3条关于样本量、记录完整度、可信度的说明"],
@@ -785,7 +784,7 @@ JSON schema:
 - statusLabel 必须遵守固定档位：90-100=状态不错，80-89=状态还行，70-79=需要关注，60-69=急需关注，0-59=存在隐患
 - recommendationRankings 必须按“重要且紧急”排序，数量至少为 max(5, 已选宠物数)
 - recommendationRankings 必须覆盖每只已选宠物；多宠物场景下每条建议都要在 petNames 中显式点名对应宠物
-- executiveSummary 不能是一句话简报，必须写成正式报告式摘要
+- executiveSummary 不能是一句话简报，必须是紧凑但完整的短版摘要
 - 每一段结论都要引用输入中的事实、统计或时间范围，不准空泛
 - perPetReports 必须覆盖输入中的每一只宠物，且 petId/petName 不得串位
 - 单宠物详细分析必须围绕五个固定段落展开：为什么是这个分数、当前最该处理什么、你漏了什么、最近有哪些变化、后续怎么跟
@@ -825,7 +824,7 @@ String _buildCareReportPrompt(
     detailLevel: detailLevel,
   );
   return '''
-请基于以下宠物照护上下文生成一份“高密度、能直接帮助用户决策”的 AI 总览。
+请基于以下宠物照护上下文生成一份“高密度、能直接帮助用户决策”的短版 AI 总览。
 
 分析目标:
 - 输出全局总分、全局状态语和一句话总结
@@ -884,6 +883,11 @@ Map<String, dynamic> _buildCareReportPayload(
   required _CarePromptDetailLevel detailLevel,
 }) {
   final config = detailLevel.config;
+  final summaryPackage = AiPortableSummaryBuilder().build(
+    title: context.title,
+    context: context,
+    generatedAt: context.rangeEnd,
+  );
   return {
     'analysisConfig': {
       'detailLevel': detailLevel.name,
@@ -892,7 +896,8 @@ Map<String, dynamic> _buildCareReportPayload(
       'rangeStart': context.rangeStart.toIso8601String(),
       'rangeEnd': context.rangeEnd.toIso8601String(),
       'rangeDays': context.rangeEnd.difference(context.rangeStart).inDays,
-      'selectedPetIds': context.pets.map((pet) => pet.id).toList(growable: false),
+      'selectedPetIds':
+          context.pets.map((pet) => pet.id).toList(growable: false),
       'selectedPetCount': context.pets.length,
       'languageTag': context.languageTag,
     },
@@ -938,6 +943,7 @@ Map<String, dynamic> _buildCareReportPayload(
             .toList(growable: false),
       },
     },
+    'summaryPackage': summaryPackage.toJson(),
     'pets': context.pets
         .map(
           (pet) => _buildPetPromptSnapshot(
@@ -962,7 +968,8 @@ Map<String, dynamic> _buildPetPromptSnapshot(
   final todos = context.todos.where((item) => item.petId == pet.id).toList();
   final reminders =
       context.reminders.where((item) => item.petId == pet.id).toList();
-  final records = context.records.where((item) => item.petId == pet.id).toList();
+  final records =
+      context.records.where((item) => item.petId == pet.id).toList();
   return {
     'profile': {
       'petId': pet.id,
@@ -1051,8 +1058,10 @@ List<String> _buildMissingCare({
   required AiPetCareScorecard scorecard,
 }) {
   final items = <String>[];
-  final overdueTodos = todos.where((item) => item.status == TodoStatus.overdue).length;
-  final skippedTodos = todos.where((item) => item.status == TodoStatus.skipped).length;
+  final overdueTodos =
+      todos.where((item) => item.status == TodoStatus.overdue).length;
+  final skippedTodos =
+      todos.where((item) => item.status == TodoStatus.skipped).length;
   final overdueReminders =
       reminders.where((item) => item.status == ReminderStatus.overdue).length;
   final skippedReminders =
@@ -1120,7 +1129,8 @@ List<String> _buildPetRecentSignals({
   required _CarePromptPayloadConfig config,
 }) {
   final items = <String>[];
-  for (final todo in _sampleTodos(todos, maxItems: config.maxPerPetTodoSamples)) {
+  for (final todo
+      in _sampleTodos(todos, maxItems: config.maxPerPetTodoSamples)) {
     items.add('${pet.name} 待办：${todo['title']}（${todo['status']}）');
   }
   for (final reminder in _sampleReminders(

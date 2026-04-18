@@ -42,20 +42,24 @@ String _recordTypeLabel(PetRecordType type) => switch (type) {
 enum _VisitSummaryRange { thirtyDays, ninetyDays, custom }
 
 class _AiCareReportOverview extends StatelessWidget {
-  const _AiCareReportOverview({required this.report});
+  const _AiCareReportOverview({
+    required this.report,
+    required this.pets,
+  });
 
   final AiCareReport report;
+  final List<Pet> pets;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: _buildCareReportCards(report),
+      children: _buildCareReportCards(report, pets),
     );
   }
 }
 
-List<Widget> _buildCareReportCards(AiCareReport report) {
+List<Widget> _buildCareReportCards(AiCareReport report, List<Pet> pets) {
   final orderedPetReports = _orderedPetReports(report);
   return [
     _AiCareReportHero(report: report),
@@ -74,7 +78,10 @@ List<Widget> _buildCareReportCards(AiCareReport report) {
         ),
       ),
     if (orderedPetReports.isNotEmpty)
-      _AiPetDetailTabs(reports: orderedPetReports),
+      _AiPetDetailTabs(
+        reports: orderedPetReports,
+        pets: pets,
+      ),
   ];
 }
 
@@ -109,9 +116,13 @@ List<AiPetCareReport> _orderedPetReports(AiCareReport report) {
 }
 
 class _AiPetDetailTabs extends StatefulWidget {
-  const _AiPetDetailTabs({required this.reports});
+  const _AiPetDetailTabs({
+    required this.reports,
+    required this.pets,
+  });
 
   final List<AiPetCareReport> reports;
+  final List<Pet> pets;
 
   @override
   State<_AiPetDetailTabs> createState() => _AiPetDetailTabsState();
@@ -155,6 +166,7 @@ class _AiPetDetailTabsState extends State<_AiPetDetailTabs> {
                 _AiPetDetailTab(
                   tabKey: ValueKey('ai-pet-tab-${report.petId}'),
                   report: report,
+                  pet: _findPetForReport(report.petId),
                   selected: report.petId == selectedReport.petId,
                   onTap: () => setState(() => _selectedPetId = report.petId),
                 ),
@@ -189,18 +201,29 @@ class _AiPetDetailTabsState extends State<_AiPetDetailTabs> {
       ],
     );
   }
+
+  Pet? _findPetForReport(String petId) {
+    for (final pet in widget.pets) {
+      if (pet.id == petId) {
+        return pet;
+      }
+    }
+    return null;
+  }
 }
 
 class _AiPetDetailTab extends StatelessWidget {
   const _AiPetDetailTab({
     required this.tabKey,
     required this.report,
+    required this.pet,
     required this.selected,
     required this.onTap,
   });
 
   final Key tabKey;
   final AiPetCareReport report;
+  final Pet? pet;
   final bool selected;
   final VoidCallback onTap;
 
@@ -239,9 +262,15 @@ class _AiPetDetailTab extends StatelessWidget {
                 backgroundColor: selected
                     ? tokens.secondarySurface.withValues(alpha: 0.18)
                     : tokens.primaryText.withValues(alpha: 0.08),
-                child: Text(
-                  _aiPetAvatarText(report.petName),
-                  style: theme.textTheme.labelMedium?.copyWith(
+                child: PetPhotoAvatar(
+                  photoPath: pet?.photoPath,
+                  fallbackText: pet == null
+                      ? _aiPetAvatarText(report.petName)
+                      : petAvatarFallbackForPet(pet!),
+                  radius: 15,
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: foregroundColor,
+                  fallbackTextStyle: theme.textTheme.labelMedium?.copyWith(
                     color: foregroundColor,
                     fontWeight: FontWeight.w700,
                   ),
@@ -267,11 +296,13 @@ class _AiPetDetailTab extends StatelessWidget {
 class _OverviewHeaderActions extends StatelessWidget {
   const _OverviewHeaderActions({
     required this.isLoading,
+    required this.canGenerate,
     required this.onOpenConfig,
     required this.onGenerate,
   });
 
   final bool isLoading;
+  final bool canGenerate;
   final VoidCallback onOpenConfig;
   final VoidCallback onGenerate;
 
@@ -298,11 +329,13 @@ class _OverviewHeaderActions extends StatelessWidget {
           icon: const Icon(Icons.settings_outlined, size: 20),
         ),
         FilledButton.icon(
-          onPressed: isLoading ? null : onGenerate,
+          onPressed: isLoading || !canGenerate ? null : onGenerate,
           style: FilledButton.styleFrom(
             elevation: 0,
             backgroundColor: accentColor,
             foregroundColor: Colors.white,
+            disabledBackgroundColor: const Color(0xFFB8BCC6),
+            disabledForegroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(999),
@@ -465,8 +498,8 @@ class _OverviewBodyTransition extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 720),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      switchInCurve: Curves.linear,
+      switchOutCurve: Curves.linear,
       layoutBuilder: (currentChild, previousChildren) {
         return Stack(
           alignment: Alignment.topCenter,
@@ -477,31 +510,57 @@ class _OverviewBodyTransition extends StatelessWidget {
         );
       },
       transitionBuilder: (child, animation) {
-        final fadeOutAnimation = CurvedAnimation(
-          parent: animation,
-          curve: const Interval(0.0, 0.42, curve: Curves.easeInCubic),
-          reverseCurve: const Interval(0.58, 1.0, curve: Curves.easeOutCubic),
-        );
-        final fadeAnimation = CurvedAnimation(
-          parent: animation,
-          curve: const Interval(0.24, 1.0, curve: Curves.easeOutCubic),
-          reverseCurve: const Interval(0.0, 0.76, curve: Curves.easeInCubic),
-        );
-        final slideAnimation = Tween<Offset>(
-          begin: const Offset(0, 0.08),
-          end: Offset.zero,
-        ).animate(fadeAnimation);
-        return FadeTransition(
-          opacity: fadeOutAnimation,
-          child: FadeTransition(
-            opacity: fadeAnimation,
-            child: SlideTransition(position: slideAnimation, child: child),
-          ),
+        return _OverviewBodyDirectionalTransition(
+          animation: animation,
+          child: child,
         );
       },
       child: child,
     );
   }
+}
+
+class _OverviewBodyDirectionalTransition extends StatelessWidget {
+  const _OverviewBodyDirectionalTransition({
+    required this.animation,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        final value = animation.value.clamp(0.0, 1.0);
+        final isOutgoing = animation.status == AnimationStatus.reverse;
+        final normalizedPhase = isOutgoing
+            ? ((1 - value) / 0.5).clamp(0.0, 1.0)
+            : ((value - 0.5) / 0.5).clamp(0.0, 1.0);
+        final phaseProgress = isOutgoing
+            ? Curves.easeInCubic.transform(normalizedPhase)
+            : Curves.easeOutCubic.transform(normalizedPhase);
+        final clampedPhaseProgress = phaseProgress.clamp(0.0, 1.0);
+        final opacity = isOutgoing
+            ? 1 - clampedPhaseProgress
+            : clampedPhaseProgress;
+        final offsetY = isOutgoing
+            ? 0.12 * clampedPhaseProgress
+            : -0.12 * (1 - clampedPhaseProgress);
+        return Opacity(
+          opacity: opacity.clamp(0.0, 1.0),
+          child: FractionalTranslation(
+            translation: Offset(0, offsetY),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
 }
 
 class _OverviewBodySection extends StatelessWidget {
@@ -521,13 +580,19 @@ class _OverviewBodySection extends StatelessWidget {
   }
 }
 
+enum _OverviewGenerationExperienceMode { generating, error }
+
 class _OverviewGeneratingExperience extends StatefulWidget {
   const _OverviewGeneratingExperience({
     super.key,
     required this.pets,
+    this.mode = _OverviewGenerationExperienceMode.generating,
+    this.errorMessage,
   });
 
   final List<Pet> pets;
+  final _OverviewGenerationExperienceMode mode;
+  final String? errorMessage;
 
   @override
   State<_OverviewGeneratingExperience> createState() =>
@@ -535,12 +600,15 @@ class _OverviewGeneratingExperience extends StatefulWidget {
 }
 
 class _OverviewGeneratingExperienceState
-    extends State<_OverviewGeneratingExperience>
-    with SingleTickerProviderStateMixin {
-  static const _transitionDuration = Duration(milliseconds: 620);
+    extends State<_OverviewGeneratingExperience> with TickerProviderStateMixin {
+  static const _transitionDuration = Duration(milliseconds: 560);
   static const _holdDuration = Duration(milliseconds: 2100);
+  static const _titleGradientDuration = Duration(milliseconds: 1320);
+  static const _breathingDuration = Duration(milliseconds: 2400);
 
   late final AnimationController _controller;
+  late final AnimationController _breathingController;
+  late final AnimationController _titleGradientController;
   Timer? _rotationTimer;
   int _displayedIndex = 0;
   int? _nextIndex;
@@ -552,12 +620,35 @@ class _OverviewGeneratingExperienceState
       vsync: this,
       duration: _transitionDuration,
     );
-    _scheduleRotation();
+    _breathingController = AnimationController(
+      vsync: this,
+      duration: _breathingDuration,
+    );
+    _titleGradientController = AnimationController(
+      vsync: this,
+      duration: _titleGradientDuration,
+    );
+    _syncGeneratingTitleAnimation();
+    _syncBreathingAnimation();
+    if (widget.mode == _OverviewGenerationExperienceMode.generating) {
+      _scheduleRotation();
+    }
   }
 
   @override
   void didUpdateWidget(covariant _OverviewGeneratingExperience oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.mode != widget.mode) {
+      _syncGeneratingTitleAnimation();
+      _syncBreathingAnimation();
+    }
+    if (widget.mode != _OverviewGenerationExperienceMode.generating) {
+      _rotationTimer?.cancel();
+      _nextIndex = null;
+      _controller.stop();
+      _controller.value = 0;
+      return;
+    }
     if (widget.pets.isEmpty) {
       _rotationTimer?.cancel();
       _nextIndex = null;
@@ -579,6 +670,30 @@ class _OverviewGeneratingExperienceState
     if (oldWidget.pets.length != widget.pets.length) {
       _scheduleRotation();
     }
+  }
+
+  void _syncGeneratingTitleAnimation() {
+    if (widget.mode == _OverviewGenerationExperienceMode.generating) {
+      if (!_titleGradientController.isAnimating) {
+        _titleGradientController.repeat();
+      }
+      return;
+    }
+    _titleGradientController
+      ..stop()
+      ..value = 0;
+  }
+
+  void _syncBreathingAnimation() {
+    if (widget.mode == _OverviewGenerationExperienceMode.generating) {
+      if (!_breathingController.isAnimating) {
+        _breathingController.repeat();
+      }
+      return;
+    }
+    _breathingController
+      ..stop()
+      ..value = 0;
   }
 
   void _scheduleRotation() {
@@ -603,6 +718,8 @@ class _OverviewGeneratingExperienceState
   void dispose() {
     _rotationTimer?.cancel();
     _controller.dispose();
+    _breathingController.dispose();
+    _titleGradientController.dispose();
     super.dispose();
   }
 
@@ -610,47 +727,191 @@ class _OverviewGeneratingExperienceState
   Widget build(BuildContext context) {
     final tokens = context.petNoteTokens;
     final pets = widget.pets.isEmpty ? const <Pet>[] : widget.pets;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 22, 4, 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 54),
-          SizedBox(
-            height: 258,
-            child: Center(
-              child: _GeneratingPetCarousel(
-                key: const ValueKey('overview-generating-pet-carousel'),
-                pets: pets,
-                animation: _controller,
-                displayedIndex: _displayedIndex,
-                nextIndex: _nextIndex,
-                onSwitchDisplayed: () {
-                  if (!mounted || _nextIndex == null) {
-                    return;
-                  }
-                  setState(() {
-                    _displayedIndex = _nextIndex!;
-                    _nextIndex = null;
-                  });
-                  _scheduleRotation();
-                },
+    final isError = widget.mode == _OverviewGenerationExperienceMode.error;
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          height: isError ? 212 : 258,
+          child: Center(
+            child: _GeneratingPetCarousel(
+              key: ValueKey(
+                isError
+                    ? 'overview-error-pet-carousel'
+                    : 'overview-generating-pet-carousel',
               ),
+              pets: pets,
+              animation: _controller,
+              breathingAnimation: _breathingController,
+              displayedIndex: _displayedIndex,
+              nextIndex: _nextIndex,
+              mode: widget.mode,
+              onSwitchDisplayed: () {
+                if (!mounted || _nextIndex == null) {
+                  return;
+                }
+                setState(() {
+                  _displayedIndex = _nextIndex!;
+                  _nextIndex = null;
+                });
+                _scheduleRotation();
+              },
             ),
           ),
-          const SizedBox(height: 34),
-          Text(
-            'AI总览生成中',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: tokens.primaryText,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.4,
-                ),
+        ),
+        SizedBox(height: isError ? 24 : 34),
+        isError
+            ? Text(
+                '喵喵喵？！好像出错了...',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: tokens.primaryText,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.4,
+                    ),
+              )
+            : _GeneratingGradientTitle(
+                animation: _titleGradientController,
+              ),
+        if (isError && (widget.errorMessage?.trim().isNotEmpty ?? false)) ...[
+          const SizedBox(height: 10),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 280),
+            child: Text(
+              widget.errorMessage!.trim(),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: tokens.secondaryText,
+                    height: 1.5,
+                  ),
+            ),
           ),
         ],
-      ),
+      ],
     );
+    return Padding(
+      padding: EdgeInsets.fromLTRB(4, isError ? 0 : 22, 4, isError ? 0 : 28),
+      child: isError
+          ? Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: content,
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 54),
+                content,
+              ],
+            ),
+    );
+  }
+}
+
+class _GeneratingGradientTitle extends StatelessWidget {
+  const _GeneratingGradientTitle({
+    required this.animation,
+  });
+
+  final Animation<double> animation;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.petNoteTokens;
+    final text = Text(
+      key: const ValueKey('overview-generating-title-label'),
+      'AI总览生成中',
+      textAlign: TextAlign.center,
+      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            color: tokens.primaryText,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.4,
+          ),
+    );
+
+    return AnimatedBuilder(
+      animation: animation,
+      child: text,
+      builder: (context, child) {
+        return ShaderMask(
+          key: const ValueKey('overview-generating-title-shimmer'),
+          blendMode: BlendMode.srcATop,
+          shaderCallback: (bounds) => _buildGeneratingTitleSweepGradient(
+            animation.value,
+            baseColor: tokens.primaryText,
+          ).createShader(bounds),
+          child: child,
+        );
+      },
+    );
+  }
+}
+
+LinearGradient _buildGeneratingTitleSweepGradient(
+  double progress, {
+  required Color baseColor,
+  double opacity = 1,
+}) {
+  const begin = Alignment(-1.74, 0);
+  const end = Alignment(1.74, 0);
+  return LinearGradient(
+    colors: [
+      const Color(0xFF8A8A8A).withValues(alpha: opacity),
+      const Color(0xFF8A8A8A).withValues(alpha: opacity),
+      const Color(0xFFB8B8B8).withValues(alpha: opacity),
+      const Color(0xFFDADADA).withValues(alpha: opacity),
+      const Color(0xFFF0F0F0).withValues(alpha: opacity),
+      const Color(0xFFFFFFFF).withValues(alpha: opacity),
+      const Color(0xFFFFFFFF).withValues(alpha: opacity),
+      const Color(0xFFF0F0F0).withValues(alpha: opacity),
+      const Color(0xFFDADADA).withValues(alpha: opacity),
+      const Color(0xFFB8B8B8).withValues(alpha: opacity),
+      const Color(0xFF8A8A8A).withValues(alpha: opacity),
+      const Color(0xFF8A8A8A).withValues(alpha: opacity),
+    ],
+    stops: const [
+      0.0,
+      0.415,
+      0.435,
+      0.455,
+      0.475,
+      0.475,
+      0.525,
+      0.525,
+      0.545,
+      0.565,
+      0.585,
+      1.0,
+    ],
+    begin: begin,
+    end: end,
+    tileMode: TileMode.repeated,
+    transform: _SlidingGradientTransform(
+      progress,
+      begin: begin,
+      end: end,
+    ),
+  );
+}
+
+class _SlidingGradientTransform extends GradientTransform {
+  const _SlidingGradientTransform(
+    this.progress, {
+    required this.begin,
+    required this.end,
+  });
+
+  final double progress;
+  final Alignment begin;
+  final Alignment end;
+
+  @override
+  Matrix4 transform(Rect bounds, {TextDirection? textDirection}) {
+    final travelX = ((end.x - begin.x) * bounds.width / 2) * progress;
+    final travelY = ((end.y - begin.y) * bounds.height / 2) * progress;
+    return Matrix4.translationValues(travelX, travelY, 0);
   }
 }
 
@@ -710,15 +971,19 @@ class _GeneratingPetCarousel extends StatefulWidget {
     super.key,
     required this.pets,
     required this.animation,
+    required this.breathingAnimation,
     required this.displayedIndex,
     required this.nextIndex,
+    required this.mode,
     required this.onSwitchDisplayed,
   });
 
   final List<Pet> pets;
   final Animation<double> animation;
+  final Animation<double> breathingAnimation;
   final int displayedIndex;
   final int? nextIndex;
+  final _OverviewGenerationExperienceMode mode;
   final VoidCallback onSwitchDisplayed;
 
   @override
@@ -738,11 +1003,20 @@ class _GeneratingPetCarouselState extends State<_GeneratingPetCarousel> {
         : widget.nextIndex!.clamp(0, widget.pets.length - 1).toInt();
     final displayedPet =
         widget.pets.isEmpty ? null : widget.pets[safeDisplayedIndex];
-    final nextPet = safeNextIndex == null ? null : widget.pets[safeNextIndex];
     return AnimatedBuilder(
-      animation: widget.animation,
+      animation: Listenable.merge([
+        widget.animation,
+        widget.breathingAnimation,
+      ]),
       builder: (context, _) {
         final progress = widget.animation.value.clamp(0.0, 1.0);
+        final hasActiveTransition =
+            (safeNextIndex != null || _appliedNextIndex != null) &&
+                progress > 0;
+        final breathingScale =
+            widget.mode == _OverviewGenerationExperienceMode.error
+                ? 1.0
+                : _breathingScaleFor(widget.breathingAnimation.value);
         if (safeNextIndex != null &&
             _appliedNextIndex != safeNextIndex &&
             progress >= 0.42) {
@@ -753,8 +1027,16 @@ class _GeneratingPetCarouselState extends State<_GeneratingPetCarousel> {
             }
           });
         }
-        if (safeNextIndex == null && _appliedNextIndex != null) {
-          _appliedNextIndex = null;
+        if (safeNextIndex == null &&
+            _appliedNextIndex != null &&
+            progress >= 0.999) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _appliedNextIndex = null;
+              });
+            }
+          });
         }
         return SizedBox(
           width: 216,
@@ -768,7 +1050,9 @@ class _GeneratingPetCarouselState extends State<_GeneratingPetCarousel> {
                     'overview-generating-pet-avatar-${displayedPet.id}',
                   ),
                   pet: displayedPet,
-                  progress: nextPet == null ? 0 : progress,
+                  breathingScale: breathingScale,
+                  progress: hasActiveTransition ? progress : 0,
+                  mode: widget.mode,
                 ),
             ],
           ),
@@ -776,67 +1060,126 @@ class _GeneratingPetCarouselState extends State<_GeneratingPetCarousel> {
       },
     );
   }
+
+  double _breathingScaleFor(double value) {
+    if (value < 0.375) {
+      return lerpDouble(
+        1.0,
+        1.14,
+        Curves.easeInOutSine.transform(value / 0.375),
+      )!;
+    }
+    if (value < 0.6666666667) {
+      return lerpDouble(
+        1.14,
+        0.86,
+        Curves.easeInOutSine.transform((value - 0.375) / 0.2916666667),
+      )!;
+    }
+    return lerpDouble(
+      0.86,
+      1.0,
+      Curves.easeInOutSine.transform((value - 0.6666666667) / 0.3333333333),
+    )!;
+  }
 }
 
 class _GeneratingPetAvatar extends StatelessWidget {
   const _GeneratingPetAvatar({
     super.key,
     required this.pet,
+    required this.breathingScale,
     required this.progress,
+    required this.mode,
   });
 
   final Pet pet;
+  final double breathingScale;
   final double progress;
+  final _OverviewGenerationExperienceMode mode;
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.petNoteTokens;
     final accent = tabAccentFor(context, AppTab.overview);
-    return Transform.scale(
-      scale: _scaleFor(progress),
-      child: Opacity(
-        opacity: _opacityFor(progress),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 116,
-              height: 116,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: accent.fill.withValues(alpha: 0.18),
-                border: Border.all(
-                  color: accent.fill.withValues(alpha: 0.9),
-                  width: 1.3,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: accent.label.withValues(alpha: 0.14),
-                    blurRadius: 24,
-                    offset: const Offset(0, 10),
+    final isError = mode == _OverviewGenerationExperienceMode.error;
+    final avatarFillColor =
+        isError ? const Color(0xFFDCEEFF) : accent.fill.withValues(alpha: 0.18);
+    final avatarBorderColor =
+        isError ? const Color(0xFF6FAFEF) : accent.fill.withValues(alpha: 0.9);
+    final avatarShadowColor = isError
+        ? const Color(0xFF3B82C4).withValues(alpha: 0.18)
+        : accent.label.withValues(alpha: 0.14);
+    return Opacity(
+      opacity: _opacityFor(progress),
+      child: Transform.scale(
+        key: ValueKey('overview-generating-pet-avatar-scale-${pet.id}'),
+        scale: _scaleFor(progress),
+        child: Transform.scale(
+          key: ValueKey('overview-generating-pet-breath-group-${pet.id}'),
+          scale: isError ? 1.0 : breathingScale,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: isError ? 132 : 124,
+                height: isError ? 132 : 124,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: avatarFillColor,
+                  border: Border.all(
+                    color: avatarBorderColor,
+                    width: isError ? 1.8 : 1.3,
                   ),
-                ],
+                  boxShadow: [
+                    BoxShadow(
+                      color: avatarShadowColor,
+                      blurRadius: isError ? 30 : 24,
+                      offset: Offset(0, isError ? 12 : 10),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Center(
+                      child: isError
+                          ? const Icon(
+                              Icons.sentiment_dissatisfied_rounded,
+                              size: 72,
+                              color: Color(0xFF2F7CC1),
+                            )
+                          : PetPhotoAvatar(
+                              photoPath: pet.photoPath,
+                              fallbackText: petAvatarFallbackForPet(pet),
+                              radius: isError ? 66 : 62,
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: tokens.primaryText,
+                              fallbackTextStyle: Theme.of(
+                                context,
+                              ).textTheme.headlineSmall?.copyWith(
+                                    color: tokens.primaryText,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.4,
+                                  ),
+                            ),
+                    ),
+                  ],
+                ),
               ),
-              child: Center(
-                child: Text(
-                  pet.avatarText,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              if (!isError) ...[
+                const SizedBox(height: 14),
+                Text(
+                  pet.name,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: tokens.primaryText,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.4,
+                        fontWeight: FontWeight.w600,
                       ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              pet.name,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: tokens.primaryText,
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-          ],
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -846,28 +1189,28 @@ class _GeneratingPetAvatar extends StatelessWidget {
     final elapsedMs =
         _OverviewGeneratingExperienceState._transitionDuration.inMilliseconds *
             value;
-    if (elapsedMs < 96) {
+    if (elapsedMs < 120) {
       return lerpDouble(
         1.0,
-        1.08,
-        _segmentValue(elapsedMs, 0, 96, Curves.linear),
+        1.18,
+        _segmentValue(elapsedMs, 0, 120, Curves.easeOutCubic),
       )!;
     }
-    if (elapsedMs < 176) {
+    if (elapsedMs < 360) {
       return lerpDouble(
-        1.08,
-        0.8,
-        _segmentValue(elapsedMs, 96, 176, Curves.easeInQuart),
+        1.18,
+        0.64,
+        _segmentValue(elapsedMs, 120, 360, Curves.easeInOutCubic),
       )!;
     }
     return lerpDouble(
-      0.8,
+      0.64,
       1.0,
       _segmentValue(
         elapsedMs,
-        176,
-        _OverviewGeneratingExperienceState._transitionDuration.inMilliseconds,
-        Curves.easeOutQuart,
+        360,
+        560,
+        Curves.easeOutBack,
       ),
     )!;
   }
@@ -876,20 +1219,20 @@ class _GeneratingPetAvatar extends StatelessWidget {
     final elapsedMs =
         _OverviewGeneratingExperienceState._transitionDuration.inMilliseconds *
             value;
-    if (elapsedMs < 96) {
+    if (elapsedMs < 120) {
       return lerpDouble(
         1.0,
-        0.96,
-        _segmentValue(elapsedMs, 0, 96, Curves.easeOutCubic),
+        0.98,
+        _segmentValue(elapsedMs, 0, 120, Curves.easeOutCubic),
       )!;
     }
     return lerpDouble(
-      0.96,
+      0.98,
       1.0,
       _segmentValue(
         elapsedMs,
-        96,
-        _OverviewGeneratingExperienceState._transitionDuration.inMilliseconds,
+        120,
+        560,
         Curves.easeOutCubic,
       ),
     )!;
@@ -926,9 +1269,7 @@ class _OverviewGenerationSetup extends StatelessWidget {
     final promptText = hasActiveProvider
         ? '右上角选好时间范围后，在此处选择你的爱宠即可生成总览'
         : '当前尚未配置AI服务，点我前往设置页进行配置➔';
-    final selectedPetIds = config.selectedPetIds.isEmpty
-        ? pets.map((pet) => pet.id).toSet()
-        : config.selectedPetIds.toSet();
+    final selectedPetIds = config.selectedPetIds.toSet();
     final allSelected = pets.isNotEmpty && selectedPetIds.length == pets.length;
     final promptStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
           color: hasActiveProvider ? tokens.primaryText : accent.label,
@@ -1053,6 +1394,7 @@ class _OverviewPetSelectionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.petNoteTokens;
+    final selectedCheckColor = Color.lerp(accent.label, Colors.white, 0.5)!;
     return InkWell(
       borderRadius: BorderRadius.circular(22),
       onTap: onTap,
@@ -1076,14 +1418,43 @@ class _OverviewPetSelectionTile extends StatelessWidget {
                 width: selected ? 1.5 : 1,
               ),
             ),
-            child: Center(
-              child: Text(
-                pet.avatarText,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: selected ? accent.label : tokens.primaryText,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
+            child: ClipOval(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Center(
+                    child: PetPhotoAvatar(
+                      photoPath: pet.photoPath,
+                      fallbackText: petAvatarFallbackForPet(pet),
+                      radius: 42,
+                      backgroundColor: Colors.transparent,
+                      foregroundColor:
+                          selected ? accent.label : tokens.primaryText,
+                      fallbackTextStyle:
+                          Theme.of(context).textTheme.titleLarge?.copyWith(
+                                color: selected
+                                    ? accent.label
+                                    : tokens.primaryText,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.3,
+                              ),
                     ),
+                  ),
+                  if (selected)
+                    ColoredBox(
+                      key: ValueKey('overview-pet-selected-overlay-${pet.id}'),
+                      color: const Color(0xFF7C3AED).withValues(alpha: 0.36),
+                    ),
+                  if (selected)
+                    Center(
+                      child: Icon(
+                        key: ValueKey('overview-pet-selected-check-${pet.id}'),
+                        Icons.check_rounded,
+                        color: selectedCheckColor,
+                        size: 34,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
