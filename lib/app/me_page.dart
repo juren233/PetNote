@@ -64,11 +64,6 @@ class MePage extends StatelessWidget {
         SectionCard(
           title: themeSectionTitle,
           children: [
-            ListRow(
-              key: const ValueKey('theme_current_row'),
-              title: currentThemeTitle,
-              subtitle: themePreferenceLabel(themePreference),
-            ),
             const ListRow(
               key: ValueKey('theme_mode_description_row'),
               title: themeModeSectionTitle,

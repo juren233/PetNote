@@ -7,12 +7,14 @@ class OverviewPage extends StatefulWidget {
     required this.onAddFirstPet,
     this.aiInsightsService,
     this.onOpenAiSettings,
+    this.bottomCtaController,
   });
 
   final PetNoteStore store;
   final VoidCallback onAddFirstPet;
   final AiInsightsService? aiInsightsService;
   final FutureOr<void> Function()? onOpenAiSettings;
+  final OverviewBottomCtaController? bottomCtaController;
 
   @override
   State<OverviewPage> createState() => _OverviewPageState();
@@ -28,6 +30,7 @@ class _OverviewPageState extends State<OverviewPage> {
   Timer? _errorRetryButtonTimer;
   String? _pendingErrorRetryKey;
   bool _showErrorRetryButton = false;
+  int _bottomCtaSyncSerial = 0;
 
   @override
   void initState() {
@@ -47,11 +50,24 @@ class _OverviewPageState extends State<OverviewPage> {
     if (!identical(oldWidget.aiInsightsService, widget.aiInsightsService)) {
       _refreshProviderAvailability();
     }
+    if (!identical(oldWidget.bottomCtaController, widget.bottomCtaController)) {
+      _scheduleBottomCtaClear(oldWidget.bottomCtaController);
+      final reportState = widget.store.overviewAiReportState;
+      _scheduleBottomCtaSync(
+        _buildBottomCtaState(
+          showGenerationSetup: _shouldShowOverviewGenerationSetup(reportState),
+          showGenerationError: _shouldShowOverviewGenerationError(reportState),
+          hasSelectedPets:
+              widget.store.overviewAnalysisConfig.selectedPetIds.isNotEmpty,
+        ),
+      );
+    }
   }
 
   @override
   void dispose() {
     _errorRetryButtonTimer?.cancel();
+    _scheduleBottomCtaClear(widget.bottomCtaController);
     super.dispose();
   }
 
@@ -63,6 +79,7 @@ class _OverviewPageState extends State<OverviewPage> {
         final pagePadding =
             pageContentPaddingForInsets(MediaQuery.viewPaddingOf(context));
         if (widget.store.pets.isEmpty) {
+          _scheduleBottomCtaSync(null);
           return ListView(
             padding: pagePadding,
             children: [
@@ -86,8 +103,6 @@ class _OverviewPageState extends State<OverviewPage> {
         final reportState = widget.store.overviewAiReportState;
         final showGenerationSetup =
             _shouldShowOverviewGenerationSetup(reportState);
-        final viewPadding = MediaQuery.viewPaddingOf(context);
-        final dockLayout = dockLayoutForInsets(viewPadding);
         final showGenerationError = _shouldShowOverviewGenerationError(
           reportState,
         );
@@ -100,17 +115,9 @@ class _OverviewPageState extends State<OverviewPage> {
         final hasSelectedPets = selectedPetIds.isNotEmpty;
         final showGeneratingExperience =
             reportState.isLoading && _hasActiveProvider && hasSelectedPets;
-        final floatingButtonBottom =
-            Theme.of(context).platform == TargetPlatform.iOS
-                ? viewPadding.bottom +
-                    iosNativeDockHostHeight +
-                    overviewFloatingButtonDockClearance
-                : viewPadding.bottom +
-                    dockLayout.shellHeight +
-                    dockLayout.outerMargin.bottom -
-                    4;
-        final listBottomPadding =
-            showGenerationSetup || showGenerationError ? 116.0 : 0.0;
+        final listBottomPadding = showGenerationSetup || showGenerationError
+            ? overviewBottomCtaContentReserve
+            : 0.0;
         final selectedPets = widget.store.pets
             .where((pet) => selectedPetIds.contains(pet.id))
             .toList(growable: false);
@@ -148,74 +155,82 @@ class _OverviewPageState extends State<OverviewPage> {
                             )
                           : null,
         );
-        return Stack(
+        _scheduleBottomCtaSync(
+          _buildBottomCtaState(
+            showGenerationSetup: showGenerationSetup,
+            showGenerationError: showGenerationError,
+            hasSelectedPets: hasSelectedPets,
+          ),
+        );
+        return ListView(
+          padding: pagePadding.copyWith(
+            bottom: pagePadding.bottom + listBottomPadding,
+          ),
           children: [
-            ListView(
-              padding: pagePadding.copyWith(
-                bottom: pagePadding.bottom + listBottomPadding,
-              ),
-              children: [
-                overviewHeader,
-                _OverviewBodyTransition(child: overviewBody),
-              ],
-            ),
-            if (showGenerationSetup || showGenerationError)
-              Positioned(
-                left: 22,
-                right: 22,
-                bottom: floatingButtonBottom,
-                child: SafeArea(
-                  top: false,
-                  child: showGenerationError && !_showErrorRetryButton
-                      ? const SizedBox.shrink()
-                      : TweenAnimationBuilder<double>(
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOutCubic,
-                          tween: Tween<double>(
-                            begin: showGenerationError ? 0 : 1,
-                            end: 1,
-                          ),
-                          child: FilledButton.icon(
-                            key: const ValueKey(
-                                'overview-floating-generate-button'),
-                            onPressed: showGenerationError
-                                ? _returnToOverviewSetup
-                                : _hasActiveProvider && hasSelectedPets
-                                    ? () => _generateCareReport(
-                                          forceRefresh: false,
-                                        )
-                                    : null,
-                            style: FilledButton.styleFrom(
-                              elevation: 0,
-                              backgroundColor:
-                                  tabAccentFor(context, AppTab.overview).label,
-                              foregroundColor: Colors.white,
-                              disabledBackgroundColor: const Color(0xFFB8BCC6),
-                              disabledForegroundColor: Colors.white,
-                            ),
-                            icon: Icon(
-                              showGenerationError
-                                  ? Icons.arrow_back_rounded
-                                  : Icons.auto_awesome_rounded,
-                              size: 18,
-                            ),
-                            label: Text(
-                              showGenerationError ? '返回重试' : '生成总览',
-                            ),
-                          ),
-                          builder: (context, opacity, child) {
-                            return Opacity(
-                              opacity: opacity,
-                              child: child,
-                            );
-                          },
-                        ),
-                ),
-              ),
+            overviewHeader,
+            _OverviewBodyTransition(child: overviewBody),
           ],
         );
       },
     );
+  }
+
+  OverviewBottomCtaState? _buildBottomCtaState({
+    required bool showGenerationSetup,
+    required bool showGenerationError,
+    required bool hasSelectedPets,
+  }) {
+    if (showGenerationError && !_showErrorRetryButton) {
+      return null;
+    }
+    if (!showGenerationSetup && !showGenerationError) {
+      return null;
+    }
+    final isErrorAction = showGenerationError;
+    final onPressed = isErrorAction
+        ? _returnToOverviewSetup
+        : _hasActiveProvider && hasSelectedPets
+            ? () => _generateCareReport(forceRefresh: false)
+            : null;
+    return OverviewBottomCtaState(
+      visible: true,
+      enabled: onPressed != null,
+      label: isErrorAction ? '返回重试' : '生成总览',
+      icon:
+          isErrorAction ? Icons.arrow_back_rounded : Icons.auto_awesome_rounded,
+      onPressed: onPressed,
+    );
+  }
+
+  void _scheduleBottomCtaSync(OverviewBottomCtaState? state) {
+    final controller = widget.bottomCtaController;
+    if (controller == null) {
+      return;
+    }
+    final serial = ++_bottomCtaSyncSerial;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (serial != _bottomCtaSyncSerial) {
+        return;
+      }
+      if (!mounted) {
+        controller.clear();
+        return;
+      }
+      controller.update(state);
+    });
+  }
+
+  void _scheduleBottomCtaClear(OverviewBottomCtaController? controller) {
+    if (controller == null) {
+      return;
+    }
+    final serial = ++_bottomCtaSyncSerial;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (serial != _bottomCtaSyncSerial) {
+        return;
+      }
+      controller.clear();
+    });
   }
 
   bool _shouldShowOverviewGenerationSetup(

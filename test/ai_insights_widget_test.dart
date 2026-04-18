@@ -13,6 +13,7 @@ import 'package:petnote/app/ai_settings_page.dart';
 import 'package:petnote/app/app_theme.dart';
 import 'package:petnote/app/layout_metrics.dart';
 import 'package:petnote/app/navigation_palette.dart';
+import 'package:petnote/app/overview_bottom_cta.dart';
 import 'package:petnote/app/pet_photo_widgets.dart';
 import 'package:petnote/app/petnote_pages.dart';
 import 'package:petnote/app/petnote_root.dart';
@@ -44,12 +45,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: service,
-          ),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
         ),
       ),
     );
@@ -90,7 +88,7 @@ void main() {
       find.byKey(const ValueKey('overview-floating-generate-button')),
     );
 
-    expect(floatingButtonRect.bottom, greaterThan(500));
+    expect(floatingButtonRect.bottom, greaterThan(460));
     expect((rangeButtonDecoration.color!).a, 1);
     expect(rangeButtonDecoration.color, overviewAccent);
     expect(floatingGenerateButton.style?.backgroundColor?.resolve({}),
@@ -231,12 +229,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: service,
-          ),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
         ),
       ),
     );
@@ -305,12 +300,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: service,
-          ),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
         ),
       ),
     );
@@ -393,8 +385,7 @@ void main() {
       find.byKey(const ValueKey('fake_ios_native_dock_for_overview_button')),
     );
     final clearance = dockRect.top - floatingButtonRect.bottom;
-    final expectedClearance =
-        iosNativeDockHostHeight + overviewFloatingButtonDockClearance;
+    const expectedClearance = overviewBottomCtaDockGap;
 
     expect(clearance, closeTo(expectedClearance, 0.1));
     expect(
@@ -402,6 +393,13 @@ void main() {
       lessThanOrEqualTo(
         dockRect.top - expectedClearance + 0.1,
       ),
+    );
+    expect(
+      find.ancestor(
+        of: find.byKey(const ValueKey('overview-floating-generate-button')),
+        matching: find.byType(OverviewPage),
+      ),
+      findsNothing,
     );
   });
 
@@ -450,10 +448,71 @@ void main() {
           const ValueKey('fake_ios_native_dock_for_overview_button_tall')),
     );
     final clearance = dockRect.top - floatingButtonRect.bottom;
-    final expectedClearance =
-        iosNativeDockHostHeight + overviewFloatingButtonDockClearance;
+    const expectedClearance = overviewBottomCtaDockGap;
 
     expect(clearance, closeTo(expectedClearance, 0.1));
+  });
+
+  testWidgets(
+      'overview setup keeps the CTA fixed while the page content scrolls',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.viewPadding = const FakeViewPadding(top: 59, bottom: 34);
+    tester.view.padding = const FakeViewPadding(top: 59, bottom: 34);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewPadding);
+    addTearDown(tester.view.resetPadding);
+
+    final store = PetNoteStore.seeded();
+    for (var index = 0; index < 24; index += 1) {
+      await store.addPet(
+        name: '加测宠物$index',
+        type: PetType.cat,
+        breed: 'Mixed',
+        sex: 'Unknown',
+        birthday: '2024-01-01',
+        weightKg: 3.0 + index,
+        neuterStatus: PetNeuterStatus.unknown,
+        feedingPreferences: '测试用',
+        allergies: '未填写',
+        note: '用于拉长总览设置页滚动高度。',
+      );
+    }
+    final service = _FakeAiInsightsService(
+      careReport: _buildDetailedCareReport(),
+      isConfigured: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final buttonFinder =
+        find.byKey(const ValueKey('overview-floating-generate-button'));
+    final promptFinder =
+        find.byKey(const ValueKey('overview-generation-prompt-row'));
+    final beforeButtonRect = tester.getRect(buttonFinder);
+    final beforePromptRect = tester.getRect(promptFinder);
+
+    await tester.fling(
+        find.byType(ListView).first, const Offset(0, -700), 1400);
+    await tester.pumpAndSettle();
+
+    final afterButtonRect = tester.getRect(buttonFinder);
+    final afterPromptRect = tester.getRect(promptFinder);
+
+    expect(afterButtonRect.top, closeTo(beforeButtonRect.top, 0.1));
+    expect(afterPromptRect.top, lessThan(beforePromptRect.top));
   });
 
   testWidgets('overview page shows generation setup without AI service',
@@ -463,11 +522,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-          ),
+        home: _OverviewPageHarness(
+          store: store,
         ),
       ),
     );
@@ -512,23 +568,20 @@ void main() {
       MaterialApp(
         navigatorKey: navigatorKey,
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: service,
-            onOpenAiSettings: () => navigatorKey.currentState!.push(
-              MaterialPageRoute<void>(
-                builder: (context) => Scaffold(
-                  appBar: AppBar(title: const Text('AI 配置')),
-                  body: Center(
-                    child: FilledButton(
-                      onPressed: () {
-                        service.isConfigured = true;
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text('保存 AI 配置'),
-                    ),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
+          onOpenAiSettings: () => navigatorKey.currentState!.push(
+            MaterialPageRoute<void>(
+              builder: (context) => Scaffold(
+                appBar: AppBar(title: const Text('AI 配置')),
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      service.isConfigured = true;
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('保存 AI 配置'),
                   ),
                 ),
               ),
@@ -580,16 +633,13 @@ void main() {
       MaterialApp(
         navigatorKey: navigatorKey,
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            onOpenAiSettings: () => navigatorKey.currentState!.push(
-              MaterialPageRoute<void>(
-                builder: (context) => AiSettingsPage(
-                  settingsController: settingsController,
-                  coordinator: coordinator,
-                ),
+        home: _OverviewPageHarness(
+          store: store,
+          onOpenAiSettings: () => navigatorKey.currentState!.push(
+            MaterialPageRoute<void>(
+              builder: (context) => AiSettingsPage(
+                settingsController: settingsController,
+                coordinator: coordinator,
               ),
             ),
           ),
@@ -614,14 +664,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: _FakeAiInsightsService(
-              isConfigured: true,
-              generateCareReportError: const AiGenerationException('服务暂时不可用'),
-            ),
+        home: _OverviewPageHarness(
+          store: store,
+          service: _FakeAiInsightsService(
+            isConfigured: true,
+            generateCareReportError: const AiGenerationException('服务暂时不可用'),
           ),
         ),
       ),
@@ -670,17 +717,14 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: NetworkAiInsightsService(
-              clientFactory: AiClientFactory(
-                settingsController: settingsController,
-                secretStore: secretStore,
-              ),
-              transport: _UnexpectedNetworkTransport(),
+        home: _OverviewPageHarness(
+          store: store,
+          service: NetworkAiInsightsService(
+            clientFactory: AiClientFactory(
+              settingsController: settingsController,
+              secretStore: secretStore,
             ),
+            transport: _UnexpectedNetworkTransport(),
           ),
         ),
       ),
@@ -699,7 +743,8 @@ void main() {
     expect(find.textContaining('Base URL'), findsNothing);
   });
 
-  testWidgets('pets page generates and displays visit summary', (tester) async {
+  testWidgets('pets page shows the selected pet profile by default',
+      (tester) async {
     tester.view.physicalSize = const Size(1200, 2200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -714,28 +759,15 @@ void main() {
             store: store,
             onAddFirstPet: () {},
             onEditPet: (_) {},
-            aiInsightsService: _FakeAiInsightsService(
-              visitSummary: AiVisitSummary(
-                visitReason: '近两周耳道护理后仍偶尔抓耳，建议复查。',
-                timeline: const ['04-01 抓耳增加', '04-03 做耳道清洁'],
-                medicationsAndTreatments: const ['耳道清洁 1 次'],
-                testsAndResults: const ['暂无新增检查结果'],
-                questionsToAskVet: const ['是否需要继续滴耳液'],
-              ),
-            ),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    final generateButton = find.widgetWithText(FilledButton, '生成看诊摘要');
-    await tester.tap(generateButton, warnIfMissed: false);
-    await tester.pumpAndSettle();
-
-    expect(find.text('AI 看诊摘要'), findsOneWidget);
-    expect(find.text('近两周耳道护理后仍偶尔抓耳，建议复查。'), findsOneWidget);
-    expect(find.text('是否需要继续滴耳液'), findsOneWidget);
+    expect(find.text('爱宠'), findsOneWidget);
+    expect(find.text('Luna 的照护档案'), findsOneWidget);
+    expect(find.text('Milo'), findsWidgets);
   });
 
   testWidgets(
@@ -752,12 +784,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: service,
-          ),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
         ),
       ),
     );
@@ -795,7 +824,8 @@ void main() {
     );
   });
 
-  testWidgets('overview setup allows clearing all pets and disables generate button',
+  testWidgets(
+      'overview setup allows clearing all pets and disables generate button',
       (tester) async {
     final store = PetNoteStore.seeded();
     final service = _FakeAiInsightsService(
@@ -806,12 +836,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: service,
-          ),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
         ),
       ),
     );
@@ -843,7 +870,8 @@ void main() {
     );
     expect(generateButton.onPressed, isNull);
 
-    await tester.tap(find.byKey(const ValueKey('overview-floating-generate-button')),
+    await tester.tap(
+        find.byKey(const ValueKey('overview-floating-generate-button')),
         warnIfMissed: false);
     await tester.pumpAndSettle();
 
@@ -862,12 +890,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: service,
-          ),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
         ),
       ),
     );
@@ -1102,8 +1127,7 @@ void main() {
     expect(refreshService.forceRefreshValues, <bool>[true]);
   });
 
-  testWidgets(
-      'overview page keeps generation setup visible on first frame after switching back',
+  testWidgets('overview page restores generation setup after switching back',
       (tester) async {
     final store = PetNoteStore.seeded();
     store.setActiveTab(AppTab.overview);
@@ -1130,14 +1154,44 @@ void main() {
     store.setActiveTab(AppTab.pets);
     await tester.pumpAndSettle();
     expect(find.text('爱宠'), findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-floating-generate-button')),
+        findsNothing);
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.byKey(const ValueKey('overview-floating-generate-button')),
+        findsNothing);
 
     store.setActiveTab(AppTab.overview);
+    await tester.pump();
     await tester.pump();
     expect(find.text('你的AI关怀助理'), findsOneWidget);
     expect(find.text('右上角选好时间范围后，在此处选择你的爱宠即可生成总览'), findsOneWidget);
     expect(find.byKey(const ValueKey('overview-range-menu-button')),
         findsOneWidget);
     expect(find.byTooltip('配置'), findsNothing);
+    expect(find.byKey(const ValueKey('overview-floating-generate-button')),
+        findsOneWidget);
+  });
+
+  testWidgets('overview setup shows CTA on the first rendered frame',
+      (tester) async {
+    final store = PetNoteStore.seeded();
+    final service = _FakeAiInsightsService(
+      careReport: _buildDetailedCareReport(),
+      isConfigured: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
+        ),
+      ),
+    );
+
     expect(find.byKey(const ValueKey('overview-floating-generate-button')),
         findsOneWidget);
   });
@@ -1154,12 +1208,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildPetNoteTheme(Brightness.light),
-        home: Scaffold(
-          body: OverviewPage(
-            store: store,
-            onAddFirstPet: () {},
-            aiInsightsService: service,
-          ),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
         ),
       ),
     );
@@ -1730,7 +1781,56 @@ class _DeferredAiInsightsService implements AiInsightsService {
   }
 }
 
-class _OverviewTabHarness extends StatelessWidget {
+class _OverviewPageHarness extends StatefulWidget {
+  const _OverviewPageHarness({
+    required this.store,
+    this.service,
+    this.onOpenAiSettings,
+  });
+
+  final PetNoteStore store;
+  final AiInsightsService? service;
+  final FutureOr<void> Function()? onOpenAiSettings;
+
+  @override
+  State<_OverviewPageHarness> createState() => _OverviewPageHarnessState();
+}
+
+class _OverviewPageHarnessState extends State<_OverviewPageHarness> {
+  late final OverviewBottomCtaController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = OverviewBottomCtaController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: OverviewPage(
+        store: widget.store,
+        onAddFirstPet: () {},
+        aiInsightsService: widget.service,
+        onOpenAiSettings: widget.onOpenAiSettings,
+        bottomCtaController: _controller,
+      ),
+      bottomNavigationBar: _OverviewTestBottomChrome(
+        store: widget.store,
+        controller: _controller,
+        activeTabOverride: AppTab.overview,
+      ),
+    );
+  }
+}
+
+class _OverviewTabHarness extends StatefulWidget {
   const _OverviewTabHarness({
     required this.store,
     required this.service,
@@ -1740,34 +1840,102 @@ class _OverviewTabHarness extends StatelessWidget {
   final AiInsightsService service;
 
   @override
+  State<_OverviewTabHarness> createState() => _OverviewTabHarnessState();
+}
+
+class _OverviewTabHarnessState extends State<_OverviewTabHarness> {
+  late final OverviewBottomCtaController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = OverviewBottomCtaController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: _OverviewTestBottomChrome(
+        store: widget.store,
+        controller: _controller,
+      ),
       body: AnimatedBuilder(
-        animation: store,
+        animation: widget.store,
         builder: (context, _) {
-          return switch (store.activeTab) {
+          return switch (widget.store.activeTab) {
             AppTab.checklist => ChecklistPage(
-                store: store,
+                store: widget.store,
                 activeSectionKey: 'today',
                 highlightedChecklistItemKey: null,
                 onSectionChanged: (_) {},
                 onAddFirstPet: () {},
               ),
             AppTab.overview => OverviewPage(
-                store: store,
+                store: widget.store,
                 onAddFirstPet: () {},
-                aiInsightsService: service,
+                aiInsightsService: widget.service,
+                bottomCtaController: _controller,
               ),
             AppTab.pets => PetsPage(
-                store: store,
+                store: widget.store,
                 onAddFirstPet: () {},
                 onEditPet: (_) {},
-                aiInsightsService: service,
               ),
             AppTab.me => const SizedBox.shrink(),
           };
         },
       ),
+    );
+  }
+}
+
+class _OverviewTestBottomChrome extends StatelessWidget {
+  const _OverviewTestBottomChrome({
+    required this.store,
+    required this.controller,
+    this.activeTabOverride,
+  });
+
+  final PetNoteStore store;
+  final OverviewBottomCtaController controller;
+  final AppTab? activeTabOverride;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([store, controller]),
+      builder: (context, _) {
+        final state = controller.value;
+        final visibleState = overviewBottomCtaFallbackState(
+          store: store,
+          activeTab: activeTabOverride ?? store.activeTab,
+          syncedState: state,
+        );
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (visibleState != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: overviewBottomCtaHorizontalMargin,
+                ),
+                child: OverviewBottomCtaBar(state: visibleState),
+              ),
+            if (visibleState != null)
+              const SizedBox(height: overviewBottomCtaDockGap),
+            const SizedBox(
+              key: ValueKey('overview-test-dock'),
+              height: 96,
+            ),
+          ],
+        );
+      },
     );
   }
 }

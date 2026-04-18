@@ -7,42 +7,42 @@ import UIKit
 import UserNotifications
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-  }
-
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IosNativeDockPlugin") {
+    GeneratedPluginRegistrant.register(with: self)
+    
+    // Register custom plugins
+    if let registrar = self.registrar(forPlugin: "IosNativeDockPlugin") {
       IosNativeDockPlugin.register(with: registrar)
     }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteNotificationPlugin") {
+    if let registrar = self.registrar(forPlugin: "PetNoteNotificationPlugin") {
       PetNoteNotificationPlugin.register(with: registrar)
     }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteAiSecretStorePlugin") {
+    if let registrar = self.registrar(forPlugin: "PetNoteAiSecretStorePlugin") {
       PetNoteAiSecretStorePlugin.register(with: registrar)
     }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteDataPackageFileAccessPlugin") {
+    if let registrar = self.registrar(forPlugin: "PetNoteDataPackageFileAccessPlugin") {
       PetNoteDataPackageFileAccessPlugin.register(with: registrar)
     }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteNativeOptionPickerPlugin") {
+    if let registrar = self.registrar(forPlugin: "PetNoteNativeOptionPickerPlugin") {
       PetNoteNativeOptionPickerPlugin.register(with: registrar)
     }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteIntroHapticsPlugin") {
+    if let registrar = self.registrar(forPlugin: "PetNoteIntroHapticsPlugin") {
       PetNoteIntroHapticsPlugin.register(with: registrar)
     }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IosNativeOverviewRangeButtonPlugin") {
+    if let registrar = self.registrar(forPlugin: "IosNativeOverviewRangeButtonPlugin") {
       IosNativeOverviewRangeButtonPlugin.register(with: registrar)
     }
     if #available(iOS 14.0, *),
-      let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteNativePetPhotoPickerPlugin")
+      let registrar = self.registrar(forPlugin: "PetNoteNativePetPhotoPickerPlugin")
     {
       PetNoteNativePetPhotoPickerPlugin.register(with: registrar)
     }
+    
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   override func application(

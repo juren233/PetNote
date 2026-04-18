@@ -16,6 +16,7 @@ import 'package:petnote/app/layout_metrics.dart';
 import 'package:petnote/app/me_page.dart';
 import 'package:petnote/app/native_pet_photo_picker.dart';
 import 'package:petnote/app/navigation_palette.dart';
+import 'package:petnote/app/overview_bottom_cta.dart';
 import 'package:petnote/data/data_storage_coordinator.dart';
 import 'package:petnote/logging/app_log_controller.dart';
 import 'package:petnote/notifications/method_channel_notification_adapter.dart';
@@ -73,6 +74,7 @@ class _PetNoteRootState extends State<PetNoteRoot>
   _OnboardingEntryPoint _onboardingEntryPoint = _OnboardingEntryPoint.manual;
   _OverlayTransition _overlayTransition = _OverlayTransition.none;
   late final AnimationController _overlayTransitionController;
+  late final OverviewBottomCtaController _overviewBottomCtaController;
   Timer? _timeRefreshTimer;
   int? _lastNotificationSyncVersion;
 
@@ -80,6 +82,7 @@ class _PetNoteRootState extends State<PetNoteRoot>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _overviewBottomCtaController = OverviewBottomCtaController();
     _overlayTransitionController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1100),
@@ -234,7 +237,7 @@ class _PetNoteRootState extends State<PetNoteRoot>
         !useNativeAndroidDock || _hasCompletedIntroBottomNavPrewarm;
     final useNativeIosDock =
         showBottomNavigation && supportsIosNativeDock(platform);
-    final bottomNavigation = !showBottomNavigation
+    final bottomDock = !showBottomNavigation
         ? null
         : useNativeAndroidDock
             ? _buildAndroidNativeDock(
@@ -248,6 +251,13 @@ class _PetNoteRootState extends State<PetNoteRoot>
                     store: store,
                     onAdd: () => _openAddSheet(context, store),
                   );
+    final bottomNavigation = bottomDock == null
+        ? null
+        : _ShellBottomChrome(
+            store: store,
+            controller: _overviewBottomCtaController,
+            dock: bottomDock,
+          );
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlayStyle,
       child: Scaffold(
@@ -281,6 +291,7 @@ class _PetNoteRootState extends State<PetNoteRoot>
                   ? _returnToIntroFromOnboarding
                   : null,
           nativePetPhotoPicker: widget.nativePetPhotoPicker,
+          overviewBottomCtaController: _overviewBottomCtaController,
           bottomNavigationOverlay:
               showBottomNavigationInBody ? bottomNavigation : null,
         ),
@@ -586,6 +597,7 @@ class _PetNoteRootState extends State<PetNoteRoot>
     _timeRefreshTimer?.cancel();
     _store?.removeListener(_handleStoreChanged);
     _notificationCoordinator?.dispose();
+    _overviewBottomCtaController.dispose();
     _overlayTransitionController.dispose();
     super.dispose();
   }
@@ -625,6 +637,7 @@ class _PetNoteBody extends StatefulWidget {
     required this.onSubmitOnboarding,
     required this.onDeferOnboarding,
     required this.onReturnToIntroFromOnboarding,
+    required this.overviewBottomCtaController,
     this.nativePetPhotoPicker,
     this.bottomNavigationOverlay,
   });
@@ -651,6 +664,7 @@ class _PetNoteBody extends StatefulWidget {
   final Future<void> Function(PetOnboardingResult result) onSubmitOnboarding;
   final Future<void> Function() onDeferOnboarding;
   final VoidCallback? onReturnToIntroFromOnboarding;
+  final OverviewBottomCtaController overviewBottomCtaController;
   final NativePetPhotoPicker? nativePetPhotoPicker;
   final Widget? bottomNavigationOverlay;
 
@@ -898,6 +912,7 @@ class _PetNoteBodyState extends State<_PetNoteBody> {
                           ),
                         ),
                 aiInsightsService: widget.aiInsightsService,
+                bottomCtaController: widget.overviewBottomCtaController,
               ),
             ),
           AppTab.pets => _StoreDrivenPageHost(
@@ -907,7 +922,6 @@ class _PetNoteBodyState extends State<_PetNoteBody> {
                 store: widget.store,
                 onAddFirstPet: widget.onAddFirstPet,
                 onEditPet: widget.onEditPet,
-                aiInsightsService: widget.aiInsightsService,
               ),
             ),
           AppTab.me => _StoreDrivenPageHost(
@@ -1002,6 +1016,48 @@ class _StoreDrivenPageHostState extends State<_StoreDrivenPageHost> {
   @override
   Widget build(BuildContext context) {
     return widget.builder(context);
+  }
+}
+
+class _ShellBottomChrome extends StatelessWidget {
+  const _ShellBottomChrome({
+    required this.store,
+    required this.controller,
+    required this.dock,
+  });
+
+  final PetNoteStore store;
+  final OverviewBottomCtaController controller;
+  final Widget dock;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([store, controller]),
+      builder: (context, _) {
+        final state = controller.value;
+        final visibleState = overviewBottomCtaFallbackState(
+          store: store,
+          activeTab: store.activeTab,
+          syncedState: state,
+        );
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (visibleState != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: overviewBottomCtaHorizontalMargin,
+                ),
+                child: OverviewBottomCtaBar(state: visibleState),
+              ),
+            if (visibleState != null)
+              const SizedBox(height: overviewBottomCtaDockGap),
+            dock,
+          ],
+        );
+      },
+    );
   }
 }
 
