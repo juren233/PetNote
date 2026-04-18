@@ -2781,16 +2781,16 @@ void main() {
     await tester.pumpWidget(const PetNoteApp());
     await tester.pumpAndSettle();
 
-    final coolAccentCards = find.byWidgetPredicate((widget) {
-      if (widget is! Container) {
-        return false;
-      }
-      final decoration = widget.decoration;
-      return decoration is BoxDecoration &&
-          decoration.color == const Color(0xFFEAF0FF);
-    });
+    final metricCardFinder = find.ancestor(
+      of: find.text('今日待办'),
+      matching: find.byType(Ink),
+    );
 
-    expect(coolAccentCards, findsWidgets);
+    expect(metricCardFinder, findsWidgets);
+
+    final coolAccentCard = tester.widget<Ink>(metricCardFinder.first);
+    final decoration = coolAccentCard.decoration as BoxDecoration;
+    expect(decoration.color, const Color(0xFFEAF0FF));
   });
 
   testWidgets('configures transparent immersive status bar wrapper',

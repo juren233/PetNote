@@ -393,12 +393,14 @@ void main() {
       find.byKey(const ValueKey('fake_ios_native_dock_for_overview_button')),
     );
     final clearance = dockRect.top - floatingButtonRect.bottom;
+    final expectedClearance =
+        iosNativeDockHostHeight + overviewFloatingButtonDockClearance;
 
-    expect(clearance, closeTo(overviewFloatingButtonDockClearance, 0.1));
+    expect(clearance, closeTo(expectedClearance, 0.1));
     expect(
       floatingButtonRect.bottom,
       lessThanOrEqualTo(
-        dockRect.top - overviewFloatingButtonDockClearance + 0.1,
+        dockRect.top - expectedClearance + 0.1,
       ),
     );
   });
@@ -448,8 +450,10 @@ void main() {
           const ValueKey('fake_ios_native_dock_for_overview_button_tall')),
     );
     final clearance = dockRect.top - floatingButtonRect.bottom;
+    final expectedClearance =
+        iosNativeDockHostHeight + overviewFloatingButtonDockClearance;
 
-    expect(clearance, closeTo(overviewFloatingButtonDockClearance, 0.1));
+    expect(clearance, closeTo(expectedClearance, 0.1));
   });
 
   testWidgets('overview page shows generation setup without AI service',
