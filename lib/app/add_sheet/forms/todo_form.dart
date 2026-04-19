@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:petnote/app/common_widgets.dart';
+import 'package:petnote/app/interaction_feedback.dart';
 import 'package:petnote/state/petnote_store.dart';
 
 import '../form_controls/adaptive_date_time_field.dart';
-import '../form_controls/choice_wrap.dart';
 import '../form_controls/form_scaffold.dart';
 import '../form_controls/pet_selector.dart';
 import '../pickers/date_time_pickers.dart';
@@ -19,21 +19,26 @@ class TodoForm extends StatefulWidget {
 }
 
 class _TodoFormState extends State<TodoForm> {
+  static const List<NotificationLeadTime> _availableLeadTimes =
+      <NotificationLeadTime>[
+    NotificationLeadTime.none,
+    NotificationLeadTime.fiveMinutes,
+    NotificationLeadTime.fifteenMinutes,
+    NotificationLeadTime.oneHour,
+    NotificationLeadTime.oneDay,
+  ];
+
   final _title = TextEditingController();
   final _note = TextEditingController();
   late String _petId;
   late DateTime _dueAt;
   NotificationLeadTime _notificationLeadTime = NotificationLeadTime.none;
-  SemanticTopicKey _topicKey = SemanticTopicKey.other;
-  SemanticActionIntent _intent = SemanticActionIntent.custom;
-  DateTime? _followUpAt;
 
   @override
   void initState() {
     super.initState();
     _petId = widget.store.pets.first.id;
     _dueAt = defaultFutureDateTime();
-    _followUpAt = _dueAt;
   }
 
   @override
@@ -49,25 +54,18 @@ class _TodoFormState extends State<TodoForm> {
       actionLabel: '保存待办',
       actionColor: const Color(0xFF4F7BFF),
       onSubmit: () async {
+        final title = _title.text.trim();
+        final note = _note.text.trim();
         await widget.store.addTodo(
-          title: _title.text.trim(),
+          title: title,
           petId: _petId,
           dueAt: _dueAt,
           notificationLeadTime: _notificationLeadTime,
-          note: _note.text.trim(),
-          semantic: SemanticEventDetails(
-            topicKey: _topicKey,
-            signal: SemanticSignal.attention,
-            tags: semanticTagsForTopic(_topicKey),
-            evidenceSummary: todoEvidenceSummary(
-              title: _title.text.trim(),
-              note: _note.text.trim(),
-            ),
-            actionSummary: intentActionSummary(_intent, _dueAt),
-            followUpAt: _followUpAt ?? _dueAt,
-            measurements: const <SemanticMeasurement>[],
-            intent: _intent,
-            source: null,
+          note: note,
+          semantic: simplifiedTodoSemantic(
+            title: title,
+            note: note,
+            dueAt: _dueAt,
           ),
         );
         if (!context.mounted) {
@@ -75,129 +73,130 @@ class _TodoFormState extends State<TodoForm> {
         }
         Navigator.pop(context);
       },
-      child: SectionCard(
-        title: '基础信息',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SectionLabel(text: '标题'),
-          HyperTextField(
-            controller: _title,
-            hintText: '可留空，默认按结构化信息生成',
+          SectionCard(
+            title: '核心信息',
+            children: [
+              const SectionLabel(text: '标题'),
+              HyperTextField(
+                controller: _title,
+                hintText: '例如：补货主粮、清洗水碗',
+              ),
+              const SectionLabel(text: '关联爱宠'),
+              PetSelector(
+                pets: widget.store.pets,
+                value: _petId,
+                onChanged: (value) => setState(() => _petId = value),
+              ),
+              const SectionLabel(text: '时间'),
+              AdaptiveDateTimeField(
+                materialFieldKey: const ValueKey('todo_due_at_field'),
+                iosDateFieldKey: const ValueKey('todo_due_date_field'),
+                iosTimeFieldKey: const ValueKey('todo_due_time_field'),
+                value: _dueAt,
+                onChanged: (value) => setState(() => _dueAt = value),
+              ),
+              const SectionLabel(text: '提前通知'),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: _availableLeadTimes
+                    .map(
+                      (value) => _TodoChipOption(
+                        key: ValueKey('todo-notification-chip-${value.name}'),
+                        label: notificationLeadTimeLabel(value),
+                        selected: _notificationLeadTime == value,
+                        onTap: () => setState(
+                          () => _notificationLeadTime = value,
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+            ],
           ),
-          const SectionLabel(text: '关联爱宠'),
-          PetSelector(
-            pets: widget.store.pets,
-            value: _petId,
-            onChanged: (value) => setState(() => _petId = value),
-          ),
-          const SectionLabel(text: '时间'),
-          AdaptiveDateTimeField(
-            materialFieldKey: const ValueKey('todo_due_at_field'),
-            iosDateFieldKey: const ValueKey('todo_due_date_field'),
-            iosTimeFieldKey: const ValueKey('todo_due_time_field'),
-            value: _dueAt,
-            onChanged: (value) => setState(() {
-              _dueAt = value;
-              _followUpAt ??= value;
-            }),
-          ),
-          const SectionLabel(text: '提前通知'),
-          ChoiceWrap<NotificationLeadTime>(
-            values: NotificationLeadTime.values,
-            selected: _notificationLeadTime,
-            labelBuilder: notificationLeadTimeLabel,
-            onChanged: (value) => setState(() => _notificationLeadTime = value),
-          ),
-          const SectionLabel(text: '主题'),
-          ChoiceWrap<SemanticTopicKey>(
-            values: todoTopicOptions,
-            selected: _topicKey,
-            labelBuilder: semanticTopicLabel,
-            onChanged: (value) => setState(() {
-              _topicKey = value;
-              _intent = defaultIntentForTopic(value);
-            }),
-          ),
-          const SectionLabel(text: '执行意图'),
-          ChoiceWrap<SemanticActionIntent>(
-            values: todoIntentOptions,
-            selected: _intent,
-            labelBuilder: semanticIntentLabel,
-            onChanged: (value) => setState(() => _intent = value),
-          ),
-          const SectionLabel(text: '跟进时间（可选）'),
-          OptionalAdaptiveDateTimeField(
-            materialFieldKey: const ValueKey('todo_follow_up_field'),
-            iosDateFieldKey: const ValueKey('todo_follow_up_date_field'),
-            iosTimeFieldKey: const ValueKey('todo_follow_up_time_field'),
-            value: _followUpAt,
-            placeholder: '默认跟随待办时间',
-            onPickDateTime: _pickFollowUpAt,
-            onPickDate: _pickFollowUpDateOnIos,
-            onPickTime: _pickFollowUpTimeOnIos,
-            clearButtonKey: const ValueKey('todo_clear_follow_up_button'),
-            onClear: () => setState(() => _followUpAt = null),
-          ),
-          const SectionLabel(text: '补充说明'),
-          HyperTextField(
-            controller: _note,
-            hintText: '补充说明，不是主要事实字段',
-            maxLines: 3,
+          SectionCard(
+            title: '补充信息',
+            children: [
+              const SectionLabel(text: '补充说明'),
+              HyperTextField(
+                controller: _note,
+                hintText: '补充这次待办的背景、要求或注意事项',
+                maxLines: 3,
+              ),
+            ],
           ),
         ],
       ),
     );
   }
+}
 
-  Future<void> _pickFollowUpAt() async {
-    final nextDateTime = await pickAdaptiveDateTime(
-      context,
-      initialValue: _followUpAt ?? _dueAt,
-    );
-    if (nextDateTime == null || !mounted) {
-      return;
-    }
-    setState(() {
-      _followUpAt = nextDateTime;
-    });
-  }
+class _TodoChipOption extends StatefulWidget {
+  const _TodoChipOption({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
-  Future<void> _pickFollowUpDateOnIos() async {
-    final nextDate = await pickCupertinoDatePart(
-      context,
-      initialValue: _followUpAt ?? _dueAt,
-    );
-    if (nextDate == null || !mounted) {
-      return;
-    }
-    setState(() {
-      final current = _followUpAt ?? _dueAt;
-      _followUpAt = DateTime(
-        nextDate.year,
-        nextDate.month,
-        nextDate.day,
-        current.hour,
-        current.minute,
-      );
-    });
-  }
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
-  Future<void> _pickFollowUpTimeOnIos() async {
-    final nextDateTime = await pickCupertinoTimePart(
-      context,
-      initialValue: _followUpAt ?? _dueAt,
+  @override
+  State<_TodoChipOption> createState() => _TodoChipOptionState();
+}
+
+class _TodoChipOptionState extends State<_TodoChipOption> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        triggerSelectionHaptic();
+        widget.onTap();
+      },
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        offset: _pressed ? const Offset(0.015, 0) : Offset.zero,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: EdgeInsets.symmetric(
+            horizontal: _pressed ? 15 : 18,
+            vertical: 12,
+          ),
+          decoration: BoxDecoration(
+            color: widget.selected
+                ? const Color(0xFF4F7BFF)
+                : const Color(0xFFF6F7FA),
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0x144F7BFF),
+                blurRadius: _pressed ? 6 : 14,
+                offset: Offset(_pressed ? 1 : 0, _pressed ? 3 : 8),
+              ),
+            ],
+          ),
+          child: Text(
+            widget.label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: widget.selected ? Colors.white : const Color(0xFF6C7280),
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ),
+      ),
     );
-    if (nextDateTime == null || !mounted) {
-      return;
-    }
-    setState(() {
-      final current = _followUpAt ?? _dueAt;
-      _followUpAt = DateTime(
-        current.year,
-        current.month,
-        current.day,
-        nextDateTime.hour,
-        nextDateTime.minute,
-      );
-    });
   }
 }

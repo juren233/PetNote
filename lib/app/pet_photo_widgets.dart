@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/interaction_feedback.dart';
 
-const String petPhotoIntroHeroAssetPath = 'assets/images/intro/first_page_hero.svg';
+const String petPhotoIntroHeroAssetPath =
+    'assets/images/intro/first_page_hero.svg';
 const Color petPhotoPlaceholderIdleIconColor = Color(0xFFB8BEC8);
 const Color petPhotoPlaceholderPressedIconColor = Color(0xFFF2A65A);
 const Color petPhotoPlaceholderIdleSurfaceColor = Color(0xFFF6F7FA);
@@ -126,23 +128,25 @@ class PetPhotoSquare extends StatelessWidget {
     required this.photoPath,
     required this.size,
     this.borderRadius = const BorderRadius.all(Radius.circular(22)),
+    this.fallback,
   });
 
   final String? photoPath;
   final double size;
   final BorderRadius borderRadius;
+  final Widget? fallback;
 
   @override
   Widget build(BuildContext context) {
-    final fallback = const SizedBox.shrink();
+    final effectiveFallback = fallback ?? const SizedBox.shrink();
     return ClipRRect(
       borderRadius: borderRadius,
       child: SizedBox(
         width: size,
         height: size,
         child: hasPetPhoto(photoPath)
-            ? _buildPhoto(photoPath!, fallback)
-            : fallback,
+            ? _buildPhoto(photoPath!, effectiveFallback)
+            : effectiveFallback,
       ),
     );
   }
@@ -159,6 +163,48 @@ class PetPhotoSquare extends StatelessWidget {
     return Image.file(
       File(resolvedPhotoPath),
       fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => fallback,
+    );
+  }
+}
+
+class PetPhotoContainFrame extends StatelessWidget {
+  const PetPhotoContainFrame({
+    super.key,
+    required this.photoPath,
+    this.borderRadius = const BorderRadius.all(Radius.circular(22)),
+    this.fallback,
+  });
+
+  final String? photoPath;
+  final BorderRadius borderRadius;
+  final Widget? fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveFallback = fallback ?? const SizedBox.shrink();
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: SizedBox.expand(
+        child: hasPetPhoto(photoPath)
+            ? _buildPhoto(photoPath!, effectiveFallback)
+            : effectiveFallback,
+      ),
+    );
+  }
+
+  Widget _buildPhoto(String resolvedPhotoPath, Widget fallback) {
+    final imageBuilder = debugPetPhotoImageBuilder;
+    if (imageBuilder != null) {
+      return imageBuilder(
+        photoPath: resolvedPhotoPath,
+        fit: BoxFit.contain,
+        fallback: fallback,
+      );
+    }
+    return Image.file(
+      File(resolvedPhotoPath),
+      fit: BoxFit.contain,
       errorBuilder: (_, __, ___) => fallback,
     );
   }
@@ -218,10 +264,17 @@ class _PetPhotoPickerCardState extends State<PetPhotoPickerCard> {
           GestureDetector(
             key: const ValueKey('pet_photo_picker_button'),
             onTap: widget.enabled ? () => widget.onTap() : null,
-            onTapDown:
-                widget.enabled ? (_) => setState(() => _pressed = true) : null,
-            onTapUp:
-                widget.enabled ? (_) => setState(() => _pressed = false) : null,
+            onTapDown: widget.enabled
+                ? (_) {
+                    if (!hasPhoto) {
+                      triggerLightImpactHaptic();
+                    }
+                    setState(() => _pressed = true);
+                  }
+                : null,
+            onTapUp: widget.enabled
+                ? (_) => setState(() => _pressed = false)
+                : null,
             onTapCancel:
                 widget.enabled ? () => setState(() => _pressed = false) : null,
             child: hasPhoto
@@ -286,24 +339,41 @@ class _PetPhotoPickerCardState extends State<PetPhotoPickerCard> {
     final iconColor = _pressed
         ? petPhotoPlaceholderPressedIconColor
         : petPhotoPlaceholderIdleIconColor;
-    return AnimatedContainer(
-      key: const ValueKey('pet_photo_picker_placeholder_surface'),
-      duration: const Duration(milliseconds: 180),
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 140),
       curve: Curves.easeOutCubic,
-      width: placeholderSize,
-      height: placeholderSize,
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: SvgPicture.asset(
-          petPhotoIntroHeroAssetPath,
-          key: const ValueKey('pet_photo_picker_placeholder_icon'),
-          width: iconSize,
-          height: iconSize,
-          fit: BoxFit.contain,
-          colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+      scale: _pressed ? 0.94 : 1,
+      child: AnimatedContainer(
+        key: const ValueKey('pet_photo_picker_placeholder_surface'),
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        width: placeholderSize,
+        height: placeholderSize,
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0x24000000),
+              blurRadius: _pressed ? 8 : 20,
+              offset: Offset(0, _pressed ? 4 : 12),
+            ),
+          ],
+        ),
+        child: Center(
+          child: AnimatedSlide(
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            offset: _pressed ? const Offset(0, 0.02) : Offset.zero,
+            child: SvgPicture.asset(
+              petPhotoIntroHeroAssetPath,
+              key: const ValueKey('pet_photo_picker_placeholder_icon'),
+              width: iconSize,
+              height: iconSize,
+              fit: BoxFit.contain,
+              colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+            ),
+          ),
         ),
       ),
     );

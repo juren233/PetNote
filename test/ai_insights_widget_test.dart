@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:petnote/ai/ai_client_factory.dart';
 import 'package:petnote/ai/ai_connection_tester.dart';
@@ -799,7 +800,19 @@ void main() {
     expect(find.text('近期提醒'), findsWidgets);
     expect(find.text('Luna'), findsWidgets);
     expect(find.text('三联疫苗加强'), findsOneWidget);
+    expect(find.byKey(const ValueKey('pet-reminder-row-reminder-1')),
+        findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('pet-reminder-row-reminder-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pet-reminder-detail-page-reminder-1')),
+        findsOneWidget);
+    expect(find.text('提前准备免疫本。'), findsOneWidget);
+    expect(find.text('提前1天'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
 
@@ -808,6 +821,205 @@ void main() {
 
     expect(find.text('资料记录'), findsWidgets);
     expect(find.text('耳道清洁复诊'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('pet-record-row-record-1')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('pet-record-row-record-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pet-record-detail-page-record-1')),
+        findsOneWidget);
+    expect(find.text('医生建议一周后继续观察，没有感染迹象。'), findsOneWidget);
+    expect(find.text('继续减少洗澡频率。'), findsOneWidget);
+  });
+
+  testWidgets(
+      'pets page record rows prefer first photo thumbnail and open matching detail page',
+      (tester) async {
+    final photoPath =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}petnote-record-thumb-${DateTime.now().microsecondsSinceEpoch}.bin';
+    debugHasPetPhotoOverride = (path) => path == photoPath;
+    debugPetPhotoImageBuilder = ({
+      required String photoPath,
+      required BoxFit fit,
+      required Widget fallback,
+    }) {
+      return SizedBox.expand(
+        key: ValueKey('debug-pet-photo-$photoPath'),
+      );
+    };
+    final store = PetNoteStore.seeded();
+    await store.addRecord(
+      petId: 'pet-1',
+      type: PetRecordType.image,
+      purpose: RecordPurpose.other,
+      customPurposeLabel: '术后观察',
+      title: '术后恢复观察',
+      recordDate: DateTime.parse('2026-03-25T09:15:00+08:00'),
+      summary: '精神状态稳定，食欲恢复正常。',
+      note: '继续观察伤口边缘是否红肿。',
+      photoPaths: [photoPath],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: Scaffold(
+          body: PetsPage(
+            store: store,
+            onAddFirstPet: () {},
+            onEditPet: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('资料记录').first);
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey('pet-record-row-record-4')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('pet-record-row-record-4')),
+        matching: find.byKey(ValueKey('debug-pet-photo-$photoPath')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('pet-record-row-record-4')),
+        matching: find.text('术后观察'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('pet-record-row-record-4')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pet-record-detail-page-record-4')),
+        findsOneWidget);
+    expect(find.text('术后恢复观察'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('精神状态稳定，食欲恢复正常。'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('精神状态稳定，食欲恢复正常。'), findsOneWidget);
+    expect(find.text('继续观察伤口边缘是否红肿。'), findsOneWidget);
+    expect(find.text('术后观察'), findsWidgets);
+    expect(find.byKey(ValueKey('debug-pet-photo-$photoPath')), findsWidgets);
+  });
+
+  testWidgets(
+      'record detail photos open immersive multi-photo preview with paging controls',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final firstPhotoPath =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}petnote-record-preview-${DateTime.now().microsecondsSinceEpoch}.bin';
+    final secondPhotoPath =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}petnote-record-preview-${DateTime.now().microsecondsSinceEpoch + 1}.bin';
+    debugHasPetPhotoOverride =
+        (path) => path == firstPhotoPath || path == secondPhotoPath;
+    debugPetPhotoImageBuilder = ({
+      required String photoPath,
+      required BoxFit fit,
+      required Widget fallback,
+    }) {
+      return SizedBox.expand(
+        key: ValueKey('debug-pet-photo-$photoPath-${fit.name}'),
+      );
+    };
+
+    final store = PetNoteStore.seeded();
+    await store.addRecord(
+      petId: 'pet-1',
+      type: PetRecordType.image,
+      title: '拆线后恢复',
+      recordDate: DateTime.parse('2026-03-26T11:00:00+08:00'),
+      summary: '恢复稳定，可以继续观察。',
+      note: '避免剧烈活动。',
+      photoPaths: [firstPhotoPath, secondPhotoPath],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: Scaffold(
+          body: PetsPage(
+            store: store,
+            onAddFirstPet: () {},
+            onEditPet: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('资料记录').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('pet-record-row-record-4')));
+    await tester.pumpAndSettle();
+
+    final photoTileKey =
+        ValueKey('pet-record-detail-photo-tile-$secondPhotoPath');
+    await tester.ensureVisible(find.byKey(photoTileKey));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(photoTileKey), warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey('pet-photo-preview-dialog')), findsOneWidget);
+    expect(
+      find.byKey(ValueKey('debug-pet-photo-$secondPhotoPath-contain')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('pet-photo-preview-close-button')),
+        findsOneWidget);
+    expect(find.text('2 / 2'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('pet-photo-preview-next-button')),
+      findsOneWidget,
+    );
+
+    final previewRect =
+        tester.getRect(find.byKey(const ValueKey('pet-photo-preview-dialog')));
+    expect(previewRect.width, lessThanOrEqualTo(1440 * 0.94));
+    expect(previewRect.height, lessThanOrEqualTo(2200 * 0.88));
+    expect(find.byKey(const ValueKey('pet-photo-preview-backdrop')),
+        findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('pet-photo-preview-previous-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('1 / 2'), findsOneWidget);
+    expect(
+      find.byKey(ValueKey('debug-pet-photo-$firstPhotoPath-contain')),
+      findsOneWidget,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 2'), findsOneWidget);
+
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('pet-photo-preview-dialog')), findsNothing);
+
+    await tester.tap(find.byKey(photoTileKey), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.byKey(const ValueKey('pet-photo-preview-close-button')));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('pet-photo-preview-dialog')), findsNothing);
   });
 
   testWidgets(

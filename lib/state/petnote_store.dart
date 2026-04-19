@@ -18,11 +18,13 @@ enum NotificationLeadTime {
   fifteenMinutes,
   oneHour,
   oneDay,
+  threeDays,
+  sevenDays,
 }
 
 enum PetRecordType { medical, receipt, image, testResult, other }
 
-enum RecordPurpose { health, life, expense }
+enum RecordPurpose { health, life, expense, other }
 
 enum OverviewRange {
   sevenDays,
@@ -385,6 +387,7 @@ class PetRecord {
     required this.summary,
     required this.note,
     this.purpose,
+    this.customPurposeLabel,
     this.photoPaths = const <String>[],
     this.semantic,
   });
@@ -397,6 +400,7 @@ class PetRecord {
   final String summary;
   final String note;
   final RecordPurpose? purpose;
+  final String? customPurposeLabel;
   final List<String> photoPaths;
   final SemanticEventDetails? semantic;
 
@@ -410,6 +414,7 @@ class PetRecord {
       'summary': summary,
       'note': note,
       'purpose': purpose?.name,
+      'customPurposeLabel': customPurposeLabel,
       'photoPaths': photoPaths,
       'semantic': semantic?.toJson(),
     };
@@ -425,6 +430,10 @@ class PetRecord {
       summary: json['summary'] as String? ?? '',
       note: json['note'] as String? ?? '',
       purpose: _recordPurposeFromName(json['purpose'] as String?),
+      customPurposeLabel:
+          ((json['customPurposeLabel'] as String?) ?? '').trim().isEmpty
+              ? null
+              : (json['customPurposeLabel'] as String).trim(),
       photoPaths: (json['photoPaths'] as List?)
               ?.whereType<String>()
               .map((item) => item.trim())
@@ -1405,6 +1414,7 @@ class PetNoteStore extends ChangeNotifier {
     required String petId,
     PetRecordType? type,
     RecordPurpose? purpose,
+    String? customPurposeLabel,
     required String title,
     required DateTime recordDate,
     required String summary,
@@ -1415,6 +1425,9 @@ class PetNoteStore extends ChangeNotifier {
     final normalizedTitle = title.trim();
     final normalizedSummary = summary.trim();
     final normalizedNote = note.trim();
+    final normalizedCustomPurpose = customPurposeLabel?.trim().isEmpty ?? true
+        ? null
+        : customPurposeLabel!.trim();
     final normalizedPhotoPaths = photoPaths
         .map((path) => path.trim())
         .where((path) => path.isNotEmpty)
@@ -1429,11 +1442,15 @@ class PetNoteStore extends ChangeNotifier {
         petId: petId,
         type: resolvedType,
         purpose: resolvedPurpose,
+        customPurposeLabel: resolvedPurpose == RecordPurpose.other
+            ? normalizedCustomPurpose
+            : null,
         title: normalizedTitle.isEmpty
             ? _defaultRecordTitle(
                 resolvedType,
                 semantic,
                 purpose: resolvedPurpose,
+                customPurposeLabel: normalizedCustomPurpose,
               )
             : normalizedTitle,
         recordDate: recordDate,
@@ -2333,6 +2350,8 @@ NotificationLeadTime _notificationLeadTimeFromName(String? value) =>
       'fifteenMinutes' => NotificationLeadTime.fifteenMinutes,
       'oneHour' => NotificationLeadTime.oneHour,
       'oneDay' => NotificationLeadTime.oneDay,
+      'threeDays' => NotificationLeadTime.threeDays,
+      'sevenDays' => NotificationLeadTime.sevenDays,
       _ => NotificationLeadTime.none,
     };
 
@@ -2342,6 +2361,8 @@ Duration leadTimeDuration(NotificationLeadTime leadTime) => switch (leadTime) {
       NotificationLeadTime.fifteenMinutes => const Duration(minutes: 15),
       NotificationLeadTime.oneHour => const Duration(hours: 1),
       NotificationLeadTime.oneDay => const Duration(days: 1),
+      NotificationLeadTime.threeDays => const Duration(days: 3),
+      NotificationLeadTime.sevenDays => const Duration(days: 7),
     };
 
 String notificationLeadTimeLabel(NotificationLeadTime leadTime) =>
@@ -2351,6 +2372,8 @@ String notificationLeadTimeLabel(NotificationLeadTime leadTime) =>
       NotificationLeadTime.fifteenMinutes => '提前15分钟',
       NotificationLeadTime.oneHour => '提前1小时',
       NotificationLeadTime.oneDay => '提前1天',
+      NotificationLeadTime.threeDays => '提前3天',
+      NotificationLeadTime.sevenDays => '提前7天',
     };
 
 String _overviewTitle(OverviewRange range) => switch (range) {
@@ -2383,6 +2406,7 @@ RecordPurpose? _recordPurposeFromName(String? value) => switch (value) {
       'health' => RecordPurpose.health,
       'life' => RecordPurpose.life,
       'expense' => RecordPurpose.expense,
+      'other' => RecordPurpose.other,
       _ => null,
     };
 
@@ -2473,6 +2497,7 @@ String _defaultRecordTitle(
   PetRecordType type,
   SemanticEventDetails? semantic, {
   RecordPurpose? purpose,
+  String? customPurposeLabel,
 }) {
   if (semantic != null && semantic.evidenceSummary.isNotEmpty) {
     return _truncateSemanticText(semantic.evidenceSummary, 18);
@@ -2482,6 +2507,9 @@ String _defaultRecordTitle(
       RecordPurpose.health => '健康记录',
       RecordPurpose.life => '生活记录',
       RecordPurpose.expense => '消费记录',
+      RecordPurpose.other => (customPurposeLabel?.trim().isNotEmpty ?? false)
+          ? '${customPurposeLabel!.trim()}记录'
+          : '其他记录',
     };
   }
   return switch (type) {
@@ -2561,6 +2589,7 @@ PetRecordType _recordTypeForPurpose(RecordPurpose purpose) {
     RecordPurpose.health => PetRecordType.medical,
     RecordPurpose.life => PetRecordType.other,
     RecordPurpose.expense => PetRecordType.receipt,
+    RecordPurpose.other => PetRecordType.other,
   };
 }
 
@@ -2577,6 +2606,7 @@ SemanticTopicKey _topicForRecordPurpose(RecordPurpose? purpose, String text) {
     RecordPurpose.health => _inferTopicFromText(text),
     RecordPurpose.life => SemanticTopicKey.other,
     RecordPurpose.expense => SemanticTopicKey.purchase,
+    RecordPurpose.other => SemanticTopicKey.other,
     null => _inferTopicFromText(text),
   };
 }
@@ -2586,6 +2616,7 @@ SemanticEvidenceSource? _sourceForRecordPurpose(RecordPurpose? purpose) {
     RecordPurpose.health => SemanticEvidenceSource.home,
     RecordPurpose.life => SemanticEvidenceSource.home,
     RecordPurpose.expense => SemanticEvidenceSource.receipt,
+    RecordPurpose.other => SemanticEvidenceSource.other,
     null => null,
   };
 }

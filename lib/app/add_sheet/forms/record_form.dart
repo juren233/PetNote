@@ -28,6 +28,7 @@ class RecordForm extends StatefulWidget {
 
 class _RecordFormState extends State<RecordForm> {
   final _summary = TextEditingController();
+  final _customPurpose = TextEditingController();
   final List<String> _photoPaths = <String>[];
   late final NativePetPhotoPicker _nativePetPhotoPicker =
       widget.nativePetPhotoPicker ?? MethodChannelNativePetPhotoPicker();
@@ -35,6 +36,7 @@ class _RecordFormState extends State<RecordForm> {
   late String _petId;
   late DateTime _recordDate;
   RecordPurpose _purpose = RecordPurpose.health;
+  String? _customPurposeError;
   bool _isPickingPhoto = false;
   bool _hasSubmitted = false;
 
@@ -43,11 +45,20 @@ class _RecordFormState extends State<RecordForm> {
     super.initState();
     _petId = widget.store.pets.first.id;
     _recordDate = DateTime.now();
+    _customPurpose.addListener(() {
+      if (_customPurposeError == null) {
+        return;
+      }
+      if (_validatedCustomPurposeLabel() != null) {
+        setState(() => _customPurposeError = null);
+      }
+    });
   }
 
   @override
   void dispose() {
     _summary.dispose();
+    _customPurpose.dispose();
     if (!_hasSubmitted) {
       for (final path in _photoPaths) {
         unawaited(_nativePetPhotoPicker.deletePetPhoto(path));
@@ -62,9 +73,17 @@ class _RecordFormState extends State<RecordForm> {
       actionLabel: '保存记录',
       actionColor: const Color(0xFF4FB57C),
       onSubmit: () async {
+        final customPurposeLabel = _validatedCustomPurposeLabel();
+        if (_purpose == RecordPurpose.other && customPurposeLabel == null) {
+          setState(() {
+            _customPurposeError = '请填写 1-12 个字的自定义记录目的';
+          });
+          return;
+        }
         await widget.store.addRecord(
           petId: _petId,
           purpose: _purpose,
+          customPurposeLabel: customPurposeLabel,
           title: '',
           recordDate: _recordDate,
           summary: _summary.text.trim(),
@@ -94,8 +113,37 @@ class _RecordFormState extends State<RecordForm> {
                 values: RecordPurpose.values,
                 selected: _purpose,
                 labelBuilder: _recordPurposeLabel,
-                onChanged: (value) => setState(() => _purpose = value),
+                onChanged: (value) => setState(() {
+                  _purpose = value;
+                  if (value != RecordPurpose.other) {
+                    _customPurposeError = null;
+                  }
+                }),
               ),
+              if (_purpose == RecordPurpose.other) ...[
+                const SizedBox(height: 10),
+                HyperTextField(
+                  key: const ValueKey('record_custom_purpose_field'),
+                  controller: _customPurpose,
+                  hintText: '输入这次记录的自定义目的',
+                  onTap: () {
+                    if (_customPurposeError != null) {
+                      setState(() => _customPurposeError = null);
+                    }
+                  },
+                ),
+                if (_customPurposeError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6, top: 8),
+                    child: Text(
+                      _customPurposeError!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFFC85B63),
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+              ],
               const SectionLabel(text: '时间'),
               AdaptiveDateTimeField(
                 materialFieldKey: const ValueKey('record_date_field'),
@@ -172,6 +220,17 @@ class _RecordFormState extends State<RecordForm> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  String? _validatedCustomPurposeLabel() {
+    if (_purpose != RecordPurpose.other) {
+      return null;
+    }
+    final normalized = _customPurpose.text.trim();
+    if (normalized.isEmpty || normalized.length > 12) {
+      return null;
+    }
+    return normalized;
   }
 }
 
@@ -658,4 +717,5 @@ String _recordPurposeLabel(RecordPurpose purpose) => switch (purpose) {
       RecordPurpose.health => '健康',
       RecordPurpose.life => '生活',
       RecordPurpose.expense => '消费',
+      RecordPurpose.other => '其他',
     };

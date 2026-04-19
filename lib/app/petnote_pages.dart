@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:petnote/ai/ai_insights_models.dart';
 import 'package:petnote/ai/ai_insights_service.dart';
 import 'package:petnote/app/app_theme.dart';

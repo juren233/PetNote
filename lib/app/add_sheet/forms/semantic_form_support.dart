@@ -208,3 +208,124 @@ String recordActionSummary(
     _ => '记录时间为 $month/$day，可作为后续分析依据。',
   };
 }
+
+SemanticEventDetails simplifiedTodoSemantic({
+  required String title,
+  required String note,
+  required DateTime dueAt,
+}) {
+  final topic = inferTodoTopic(title: title, note: note);
+  final intent = defaultIntentForTopic(topic);
+  return SemanticEventDetails(
+    topicKey: topic,
+    signal: SemanticSignal.attention,
+    tags: semanticTagsForTopic(topic),
+    evidenceSummary: todoEvidenceSummary(
+      title: title,
+      note: note,
+    ),
+    actionSummary: intentActionSummary(intent, dueAt),
+    followUpAt: dueAt,
+    measurements: const <SemanticMeasurement>[],
+    intent: intent,
+    source: null,
+  );
+}
+
+SemanticTopicKey inferTodoTopic({
+  required String title,
+  required String note,
+}) {
+  final text = '$title $note'.toLowerCase();
+  if (_containsAny(text, const ['粮', '猫砂', '冻干', '补货', '囤', '买', '采购'])) {
+    return SemanticTopicKey.purchase;
+  }
+  if (_containsAny(text, const ['洗', '清洁', '消毒', '擦', '整理', '打扫'])) {
+    return SemanticTopicKey.cleaning;
+  }
+  if (_containsAny(text, const ['梳毛', '洗澡', '修毛', '美容', '护理'])) {
+    return SemanticTopicKey.grooming;
+  }
+  if (_containsAny(text, const ['喝水', '饮水', '补水'])) {
+    return SemanticTopicKey.hydration;
+  }
+  if (_containsAny(text, const ['吃', '喂', '饮食', '主粮', '罐头'])) {
+    return SemanticTopicKey.diet;
+  }
+  return SemanticTopicKey.other;
+}
+
+ReminderDraft inferReminderDraft({
+  required String title,
+  required String note,
+  required String recurrence,
+  required DateTime scheduledAt,
+}) {
+  final topic = inferReminderTopic(
+    title: title,
+    note: note,
+    recurrence: recurrence,
+  );
+  final kind = reminderKindForTopic(topic);
+  final intent = defaultReminderIntentForTopic(topic);
+  return ReminderDraft(
+    kind: kind,
+    semantic: SemanticEventDetails(
+      topicKey: topic,
+      signal: SemanticSignal.scheduled,
+      tags: semanticTagsForTopic(topic),
+      evidenceSummary: todoEvidenceSummary(
+        title: title,
+        note: note,
+      ),
+      actionSummary: intentActionSummary(intent, scheduledAt),
+      followUpAt: scheduledAt,
+      measurements: const <SemanticMeasurement>[],
+      intent: intent,
+      source: null,
+    ),
+  );
+}
+
+SemanticTopicKey inferReminderTopic({
+  required String title,
+  required String note,
+  required String recurrence,
+}) {
+  final text = '$title $note $recurrence'.toLowerCase();
+  if (_containsAny(text, const ['疫苗', '免疫', '狂犬'])) {
+    return SemanticTopicKey.vaccine;
+  }
+  if (_containsAny(text, const ['驱虫', '体内', '体外'])) {
+    return SemanticTopicKey.deworming;
+  }
+  if (_containsAny(text, const ['吃药', '用药', '滴耳', '喂药'])) {
+    return SemanticTopicKey.medication;
+  }
+  if (_containsAny(text, const ['复查', '复诊', '回诊', '复检', '就诊'])) {
+    return SemanticTopicKey.review;
+  }
+  if (_containsAny(text, const ['洗澡', '美容', '梳毛', '洗护', '修毛'])) {
+    return SemanticTopicKey.grooming;
+  }
+  return SemanticTopicKey.other;
+}
+
+bool _containsAny(String text, List<String> keywords) {
+  for (final keyword in keywords) {
+    if (text.contains(keyword)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+class ReminderDraft {
+  const ReminderDraft({
+    required this.kind,
+    required this.semantic,
+  });
+
+  final ReminderKind kind;
+  final SemanticEventDetails semantic;
+}

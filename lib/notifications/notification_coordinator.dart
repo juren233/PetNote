@@ -375,6 +375,8 @@ NotificationLeadTime _leadTimeFromName(String? value) {
     'fifteenMinutes' => NotificationLeadTime.fifteenMinutes,
     'oneHour' => NotificationLeadTime.oneHour,
     'oneDay' => NotificationLeadTime.oneDay,
+    'threeDays' => NotificationLeadTime.threeDays,
+    'sevenDays' => NotificationLeadTime.sevenDays,
     _ => NotificationLeadTime.none,
   };
 }

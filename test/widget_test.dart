@@ -2374,6 +2374,7 @@ void main() {
     expect(find.text('健康'), findsOneWidget);
     expect(find.text('生活'), findsOneWidget);
     expect(find.text('消费'), findsOneWidget);
+    expect(find.text('其他'), findsOneWidget);
     expect(find.text('图片'), findsNothing);
     expect(find.text('补充说明'), findsNothing);
     expect(find.text('正文'), findsNothing);
@@ -2568,6 +2569,52 @@ void main() {
   });
 
   testWidgets(
+      'record form persists custom purpose labels when selecting other',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetNoteApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增记录'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('record_custom_purpose_field')),
+        findsNothing);
+
+    await tester.tap(find.text('其他'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('record_custom_purpose_field')),
+        findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, '保存记录'));
+    await tester.pumpAndSettle();
+    expect(find.text('请填写 1-12 个字的自定义记录目的'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('record_custom_purpose_field')),
+      '术后观察',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('record_summary_field')),
+      '恢复状态稳定，继续观察。',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '保存记录'));
+    await tester.pumpAndSettle();
+
+    final prefs = await SharedPreferences.getInstance();
+    final recordsJson = prefs.getString(_recordsStorageKey);
+    expect(recordsJson, isNotNull);
+    final decodedRecords = (jsonDecode(recordsJson!) as List)
+        .map((item) => Map<String, Object?>.from(item as Map))
+        .toList(growable: false);
+    expect(decodedRecords.first['purpose'], 'other');
+    expect(decodedRecords.first['customPurposeLabel'], '术后观察');
+  });
+
+  testWidgets(
       'record form reuses a stable empty-state add card after removing all photos',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1000));
@@ -2708,6 +2755,33 @@ void main() {
     expect(find.byType(CalendarDatePicker), findsOneWidget);
   });
 
+  testWidgets(
+      'expanded todo form shows only simplified core fields on first screen',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetNoteApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增待办'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('标题'), findsOneWidget);
+    expect(find.text('关联爱宠'), findsOneWidget);
+    expect(find.text('时间'), findsOneWidget);
+    expect(find.text('提前通知'), findsOneWidget);
+    expect(find.text('补充说明'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '保存待办'), findsOneWidget);
+    expect(find.text('主题'), findsNothing);
+    expect(find.text('执行意图'), findsNothing);
+    expect(find.text('跟进时间（可选）'), findsNothing);
+    expect(find.byKey(const ValueKey('todo_follow_up_field')), findsNothing);
+  });
+
   testWidgets('expanded reminder form uses cupertino picker flow on iOS',
       (tester) async {
     SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
@@ -2751,6 +2825,62 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CupertinoDatePicker), findsOneWidget);
+  });
+
+  testWidgets(
+      'expanded reminder form shows simplified core fields and infers reminder kind on save',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    SharedPreferences.setMockInitialValues(_persistedSinglePetPreferences());
+    await tester.pumpWidget(const PetNoteApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增提醒'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('标题'), findsOneWidget);
+    expect(find.text('关联爱宠'), findsOneWidget);
+    expect(find.text('时间'), findsOneWidget);
+    expect(find.text('提前通知'), findsOneWidget);
+    expect(find.text('重复规则'), findsNothing);
+    expect(find.text('补充说明'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '保存提醒'), findsOneWidget);
+    expect(find.text('主题'), findsNothing);
+    expect(find.text('执行意图'), findsNothing);
+    expect(find.text('跟进时间（可选）'), findsNothing);
+    expect(
+        find.byKey(const ValueKey('reminder_follow_up_field')), findsNothing);
+    expect(find.text('提前1天'), findsOneWidget);
+    expect(find.text('提前3天'), findsOneWidget);
+    expect(find.text('提前7天'), findsOneWidget);
+    expect(find.text('准时'), findsNothing);
+    expect(find.text('提前5分钟'), findsNothing);
+    expect(find.text('提前15分钟'), findsNothing);
+    expect(find.text('提前1小时'), findsNothing);
+
+    await tester.enterText(find.byType(TextField).first, '年度疫苗补打');
+    await tester.tap(find.widgetWithText(FilledButton, '保存提醒'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('add_sheet_shell')), findsNothing);
+
+    final prefs = await SharedPreferences.getInstance();
+    final remindersJson = prefs.getString('reminders_v1');
+    expect(remindersJson, isNotNull);
+    final decodedReminders = (jsonDecode(remindersJson!) as List)
+        .map((item) => Map<String, Object?>.from(item as Map))
+        .toList(growable: false);
+    expect(decodedReminders.first['title'], '年度疫苗补打');
+    expect(decodedReminders.first['kind'], 'vaccine');
+    expect(decodedReminders.first['recurrence'], '单次');
+    final semantic =
+        Map<String, Object?>.from(decodedReminders.first['semantic'] as Map);
+    expect(semantic['topicKey'], 'vaccine');
+    expect(semantic['intent'], 'administer');
   });
 
   testWidgets('expanded reminder form save button stays above the sheet bottom',

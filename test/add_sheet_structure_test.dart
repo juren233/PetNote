@@ -13,12 +13,22 @@ void main() {
       File('lib/app/add_sheet/forms/reminder_form.dart').readAsStringSync();
   final recordFormSource =
       File('lib/app/add_sheet/forms/record_form.dart').readAsStringSync();
+  final petEditSheetSource =
+      File('lib/app/pet_edit_sheet.dart').readAsStringSync();
 
   test(
       'add sheet relies on the system drag handle instead of rendering a duplicate one',
       () {
     expect(rootSource, contains('showDragHandle: true'));
     expect(sheetSource, isNot(contains('height: 5,')));
+  });
+
+  test(
+      'pet edit sheet relies on the system drag handle instead of rendering a duplicate one',
+      () {
+    expect(rootSource, contains('showDragHandle: true'));
+    expect(petEditSheetSource, isNot(contains('width: 52,')));
+    expect(petEditSheetSource, isNot(contains('height: 5,')));
   });
 
   test(
@@ -71,13 +81,41 @@ void main() {
   });
 
   test(
+      'todo and reminder forms use simplified core fields instead of semantic controls',
+      () {
+    for (final source in [todoFormSource, reminderFormSource]) {
+      expect(source, isNot(contains("SectionLabel(text: '主题')")));
+      expect(source, isNot(contains("SectionLabel(text: '执行意图')")));
+      expect(source, isNot(contains("SectionLabel(text: '跟进时间（可选）')")));
+      expect(source, isNot(contains('OptionalAdaptiveDateTimeField(')));
+      expect(source, isNot(contains('ChoiceWrap<SemanticTopicKey>(')));
+      expect(source, isNot(contains('ChoiceWrap<SemanticActionIntent>(')));
+    }
+    expect(todoFormSource, contains("SectionLabel(text: '标题')"));
+    expect(todoFormSource, contains("SectionLabel(text: '关联爱宠')"));
+    expect(todoFormSource, contains("SectionLabel(text: '时间')"));
+    expect(todoFormSource, contains("SectionLabel(text: '提前通知')"));
+    expect(todoFormSource, contains("SectionLabel(text: '补充说明')"));
+    expect(reminderFormSource, contains("SectionLabel(text: '标题')"));
+    expect(reminderFormSource, contains("SectionLabel(text: '关联爱宠')"));
+    expect(reminderFormSource, contains("SectionLabel(text: '时间')"));
+    expect(reminderFormSource, contains("SectionLabel(text: '提前通知')"));
+    expect(reminderFormSource, isNot(contains("SectionLabel(text: '重复规则')")));
+    expect(reminderFormSource, contains("SectionLabel(text: '补充说明')"));
+    expect(reminderFormSource, contains('NotificationLeadTime.threeDays'));
+    expect(reminderFormSource, contains('NotificationLeadTime.sevenDays'));
+  });
+
+  test(
       'record form uses simplified record purpose instead of semantic controls',
       () {
     expect(recordFormSource, contains('RecordPurpose'));
     expect(recordFormSource, contains('健康'));
     expect(recordFormSource, contains('生活'));
     expect(recordFormSource, contains('消费'));
+    expect(recordFormSource, contains('其他'));
     expect(recordFormSource, contains('record_summary_field'));
+    expect(recordFormSource, contains('record_custom_purpose_field'));
     expect(recordFormSource, isNot(contains('record_note_field')));
     expect(recordFormSource, isNot(contains("SectionLabel(text: '事实正文')")));
     expect(recordFormSource, contains('record_add_photo_hero_card'));

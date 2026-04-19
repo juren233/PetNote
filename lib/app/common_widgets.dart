@@ -803,6 +803,8 @@ class StatusListRow extends StatelessWidget {
     required this.leadingIconColor,
     this.trailing,
     this.leadingText,
+    this.leading,
+    this.onTap,
   });
 
   final String title;
@@ -812,32 +814,37 @@ class StatusListRow extends StatelessWidget {
   final Color leadingIconColor;
   final Widget? trailing;
   final String? leadingText;
+  final Widget? leading;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final effectiveLeading = leading ??
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: leadingBackgroundColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Center(
+            child: leadingText == null
+                ? Icon(leadingIcon, color: leadingIconColor)
+                : Text(
+                    leadingText!,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: leadingIconColor,
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+          ),
+        );
     return ListRow(
       title: title,
       subtitle: subtitle,
-      leading: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: leadingBackgroundColor,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Center(
-          child: leadingText == null
-              ? Icon(leadingIcon, color: leadingIconColor)
-              : Text(
-                  leadingText!,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: leadingIconColor,
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-        ),
-      ),
+      leading: effectiveLeading,
       trailing: trailing,
+      onTap: onTap,
     );
   }
 }
@@ -1173,17 +1180,19 @@ class ListRow extends StatelessWidget {
     required this.subtitle,
     this.leading,
     this.trailing,
+    this.onTap,
   });
 
   final String title;
   final String subtitle;
   final Widget? leading;
   final Widget? trailing;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.petNoteTokens;
-    return Container(
+    final content = Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: tokens.listRowBackground,
@@ -1224,6 +1233,19 @@ class ListRow extends StatelessWidget {
             trailing!,
           ],
         ],
+      ),
+    );
+
+    if (onTap == null) {
+      return content;
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: content,
       ),
     );
   }
