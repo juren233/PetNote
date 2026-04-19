@@ -53,6 +53,11 @@ class PetNoteIntroHapticsBridge(
         result: MethodChannel.Result,
     ) {
         when (call.method) {
+            "prepareIntroLaunchHaptics" -> {
+                Log.d(TAG, "Received prepareIntroLaunchHaptics")
+                result.success(null)
+            }
+
             "playIntroLaunchContinuous" -> {
                 Log.d(TAG, "Received playIntroLaunchContinuous")
                 playLaunchHaptics()

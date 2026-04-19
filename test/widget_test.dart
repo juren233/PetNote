@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -117,14 +118,15 @@ void main() {
     );
 
     await tester.pump();
+    expect(driver.events, <String>['prepare']);
     await tester.pump(const Duration(milliseconds: 260));
-    expect(driver.events, isEmpty);
+    expect(driver.events, <String>['prepare']);
 
     await tester.pump(const Duration(milliseconds: 220));
-    expect(driver.events, <String>['start']);
+    expect(driver.events, <String>['prepare', 'start']);
 
     await tester.pumpAndSettle();
-    expect(driver.events, <String>['start', 'stop']);
+    expect(driver.events, <String>['prepare', 'start', 'stop']);
   });
 
   testWidgets(
@@ -149,14 +151,15 @@ void main() {
     );
 
     await tester.pump();
+    expect(driver.events, <String>['prepare']);
     await tester.pump(const Duration(milliseconds: 260));
-    expect(driver.events, isEmpty);
+    expect(driver.events, <String>['prepare']);
 
     await tester.pump(const Duration(milliseconds: 220));
-    expect(driver.events, <String>['start']);
+    expect(driver.events, <String>['prepare', 'start']);
 
     await tester.pumpAndSettle();
-    expect(driver.events, <String>['start', 'stop']);
+    expect(driver.events, <String>['prepare', 'start', 'stop']);
   });
 
   testWidgets('intro stops active haptics if removed before launch paw settles',
@@ -191,12 +194,51 @@ void main() {
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 520));
-    expect(driver.events, <String>['start']);
+    expect(driver.events, <String>['prepare', 'start']);
 
     setVisible(() => visible = false);
     await tester.pump();
 
-    expect(driver.events, <String>['start', 'stop']);
+    expect(driver.events, <String>['prepare', 'start', 'stop']);
+  });
+
+  testWidgets(
+      'intro does not wait for launch haptics preparation to start animating',
+      (tester) async {
+    final prepareCompleter = Completer<void>();
+    final driver = _FakeIntroHapticsDriver(
+      prepareFutureFactory: () => prepareCompleter.future,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light).copyWith(
+          platform: TargetPlatform.iOS,
+        ),
+        home: Scaffold(
+          body: PetFirstLaunchIntro(
+            fillParent: false,
+            introHapticsDriver: driver,
+            onStartOnboarding: () async {},
+            onExploreFirst: () async {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    expect(driver.events, <String>['prepare']);
+    final initialPawTopLeft = tester.getTopLeft(
+      find.byKey(const ValueKey('intro_launch_paw_icon')),
+    );
+
+    await tester.pump(const Duration(milliseconds: 260));
+    final animatedPawTopLeft = tester.getTopLeft(
+      find.byKey(const ValueKey('intro_launch_paw_icon')),
+    );
+    expect(animatedPawTopLeft.dy, lessThan(initialPawTopLeft.dy));
+
+    prepareCompleter.complete();
   });
 
   testWidgets(
@@ -3424,7 +3466,21 @@ Finder _introHeroIconFinder() {
 }
 
 class _FakeIntroHapticsDriver implements IntroHapticsDriver {
+  _FakeIntroHapticsDriver({
+    this.prepareFutureFactory,
+  });
+
   final List<String> events = <String>[];
+  final Future<void> Function()? prepareFutureFactory;
+
+  @override
+  Future<void> prepareIntroLaunchHaptics() async {
+    events.add('prepare');
+    final prepareFutureFactory = this.prepareFutureFactory;
+    if (prepareFutureFactory != null) {
+      await prepareFutureFactory();
+    }
+  }
 
   @override
   Future<void> playIntroLaunchContinuous() async {

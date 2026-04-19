@@ -9,15 +9,14 @@ import 'package:petnote/app/common_widgets.dart';
 import 'package:petnote/app/ios_native_overview_range_button.dart';
 import 'package:petnote/app/layout_metrics.dart';
 import 'package:petnote/app/native_option_picker.dart';
-import 'package:petnote/app/overview_bottom_cta.dart';
 import 'package:petnote/app/pet_photo_widgets.dart';
 import 'package:petnote/app/navigation_palette.dart';
+import 'package:petnote/app/overview_bottom_cta.dart';
 import 'package:petnote/state/app_settings_controller.dart';
 import 'package:petnote/state/petnote_store.dart';
 
 part 'petnote_pages_overview.dart';
 part 'petnote_pages_pets.dart';
-part 'petnote_pages_pets_details.dart';
 part 'petnote_pages_me.dart';
 part 'petnote_pages_ai.dart';
 

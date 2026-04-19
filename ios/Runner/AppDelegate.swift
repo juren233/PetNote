@@ -7,42 +7,42 @@ import UIKit
 import UserNotifications
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-    
-    // Register custom plugins
-    if let registrar = self.registrar(forPlugin: "IosNativeDockPlugin") {
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IosNativeDockPlugin") {
       IosNativeDockPlugin.register(with: registrar)
     }
-    if let registrar = self.registrar(forPlugin: "PetNoteNotificationPlugin") {
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteNotificationPlugin") {
       PetNoteNotificationPlugin.register(with: registrar)
     }
-    if let registrar = self.registrar(forPlugin: "PetNoteAiSecretStorePlugin") {
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteAiSecretStorePlugin") {
       PetNoteAiSecretStorePlugin.register(with: registrar)
     }
-    if let registrar = self.registrar(forPlugin: "PetNoteDataPackageFileAccessPlugin") {
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteDataPackageFileAccessPlugin") {
       PetNoteDataPackageFileAccessPlugin.register(with: registrar)
     }
-    if let registrar = self.registrar(forPlugin: "PetNoteNativeOptionPickerPlugin") {
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteNativeOptionPickerPlugin") {
       PetNoteNativeOptionPickerPlugin.register(with: registrar)
     }
-    if let registrar = self.registrar(forPlugin: "PetNoteIntroHapticsPlugin") {
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteIntroHapticsPlugin") {
       PetNoteIntroHapticsPlugin.register(with: registrar)
     }
-    if let registrar = self.registrar(forPlugin: "IosNativeOverviewRangeButtonPlugin") {
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IosNativeOverviewRangeButtonPlugin") {
       IosNativeOverviewRangeButtonPlugin.register(with: registrar)
     }
     if #available(iOS 14.0, *),
-      let registrar = self.registrar(forPlugin: "PetNoteNativePetPhotoPickerPlugin")
+      let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteNativePetPhotoPickerPlugin")
     {
       PetNoteNativePetPhotoPickerPlugin.register(with: registrar)
     }
-    
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   override func application(
@@ -538,6 +538,14 @@ final class PetNoteIntroHapticsPlugin: NSObject, FlutterPlugin {
 
   private var engine: CHHapticEngine?
   private var activePlayer: CHHapticAdvancedPatternPlayer?
+  @available(iOS 13.0, *)
+  private var introLaunchPattern: CHHapticPattern?
+  @available(iOS 13.0, *)
+  private var introToOnboardingPattern: CHHapticPattern?
+  @available(iOS 13.0, *)
+  private var introPrimaryButtonTapPattern: CHHapticPattern?
+  @available(iOS 13.0, *)
+  private var preparedIntroLaunchPlayer: CHHapticAdvancedPatternPlayer?
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -550,6 +558,8 @@ final class PetNoteIntroHapticsPlugin: NSObject, FlutterPlugin {
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
+    case "prepareIntroLaunchHaptics":
+      prepareIntroLaunchHaptics(result: result)
     case "playIntroLaunchContinuous":
       playIntroLaunchContinuous(result: result)
     case "stopIntroLaunchContinuous":
@@ -565,6 +575,26 @@ final class PetNoteIntroHapticsPlugin: NSObject, FlutterPlugin {
     }
   }
 
+  private func prepareIntroLaunchHaptics(result: @escaping FlutterResult) {
+    guard #available(iOS 13.0, *), supportsHaptics else {
+      result(nil)
+      return
+    }
+
+    do {
+      _ = try prepareIntroLaunchPlayer()
+      result(nil)
+    } catch {
+      result(
+        FlutterError(
+          code: "platformError",
+          message: "Failed to prepare intro launch haptics.",
+          details: error.localizedDescription
+        )
+      )
+    }
+  }
+
   private func playIntroLaunchContinuous(result: @escaping FlutterResult) {
     guard #available(iOS 13.0, *), supportsHaptics else {
       result(nil)
@@ -572,10 +602,8 @@ final class PetNoteIntroHapticsPlugin: NSObject, FlutterPlugin {
     }
 
     do {
-      let engine = try prepareEngine()
       try stopActivePlayerIfNeeded()
-      let pattern = try makeIntroLaunchPattern()
-      let player = try engine.makeAdvancedPlayer(with: pattern)
+      let player = try prepareIntroLaunchPlayer()
       activePlayer = player
       try player.start(atTime: CHHapticTimeImmediate)
       result(nil)
@@ -619,7 +647,7 @@ final class PetNoteIntroHapticsPlugin: NSObject, FlutterPlugin {
     do {
       let engine = try prepareEngine()
       try stopActivePlayerIfNeeded()
-      let pattern = try makeIntroToOnboardingPattern()
+      let pattern = try cachedIntroToOnboardingPattern()
       let player = try engine.makeAdvancedPlayer(with: pattern)
       activePlayer = player
       try player.start(atTime: CHHapticTimeImmediate)
@@ -663,7 +691,7 @@ final class PetNoteIntroHapticsPlugin: NSObject, FlutterPlugin {
 
     do {
       let engine = try prepareEngine()
-      let pattern = try makeIntroPrimaryButtonTapPattern()
+      let pattern = try cachedIntroPrimaryButtonTapPattern()
       let player = try engine.makePlayer(with: pattern)
       try player.start(atTime: CHHapticTimeImmediate)
       result(nil)
@@ -693,12 +721,13 @@ final class PetNoteIntroHapticsPlugin: NSObject, FlutterPlugin {
     }
 
     let engine = try CHHapticEngine()
-    engine.isAutoShutdownEnabled = true
+    engine.isAutoShutdownEnabled = false
     engine.stoppedHandler = { [weak self] _ in
       self?.activePlayer = nil
     }
     engine.resetHandler = { [weak self] in
       self?.activePlayer = nil
+      self?.preparedIntroLaunchPlayer = nil
       self?.engine = nil
     }
     try engine.start()
@@ -713,6 +742,47 @@ final class PetNoteIntroHapticsPlugin: NSObject, FlutterPlugin {
     }
     try activePlayer.stop(atTime: CHHapticTimeImmediate)
     self.activePlayer = nil
+  }
+
+  @available(iOS 13.0, *)
+  private func prepareIntroLaunchPlayer() throws -> CHHapticAdvancedPatternPlayer {
+    let engine = try prepareEngine()
+    if let preparedIntroLaunchPlayer {
+      return preparedIntroLaunchPlayer
+    }
+    let player = try engine.makeAdvancedPlayer(with: try cachedIntroLaunchPattern())
+    preparedIntroLaunchPlayer = player
+    return player
+  }
+
+  @available(iOS 13.0, *)
+  private func cachedIntroLaunchPattern() throws -> CHHapticPattern {
+    if let introLaunchPattern {
+      return introLaunchPattern
+    }
+    let pattern = try makeIntroLaunchPattern()
+    introLaunchPattern = pattern
+    return pattern
+  }
+
+  @available(iOS 13.0, *)
+  private func cachedIntroToOnboardingPattern() throws -> CHHapticPattern {
+    if let introToOnboardingPattern {
+      return introToOnboardingPattern
+    }
+    let pattern = try makeIntroToOnboardingPattern()
+    introToOnboardingPattern = pattern
+    return pattern
+  }
+
+  @available(iOS 13.0, *)
+  private func cachedIntroPrimaryButtonTapPattern() throws -> CHHapticPattern {
+    if let introPrimaryButtonTapPattern {
+      return introPrimaryButtonTapPattern
+    }
+    let pattern = try makeIntroPrimaryButtonTapPattern()
+    introPrimaryButtonTapPattern = pattern
+    return pattern
   }
 
   @available(iOS 13.0, *)

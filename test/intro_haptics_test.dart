@@ -28,6 +28,22 @@ void main() {
     expect(recordedCall!.method, 'playIntroLaunchContinuous');
   });
 
+  test('prepareIntroLaunchHaptics invokes native intro haptics warmup',
+      () async {
+    MethodCall? recordedCall;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      recordedCall = call;
+      return null;
+    });
+
+    final driver = MethodChannelIntroHaptics(channel: channel);
+    await driver.prepareIntroLaunchHaptics();
+
+    expect(recordedCall, isNotNull);
+    expect(recordedCall!.method, 'prepareIntroLaunchHaptics');
+  });
+
   test('stopIntroLaunchContinuous invokes native intro haptics stop', () async {
     MethodCall? recordedCall;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

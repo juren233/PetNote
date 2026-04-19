@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 
 abstract class IntroHapticsDriver {
+  Future<void> prepareIntroLaunchHaptics();
+
   Future<void> playIntroLaunchContinuous();
 
   Future<void> stopIntroLaunchContinuous();
@@ -20,6 +22,17 @@ class MethodChannelIntroHaptics implements IntroHapticsDriver {
   static const String _channelName = 'petnote/intro_haptics';
 
   final MethodChannel _channel;
+
+  @override
+  Future<void> prepareIntroLaunchHaptics() async {
+    try {
+      await _channel.invokeMethod<void>('prepareIntroLaunchHaptics');
+    } on MissingPluginException {
+      // Ignore platforms without the native bridge.
+    } on PlatformException {
+      // Ignore transient haptics failures so intro animation stays smooth.
+    }
+  }
 
   @override
   Future<void> playIntroLaunchContinuous() async {

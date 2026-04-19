@@ -17,6 +17,7 @@ void main() {
     expect(
         source.contains('parameterID: .hapticSharpness, value: 0.15'), isTrue);
     expect(source.contains('duration: 0.40'), isTrue);
+    expect(source.contains('prepareIntroLaunchHaptics'), isTrue);
     expect(source.contains('playIntroToOnboardingContinuous'), isTrue);
     expect(source.contains('stopIntroToOnboardingContinuous'), isTrue);
     expect(source.contains('playIntroPrimaryButtonTap'), isTrue);

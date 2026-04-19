@@ -82,7 +82,6 @@ class _PetNoteRootState extends State<PetNoteRoot>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _overviewBottomCtaController = OverviewBottomCtaController();
     _overlayTransitionController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1100),
@@ -91,6 +90,7 @@ class _PetNoteRootState extends State<PetNoteRoot>
           setState(() {});
         }
       });
+    _overviewBottomCtaController = OverviewBottomCtaController();
     _loadStore();
   }
 
@@ -237,7 +237,7 @@ class _PetNoteRootState extends State<PetNoteRoot>
         !useNativeAndroidDock || _hasCompletedIntroBottomNavPrewarm;
     final useNativeIosDock =
         showBottomNavigation && supportsIosNativeDock(platform);
-    final bottomDock = !showBottomNavigation
+    final dockNavigation = !showBottomNavigation
         ? null
         : useNativeAndroidDock
             ? _buildAndroidNativeDock(
@@ -251,12 +251,12 @@ class _PetNoteRootState extends State<PetNoteRoot>
                     store: store,
                     onAdd: () => _openAddSheet(context, store),
                   );
-    final bottomNavigation = bottomDock == null
+    final bottomNavigation = dockNavigation == null
         ? null
         : _ShellBottomChrome(
             store: store,
             controller: _overviewBottomCtaController,
-            dock: bottomDock,
+            dock: dockNavigation,
           );
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlayStyle,
@@ -637,8 +637,8 @@ class _PetNoteBody extends StatefulWidget {
     required this.onSubmitOnboarding,
     required this.onDeferOnboarding,
     required this.onReturnToIntroFromOnboarding,
-    required this.overviewBottomCtaController,
     this.nativePetPhotoPicker,
+    required this.overviewBottomCtaController,
     this.bottomNavigationOverlay,
   });
 
@@ -664,8 +664,8 @@ class _PetNoteBody extends StatefulWidget {
   final Future<void> Function(PetOnboardingResult result) onSubmitOnboarding;
   final Future<void> Function() onDeferOnboarding;
   final VoidCallback? onReturnToIntroFromOnboarding;
-  final OverviewBottomCtaController overviewBottomCtaController;
   final NativePetPhotoPicker? nativePetPhotoPicker;
+  final OverviewBottomCtaController overviewBottomCtaController;
   final Widget? bottomNavigationOverlay;
 
   @override
@@ -900,6 +900,7 @@ class _PetNoteBodyState extends State<_PetNoteBody> {
               builder: (context) => OverviewPage(
                 store: widget.store,
                 onAddFirstPet: widget.onAddFirstPet,
+                bottomCtaController: widget.overviewBottomCtaController,
                 onOpenAiSettings: widget.settingsController == null ||
                         widget.aiSettingsCoordinator == null
                     ? null
@@ -912,7 +913,6 @@ class _PetNoteBodyState extends State<_PetNoteBody> {
                           ),
                         ),
                 aiInsightsService: widget.aiInsightsService,
-                bottomCtaController: widget.overviewBottomCtaController,
               ),
             ),
           AppTab.pets => _StoreDrivenPageHost(
@@ -922,6 +922,7 @@ class _PetNoteBodyState extends State<_PetNoteBody> {
                 store: widget.store,
                 onAddFirstPet: widget.onAddFirstPet,
                 onEditPet: widget.onEditPet,
+                aiInsightsService: widget.aiInsightsService,
               ),
             ),
           AppTab.me => _StoreDrivenPageHost(
@@ -1016,48 +1017,6 @@ class _StoreDrivenPageHostState extends State<_StoreDrivenPageHost> {
   @override
   Widget build(BuildContext context) {
     return widget.builder(context);
-  }
-}
-
-class _ShellBottomChrome extends StatelessWidget {
-  const _ShellBottomChrome({
-    required this.store,
-    required this.controller,
-    required this.dock,
-  });
-
-  final PetNoteStore store;
-  final OverviewBottomCtaController controller;
-  final Widget dock;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([store, controller]),
-      builder: (context, _) {
-        final state = controller.value;
-        final visibleState = overviewBottomCtaFallbackState(
-          store: store,
-          activeTab: store.activeTab,
-          syncedState: state,
-        );
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (visibleState != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: overviewBottomCtaHorizontalMargin,
-                ),
-                child: OverviewBottomCtaBar(state: visibleState),
-              ),
-            if (visibleState != null)
-              const SizedBox(height: overviewBottomCtaDockGap),
-            dock,
-          ],
-        );
-      },
-    );
   }
 }
 
@@ -1202,6 +1161,49 @@ class _PetNoteBottomNav extends StatelessWidget {
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+class _ShellBottomChrome extends StatelessWidget {
+  const _ShellBottomChrome({
+    required this.store,
+    required this.controller,
+    required this.dock,
+  });
+
+  final PetNoteStore store;
+  final OverviewBottomCtaController controller;
+  final Widget dock;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([store, controller]),
+      builder: (context, _) {
+        final ctaState = overviewBottomCtaFallbackState(
+          store: store,
+          activeTab: store.activeTab,
+          syncedState: controller.value,
+        );
+        final hasVisibleCta = ctaState?.visible ?? false;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasVisibleCta)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  overviewBottomCtaHorizontalMargin,
+                  0,
+                  overviewBottomCtaHorizontalMargin,
+                  overviewBottomCtaDockGap,
+                ),
+                child: OverviewBottomCtaBar(state: ctaState!),
+              ),
+            dock,
+          ],
         );
       },
     );

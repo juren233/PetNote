@@ -5,16 +5,16 @@ class OverviewPage extends StatefulWidget {
     super.key,
     required this.store,
     required this.onAddFirstPet,
+    required this.bottomCtaController,
     this.aiInsightsService,
     this.onOpenAiSettings,
-    this.bottomCtaController,
   });
 
   final PetNoteStore store;
   final VoidCallback onAddFirstPet;
+  final OverviewBottomCtaController bottomCtaController;
   final AiInsightsService? aiInsightsService;
   final FutureOr<void> Function()? onOpenAiSettings;
-  final OverviewBottomCtaController? bottomCtaController;
 
   @override
   State<OverviewPage> createState() => _OverviewPageState();
@@ -50,24 +50,11 @@ class _OverviewPageState extends State<OverviewPage> {
     if (!identical(oldWidget.aiInsightsService, widget.aiInsightsService)) {
       _refreshProviderAvailability();
     }
-    if (!identical(oldWidget.bottomCtaController, widget.bottomCtaController)) {
-      _scheduleBottomCtaClear(oldWidget.bottomCtaController);
-      final reportState = widget.store.overviewAiReportState;
-      _scheduleBottomCtaSync(
-        _buildBottomCtaState(
-          showGenerationSetup: _shouldShowOverviewGenerationSetup(reportState),
-          showGenerationError: _shouldShowOverviewGenerationError(reportState),
-          hasSelectedPets:
-              widget.store.overviewAnalysisConfig.selectedPetIds.isNotEmpty,
-        ),
-      );
-    }
   }
 
   @override
   void dispose() {
     _errorRetryButtonTimer?.cancel();
-    _scheduleBottomCtaClear(widget.bottomCtaController);
     super.dispose();
   }
 
@@ -175,62 +162,43 @@ class _OverviewPageState extends State<OverviewPage> {
     );
   }
 
+  void _scheduleBottomCtaSync(OverviewBottomCtaState? nextState) {
+    _bottomCtaSyncSerial += 1;
+    final syncSerial = _bottomCtaSyncSerial;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || syncSerial != _bottomCtaSyncSerial) {
+        return;
+      }
+      widget.bottomCtaController.update(nextState);
+    });
+  }
+
   OverviewBottomCtaState? _buildBottomCtaState({
     required bool showGenerationSetup,
     required bool showGenerationError,
     required bool hasSelectedPets,
   }) {
-    if (showGenerationError && !_showErrorRetryButton) {
+    if (showGenerationError) {
+      return OverviewBottomCtaState(
+        visible: _showErrorRetryButton,
+        enabled: true,
+        label: '返回重试',
+        icon: Icons.arrow_back_rounded,
+        onPressed: _returnToOverviewSetup,
+      );
+    }
+    if (!showGenerationSetup) {
       return null;
     }
-    if (!showGenerationSetup && !showGenerationError) {
-      return null;
-    }
-    final isErrorAction = showGenerationError;
-    final onPressed = isErrorAction
-        ? _returnToOverviewSetup
-        : _hasActiveProvider && hasSelectedPets
-            ? () => _generateCareReport(forceRefresh: false)
-            : null;
     return OverviewBottomCtaState(
       visible: true,
-      enabled: onPressed != null,
-      label: isErrorAction ? '返回重试' : '生成总览',
-      icon:
-          isErrorAction ? Icons.arrow_back_rounded : Icons.auto_awesome_rounded,
-      onPressed: onPressed,
+      enabled: _hasActiveProvider && hasSelectedPets,
+      label: '生成总览',
+      icon: Icons.auto_awesome_rounded,
+      onPressed: _hasActiveProvider && hasSelectedPets
+          ? () => _generateCareReport(forceRefresh: false)
+          : null,
     );
-  }
-
-  void _scheduleBottomCtaSync(OverviewBottomCtaState? state) {
-    final controller = widget.bottomCtaController;
-    if (controller == null) {
-      return;
-    }
-    final serial = ++_bottomCtaSyncSerial;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (serial != _bottomCtaSyncSerial) {
-        return;
-      }
-      if (!mounted) {
-        controller.clear();
-        return;
-      }
-      controller.update(state);
-    });
-  }
-
-  void _scheduleBottomCtaClear(OverviewBottomCtaController? controller) {
-    if (controller == null) {
-      return;
-    }
-    final serial = ++_bottomCtaSyncSerial;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (serial != _bottomCtaSyncSerial) {
-        return;
-      }
-      controller.clear();
-    });
   }
 
   bool _shouldShowOverviewGenerationSetup(

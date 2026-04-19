@@ -77,6 +77,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
   bool _isSecondaryNavigating = false;
   bool _hasReportedFirstPageAnimationsCompleted = false;
   bool _hasStartedLaunchAnimation = false;
+  bool _hasRequestedLaunchHapticsPreparation = false;
   bool _supportsIntroHaptics = false;
   bool _isLaunchHapticActive = false;
   bool _isOnboardingHapticActive = false;
@@ -182,6 +183,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
       duration: _finalPageFooterTimelineDuration,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybePrepareLaunchHaptics();
       _maybeStartLaunchAnimation();
     });
   }
@@ -217,6 +219,7 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
       unawaited(_stopOnboardingTransitionHaptics());
       return;
     }
+    _maybePrepareLaunchHaptics();
     _syncLaunchHapticsForProgress(_launchController.value);
     _syncOnboardingTransitionHaptics(widget.onboardingExitProgress);
   }
@@ -593,6 +596,14 @@ class _PetFirstLaunchIntroState extends State<PetFirstLaunchIntro>
 
   void _handleLaunchAnimationTick() {
     _syncLaunchHapticsForProgress(_launchController.value);
+  }
+
+  void _maybePrepareLaunchHaptics() {
+    if (!_supportsIntroHaptics || _hasRequestedLaunchHapticsPreparation) {
+      return;
+    }
+    _hasRequestedLaunchHapticsPreparation = true;
+    unawaited(_introHapticsDriver.prepareIntroLaunchHaptics());
   }
 
   void _syncLaunchHapticsForProgress(double progress) {
