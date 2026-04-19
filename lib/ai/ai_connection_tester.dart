@@ -68,8 +68,7 @@ class HttpClientAiHttpTransport implements AiHttpTransport {
         httpRequest.add(utf8.encode(requestBody));
       }
       final httpResponse = await httpRequest.close().timeout(timeout);
-      final responseBody =
-          await utf8.decoder.bind(httpResponse).join().timeout(timeout);
+      final responseBody = await _readResponseBody(httpResponse, timeout);
       return AiHttpResponse(
         statusCode: httpResponse.statusCode,
         body: responseBody,
@@ -77,6 +76,27 @@ class HttpClientAiHttpTransport implements AiHttpTransport {
     } finally {
       client.close(force: true);
     }
+  }
+
+  Future<String> _readResponseBody(
+    HttpClientResponse httpResponse,
+    Duration timeout,
+  ) {
+    final contentType = httpResponse.headers.contentType;
+    final mediaType = contentType?.mimeType.toLowerCase();
+    if (mediaType == 'text/event-stream') {
+      return _readEventStreamBody(httpResponse, timeout);
+    }
+    return utf8.decoder.bind(httpResponse).join().timeout(timeout);
+  }
+
+  Future<String> _readEventStreamBody(
+    HttpClientResponse httpResponse,
+    Duration timeout,
+  ) async {
+    final rawBody =
+        await utf8.decoder.bind(httpResponse).join().timeout(timeout);
+    return decodeSseToOpenAiChatCompletionBody(rawBody) ?? rawBody;
   }
 }
 
@@ -89,6 +109,7 @@ enum AiModelDiscoveryPolicy {
   required,
   optional,
   fallbackOnMethodNotAllowed,
+  skip,
 }
 
 class AiProviderRuntimeProfile {
@@ -129,14 +150,13 @@ AiProviderRuntimeProfile resolveAiProviderRuntimeProfile({
         strictProbeTimeout: Duration(seconds: 20),
       );
     case AiProviderType.openaiCompatible:
-      if (_looksLikeCloudflareWorkersAiUrl(baseUrl)) {
+      if (looksLikeCloudflareWorkersAiUrl(baseUrl)) {
         return const AiProviderRuntimeProfile(
           id: 'openai-compatible-cloudflare-workers-ai',
           providerType: AiProviderType.openaiCompatible,
           strictProbeKind: AiStrictProbeKind.openAiChatCompletions,
-          modelDiscoveryPolicy:
-              AiModelDiscoveryPolicy.fallbackOnMethodNotAllowed,
-          strictProbeTimeout: Duration(seconds: 20),
+          modelDiscoveryPolicy: AiModelDiscoveryPolicy.skip,
+          strictProbeTimeout: Duration(seconds: 60),
         );
       }
       final uri = Uri.tryParse(baseUrl);
@@ -156,11 +176,64 @@ AiProviderRuntimeProfile resolveAiProviderRuntimeProfile({
         modelDiscoveryPolicy: AiModelDiscoveryPolicy.optional,
         strictProbeTimeout: Duration(seconds: 20),
       );
+    case AiProviderType.cloudflareWorkersAi:
+      return const AiProviderRuntimeProfile(
+        id: 'cloudflare-workers-ai',
+        providerType: AiProviderType.cloudflareWorkersAi,
+        strictProbeKind: AiStrictProbeKind.openAiChatCompletions,
+        modelDiscoveryPolicy: AiModelDiscoveryPolicy.skip,
+        strictProbeTimeout: Duration(seconds: 60),
+      );
   }
 }
 
 bool aiProviderSupportsResponseFormat(AiProviderType providerType) {
   return providerType != AiProviderType.anthropic;
+}
+
+AiProviderType resolveEffectiveAiProviderType(
+  AiProviderType providerType, {
+  String? baseUrl,
+}) {
+  return providerType == AiProviderType.openaiCompatible &&
+          baseUrl != null &&
+          looksLikeCloudflareWorkersAiUrl(baseUrl)
+      ? AiProviderType.cloudflareWorkersAi
+      : providerType;
+}
+
+int? aiProviderDefaultMaxTokens(
+  AiProviderType providerType, {
+  String? baseUrl,
+  String? model,
+}) {
+  final effectiveProviderType = resolveEffectiveAiProviderType(
+    providerType,
+    baseUrl: baseUrl,
+  );
+  return switch (effectiveProviderType) {
+    AiProviderType.cloudflareWorkersAi => 4096,
+    _ => null,
+  };
+}
+
+int? aiProviderStrictProbeMaxTokens(AiProviderType providerType) {
+  return switch (providerType) {
+    AiProviderType.cloudflareWorkersAi => 1024,
+    _ => null,
+  };
+}
+
+int? aiProviderStrictProbeMaxTokensForConfig(
+  AiProviderType providerType, {
+  String? baseUrl,
+  String? model,
+}) {
+  final effectiveProviderType = resolveEffectiveAiProviderType(
+    providerType,
+    baseUrl: baseUrl,
+  );
+  return aiProviderStrictProbeMaxTokens(effectiveProviderType);
 }
 
 AiHttpRequest buildAiConversationRequest({
@@ -171,12 +244,15 @@ AiHttpRequest buildAiConversationRequest({
   required String systemPrompt,
   required String userPrompt,
   required bool useStructuredOutput,
+  int? maxTokens,
+  bool stream = false,
   Duration? timeout,
 }) {
   final normalizedBaseUrl = normalizeAiBaseUrl(baseUrl);
   switch (providerType) {
     case AiProviderType.openai:
     case AiProviderType.openaiCompatible:
+    case AiProviderType.cloudflareWorkersAi:
       final body = <String, dynamic>{
         'model': model,
         'messages': [
@@ -191,18 +267,24 @@ AiHttpRequest buildAiConversationRequest({
         ],
         'temperature': 0.2,
       };
+      if (maxTokens != null) {
+        body['max_tokens'] = maxTokens;
+      }
       if (useStructuredOutput &&
           aiProviderSupportsResponseFormat(providerType)) {
         body['response_format'] = const {
           'type': 'json_object',
         };
       }
+      if (stream) {
+        body['stream'] = true;
+      }
       return AiHttpRequest(
         method: 'POST',
         uri: Uri.parse('$normalizedBaseUrl/chat/completions'),
         headers: {
           'Authorization': 'Bearer $apiKey',
-          'Accept': 'application/json',
+          'Accept': stream ? 'text/event-stream' : 'application/json',
           'Content-Type': 'application/json',
         },
         body: jsonEncode(body),
@@ -246,6 +328,47 @@ bool looksLikeStructuredOutputUnsupportedResponse(AiHttpResponse response) {
       message.contains('structured output');
 }
 
+bool shouldRetryOpenAiCompatibleWithStreamResponse({
+  required AiProviderType providerType,
+  required AiHttpResponse response,
+}) {
+  if (providerType != AiProviderType.openaiCompatible &&
+      providerType != AiProviderType.cloudflareWorkersAi) {
+    return false;
+  }
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    return false;
+  }
+  final decoded = tryDecodeAiJson(response.body);
+  if (decoded is! Map<String, dynamic>) {
+    return false;
+  }
+  final choices = decoded['choices'];
+  if (choices is! List || choices.isEmpty) {
+    return false;
+  }
+  final firstChoice = choices.first;
+  if (firstChoice is! Map) {
+    return false;
+  }
+  final message = firstChoice['message'];
+  if (message is! Map) {
+    return false;
+  }
+  final finishReason = firstChoice['finish_reason'];
+  final normalizedFinishReason =
+      finishReason is String ? finishReason.trim().toLowerCase() : null;
+  if (normalizedFinishReason == 'length' ||
+      normalizedFinishReason == 'max_tokens') {
+    return false;
+  }
+  final content = tryExtractAiResponseTextContent(
+    providerType: providerType,
+    decoded: decoded,
+  );
+  return content == null;
+}
+
 String? extractAiErrorMessage(String rawBody) {
   final decoded = tryDecodeAiJson(rawBody);
   if (decoded is! Map<String, dynamic>) {
@@ -282,6 +405,7 @@ String? tryExtractAiResponseTextContent({
   switch (providerType) {
     case AiProviderType.openai:
     case AiProviderType.openaiCompatible:
+    case AiProviderType.cloudflareWorkersAi:
       final choices = decoded['choices'];
       if (choices is! List || choices.isEmpty) {
         return null;
@@ -312,6 +436,77 @@ String? tryExtractAiResponseTextContent({
       final text = buffer.toString().trim();
       return text.isEmpty ? null : text;
   }
+}
+
+String? decodeSseToOpenAiChatCompletionBody(String rawBody) {
+  final lines = LineSplitter.split(rawBody);
+  final contentBuffer = StringBuffer();
+  String? role;
+  String? finishReason;
+  String? model;
+  int? created;
+  String? id;
+
+  for (final rawLine in lines) {
+    final line = rawLine.trim();
+    if (!line.startsWith('data:')) {
+      continue;
+    }
+    final payload = line.substring(5).trim();
+    if (payload.isEmpty || payload == '[DONE]') {
+      continue;
+    }
+    final decoded = tryDecodeAiJson(payload);
+    if (decoded is! Map<String, dynamic>) {
+      continue;
+    }
+    id ??= decoded['id'] as String?;
+    model ??= decoded['model'] as String?;
+    created ??= decoded['created'] as int?;
+    final choices = decoded['choices'];
+    if (choices is! List || choices.isEmpty) {
+      continue;
+    }
+    final firstChoice = choices.first;
+    if (firstChoice is! Map) {
+      continue;
+    }
+    final delta = firstChoice['delta'];
+    if (delta is Map) {
+      role ??= delta['role'] as String?;
+      final deltaContent = delta['content'];
+      if (deltaContent is String) {
+        contentBuffer.write(deltaContent);
+      } else {
+        _appendTextContent(deltaContent, contentBuffer);
+      }
+    }
+    final chunkFinishReason = firstChoice['finish_reason'];
+    if (chunkFinishReason is String && chunkFinishReason.trim().isNotEmpty) {
+      finishReason = chunkFinishReason;
+    }
+  }
+
+  if (contentBuffer.isEmpty && role == null && finishReason == null) {
+    return null;
+  }
+
+  return jsonEncode({
+    'id': id ?? 'sse-decoded-response',
+    'object': 'chat.completion',
+    'created': created ?? 0,
+    'model': model ?? 'unknown',
+    'choices': [
+      {
+        'index': 0,
+        'message': {
+          'role': role ?? 'assistant',
+          'content': contentBuffer.toString(),
+        },
+        'finish_reason': finishReason ?? 'stop',
+      },
+    ],
+  });
 }
 
 Map<String, dynamic>? extractAiJsonObject(String text) {
@@ -458,6 +653,21 @@ class AiConnectionTester {
       details: 'baseUrl=$baseUrl',
     );
 
+    if (profile.modelDiscoveryPolicy == AiModelDiscoveryPolicy.skip) {
+      appLogController?.info(
+        category: AppLogCategory.ai,
+        title: 'AI 连接测试跳过模型列表探测',
+        message: '当前服务按兼容聊天接口直接探活。',
+        details: 'profile=${profile.id}',
+      );
+      return _probeStrictStructuredOutput(
+        profile: profile,
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: apiKey,
+      );
+    }
+
     try {
       final request = _buildModelDiscoveryRequest(
         providerType: providerType,
@@ -527,7 +737,10 @@ class AiConnectionTester {
     required String apiKey,
   }) {
     return switch (providerType) {
-      AiProviderType.openai || AiProviderType.openaiCompatible => AiHttpRequest(
+      AiProviderType.openai ||
+      AiProviderType.openaiCompatible ||
+      AiProviderType.cloudflareWorkersAi =>
+        AiHttpRequest(
           method: 'GET',
           uri: Uri.parse('$baseUrl/models'),
           headers: {
@@ -588,19 +801,25 @@ class AiConnectionTester {
 
     final decoded = tryDecodeAiJson(response.body);
     if (decoded is! Map<String, dynamic>) {
-      return const _ModelDiscoveryOutcome(
+      return _ModelDiscoveryOutcome(
         result: AiConnectionTestResult(
           status: AiConnectionStatus.invalidResponse,
-          message: '服务响应异常，未返回合法 JSON。',
+          message: _buildInvalidResponseMessage(
+            baseMessage: 'AI 端返回不是合法 JSON。',
+            responseBody: response.body,
+          ),
         ),
       );
     }
     final items = decoded['data'];
     if (items is! List) {
-      return const _ModelDiscoveryOutcome(
+      return _ModelDiscoveryOutcome(
         result: AiConnectionTestResult(
           status: AiConnectionStatus.invalidResponse,
-          message: '服务响应异常，未返回模型列表。',
+          message: _buildInvalidResponseMessage(
+            baseMessage: 'AI 端返回未包含模型列表。',
+            responseBody: response.body,
+          ),
         ),
       );
     }
@@ -631,6 +850,7 @@ class AiConnectionTester {
       profile.providerType,
     );
     var hasRetriedTransientFailure = false;
+    var useStream = false;
 
     while (true) {
       AiHttpResponse response;
@@ -642,6 +862,12 @@ class AiConnectionTester {
         systemPrompt: _probeSystemPrompt,
         userPrompt: _probeUserPrompt,
         useStructuredOutput: useStructuredOutput,
+        maxTokens: aiProviderStrictProbeMaxTokensForConfig(
+          profile.providerType,
+          baseUrl: baseUrl,
+          model: model,
+        ),
+        stream: useStream,
         timeout: profile.strictProbeTimeout,
       );
       try {
@@ -695,6 +921,21 @@ class AiConnectionTester {
         continue;
       }
 
+      if (!useStream &&
+          shouldRetryOpenAiCompatibleWithStreamResponse(
+            providerType: profile.providerType,
+            response: response,
+          )) {
+        useStream = true;
+        appLogController?.warning(
+          category: AppLogCategory.ai,
+          title: 'AI 连接测试流式重试',
+          message: '兼容服务非流式返回缺少正文，改用 stream=true 再探活一次。',
+          details: 'profile=${profile.id}',
+        );
+        continue;
+      }
+
       return _parseStrictProbeResponse(
         providerType: profile.providerType,
         response: response,
@@ -727,9 +968,12 @@ class AiConnectionTester {
 
     final decoded = tryDecodeAiJson(response.body);
     if (decoded is! Map<String, dynamic>) {
-      return const AiConnectionTestResult(
+      return AiConnectionTestResult(
         status: AiConnectionStatus.invalidResponse,
-        message: '服务响应异常，未返回合法 JSON。',
+        message: _buildInvalidResponseMessage(
+          baseMessage: 'AI 端返回不是合法 JSON。',
+          responseBody: response.body,
+        ),
       );
     }
 
@@ -738,9 +982,12 @@ class AiConnectionTester {
       decoded: decoded,
     );
     if (content == null) {
-      return const AiConnectionTestResult(
+      return AiConnectionTestResult(
         status: AiConnectionStatus.invalidResponse,
-        message: '服务响应异常，未返回文本内容。',
+        message: _buildInvalidResponseMessage(
+          baseMessage: 'AI 端返回未包含文本内容。',
+          responseBody: response.body,
+        ),
       );
     }
     if (extractAiJsonObject(content) == null) {
@@ -812,6 +1059,17 @@ class AiConnectionTester {
     }
     return '${trimmed.substring(0, 600)}…';
   }
+
+  String _buildInvalidResponseMessage({
+    required String baseMessage,
+    required String responseBody,
+  }) {
+    final preview = _previewResponseBody(responseBody);
+    if (preview == 'response body is empty') {
+      return baseMessage;
+    }
+    return '$baseMessage AI 端返回：$preview';
+  }
 }
 
 class _ModelDiscoveryOutcome {
@@ -824,7 +1082,7 @@ class _ModelDiscoveryOutcome {
   final bool shouldProbe;
 }
 
-bool _looksLikeCloudflareWorkersAiUrl(String baseUrl) {
+bool looksLikeCloudflareWorkersAiUrl(String baseUrl) {
   final uri = Uri.tryParse(baseUrl);
   if (uri == null) {
     return false;

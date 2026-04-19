@@ -121,4 +121,34 @@ void main() {
     expect(controller.aiProviderConfigs, hasLength(1));
     expect(controller.activeAiProviderConfig, isNull);
   });
+
+  test('persists cloudflare workers ai provider type and default base url',
+      () async {
+    final controller = await AppSettingsController.load();
+    final createdAt = DateTime.parse('2026-04-08T20:00:00+08:00');
+
+    await controller.upsertAiProviderConfig(
+      AiProviderConfig(
+        id: 'cfg-cloudflare-workers-ai',
+        displayName: 'Cloudflare Workers AI',
+        providerType: AiProviderType.cloudflareWorkersAi,
+        baseUrl: defaultBaseUrlForProvider(AiProviderType.cloudflareWorkersAi),
+        model: '@cf/meta/llama-3.1-8b-instruct-fast',
+        isActive: true,
+        createdAt: createdAt,
+        updatedAt: createdAt,
+      ),
+    );
+
+    final reloaded = await AppSettingsController.load();
+
+    expect(
+      reloaded.activeAiProviderConfig?.providerType,
+      AiProviderType.cloudflareWorkersAi,
+    );
+    expect(
+      reloaded.activeAiProviderConfig?.baseUrl,
+      defaultBaseUrlForProvider(AiProviderType.cloudflareWorkersAi),
+    );
+  });
 }

@@ -40,6 +40,18 @@ void main() {
     expect(receivedBody, contains('你是宠物日常照护助手'));
   });
 
+  test('invalid response status label avoids generic response exception copy',
+      () {
+    expect(
+      aiConnectionStatusLabel(AiConnectionStatus.invalidResponse),
+      'AI 端返回格式无法解析',
+    );
+    expect(
+      aiConnectionStatusLabel(AiConnectionStatus.invalidResponse),
+      isNot(contains('响应异常')),
+    );
+  });
+
   test('openai probe succeeds when configured model is listed', () async {
     final requestedUrls = <String>[];
     final tester = AiConnectionTester(
@@ -159,6 +171,8 @@ void main() {
     );
 
     expect(result.status, AiConnectionStatus.invalidResponse);
+    expect(result.message, contains('unexpected'));
+    expect(result.message, isNot(contains('响应异常')));
   });
 
   test(
@@ -181,6 +195,8 @@ void main() {
     );
 
     expect(result.status, AiConnectionStatus.invalidResponse);
+    expect(result.message, contains('gateway page'));
+    expect(result.message, isNot(contains('响应异常')));
   });
 
   test('retries with /v1 when root base url serves a non-api HTML page',
@@ -249,7 +265,7 @@ void main() {
   });
 
   test(
-      'cloudflare openai-compatible probe falls back to chat completions when models endpoint is unsupported',
+      'cloudflare openai-compatible probe skips models discovery and directly probes chat completions',
       () async {
     final requestedUrls = <String>[];
     final requestedMethods = <String>[];
@@ -311,13 +327,172 @@ void main() {
     expect(result.message, contains('正式生成较长报告'));
     expect(
       requestedUrls,
-      containsAll([
-        'https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1/models',
-        'https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1/chat/completions',
-      ]),
+      [
+        'https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1/chat/completions'
+      ],
     );
-    expect(requestedMethods, containsAll(['GET', 'POST']));
+    expect(requestedMethods, ['POST']);
     expect(requestedBodies.single['response_format'], isNotNull);
+  });
+
+  test(
+      'cloudflare workers ai provider uses explicit max_tokens for strict probe',
+      () async {
+    final requestedBodies = <Map<String, dynamic>>[];
+    final tester = AiConnectionTester(
+      transport: _FakeAiHttpTransport(
+        handler: (request) async {
+          if (request.uri.toString() ==
+                  'https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1/chat/completions' &&
+              request.method == 'POST') {
+            requestedBodies
+                .add(jsonDecode(request.body!) as Map<String, dynamic>);
+            return AiHttpResponse(
+              statusCode: 200,
+              body: jsonEncode({
+                'choices': [
+                  {
+                    'message': {
+                      'content': '{"ok":true}',
+                    },
+                  },
+                ],
+              }),
+            );
+          }
+          return const AiHttpResponse(statusCode: 404, body: '{}');
+        },
+      ),
+    );
+
+    final result = await tester.testConnection(
+      providerType: AiProviderType.cloudflareWorkersAi,
+      baseUrl:
+          'https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1',
+      model: '@cf/meta/llama-3.1-8b-instruct-fast',
+      apiKey: 'cf-test',
+    );
+
+    expect(result.status, AiConnectionStatus.success);
+    expect(requestedBodies, hasLength(1));
+    expect(requestedBodies.single['max_tokens'], greaterThanOrEqualTo(1024));
+    expect(requestedBodies.single['response_format'], isNotNull);
+  });
+
+  test('cloudflare workers ai strict probe uses an extended timeout budget',
+      () async {
+    final recordedTimeouts = <Duration?>[];
+    final tester = AiConnectionTester(
+      transport: _FakeAiHttpTransport(
+        handler: (request) async {
+          recordedTimeouts.add(request.timeout);
+          return AiHttpResponse(
+            statusCode: 200,
+            body: jsonEncode({
+              'choices': [
+                {
+                  'message': {
+                    'content': '{"ok":true}',
+                  },
+                },
+              ],
+            }),
+          );
+        },
+      ),
+    );
+
+    final result = await tester.testConnection(
+      providerType: AiProviderType.cloudflareWorkersAi,
+      baseUrl:
+          'https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1',
+      model: '@cf/google/gemma-4-26b-a4b-it',
+      apiKey: 'cf-test',
+    );
+
+    expect(result.status, AiConnectionStatus.success);
+    expect(recordedTimeouts, isNotEmpty);
+    expect(recordedTimeouts.single, const Duration(seconds: 60));
+  });
+
+  test(
+      'legacy cloudflare-compatible strict probe uses an extended timeout budget',
+      () async {
+    final recordedTimeouts = <Duration?>[];
+    final tester = AiConnectionTester(
+      transport: _FakeAiHttpTransport(
+        handler: (request) async {
+          recordedTimeouts.add(request.timeout);
+          return AiHttpResponse(
+            statusCode: 200,
+            body: jsonEncode({
+              'choices': [
+                {
+                  'message': {
+                    'content': '{"ok":true}',
+                  },
+                },
+              ],
+            }),
+          );
+        },
+      ),
+    );
+
+    final result = await tester.testConnection(
+      providerType: AiProviderType.openaiCompatible,
+      baseUrl:
+          'https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1',
+      model: '@cf/google/gemma-4-26b-a4b-it',
+      apiKey: 'cf-test',
+    );
+
+    expect(result.status, AiConnectionStatus.success);
+    expect(recordedTimeouts, isNotEmpty);
+    expect(recordedTimeouts.single, const Duration(seconds: 60));
+  });
+
+  test(
+      'legacy cloudflare-compatible strict probe also uses explicit max_tokens',
+      () async {
+    final requestedBodies = <Map<String, dynamic>>[];
+    final tester = AiConnectionTester(
+      transport: _FakeAiHttpTransport(
+        handler: (request) async {
+          if (request.uri.toString() ==
+                  'https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1/chat/completions' &&
+              request.method == 'POST') {
+            requestedBodies
+                .add(jsonDecode(request.body!) as Map<String, dynamic>);
+            return AiHttpResponse(
+              statusCode: 200,
+              body: jsonEncode({
+                'choices': [
+                  {
+                    'message': {
+                      'content': '{"ok":true}',
+                    },
+                  },
+                ],
+              }),
+            );
+          }
+          return const AiHttpResponse(statusCode: 404, body: '{}');
+        },
+      ),
+    );
+
+    final result = await tester.testConnection(
+      providerType: AiProviderType.openaiCompatible,
+      baseUrl:
+          'https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1',
+      model: '@cf/google/gemma-4-26b-a4b-it',
+      apiKey: 'cf-test',
+    );
+
+    expect(result.status, AiConnectionStatus.success);
+    expect(requestedBodies, hasLength(1));
+    expect(requestedBodies.single['max_tokens'], greaterThanOrEqualTo(1024));
   });
 
   test(
@@ -816,7 +991,7 @@ void main() {
     );
 
     expect(result.status, AiConnectionStatus.invalidResponse);
-    expect(result.message, contains('未返回文本内容'));
+    expect(result.message, contains('未包含文本内容'));
     expect(
       requestedUrls,
       containsAll([
@@ -824,6 +999,126 @@ void main() {
         'https://yybb.codes/v1/chat/completions',
       ]),
     );
+  });
+
+  test(
+      'openai-compatible probe falls back to stream when non-stream response has no content',
+      () async {
+    final requestedUrls = <String>[];
+    final requestedBodies = <Map<String, dynamic>>[];
+    final tester = AiConnectionTester(
+      transport: _FakeAiHttpTransport(
+        handler: (request) async {
+          requestedUrls.add(request.uri.toString());
+          if (request.uri.toString() == 'https://hk.yybb.codes/v1/models') {
+            return AiHttpResponse(
+              statusCode: 200,
+              body: jsonEncode({
+                'data': [
+                  {'id': 'gpt-5.4'},
+                ],
+              }),
+            );
+          }
+          if (request.uri.toString() ==
+                  'https://hk.yybb.codes/v1/chat/completions' &&
+              request.method == 'POST') {
+            final body = jsonDecode(request.body!) as Map<String, dynamic>;
+            requestedBodies.add(body);
+            if (requestedBodies.length == 1) {
+              expect(body['stream'], isNot(true));
+              return AiHttpResponse(
+                statusCode: 200,
+                body: jsonEncode({
+                  'choices': [
+                    {
+                      'index': 0,
+                      'message': {
+                        'role': 'assistant',
+                      },
+                      'finish_reason': 'stop',
+                    },
+                  ],
+                }),
+              );
+            }
+            expect(body['stream'], isTrue);
+            return AiHttpResponse(
+              statusCode: 200,
+              body: jsonEncode({
+                'choices': [
+                  {
+                    'message': {
+                      'content': '{"ok":true}',
+                    },
+                  },
+                ],
+              }),
+            );
+          }
+          return const AiHttpResponse(statusCode: 404, body: '{}');
+        },
+      ),
+    );
+
+    final result = await tester.testConnection(
+      providerType: AiProviderType.openaiCompatible,
+      baseUrl: 'https://hk.yybb.codes/v1',
+      model: 'gpt-5.4',
+      apiKey: 'sk-test',
+    );
+
+    expect(result.status, AiConnectionStatus.success);
+    expect(requestedBodies, hasLength(2));
+    expect(requestedBodies.first['response_format'], isNotNull);
+    expect(requestedBodies.last['stream'], isTrue);
+    expect(
+      requestedUrls,
+      containsAll([
+        'https://hk.yybb.codes/v1/models',
+        'https://hk.yybb.codes/v1/chat/completions',
+      ]),
+    );
+  });
+
+  test('invalid response message includes response body preview when available',
+      () async {
+    final tester = AiConnectionTester(
+      transport: _FakeAiHttpTransport(
+        handler: (request) async {
+          if (request.uri.toString() == 'https://api.openai.com/v1/models') {
+            return AiHttpResponse(
+              statusCode: 200,
+              body: jsonEncode({
+                'data': [
+                  {'id': 'gpt-5.4'},
+                ],
+              }),
+            );
+          }
+          if (request.uri.toString() ==
+                  'https://api.openai.com/v1/chat/completions' &&
+              request.method == 'POST') {
+            return const AiHttpResponse(
+              statusCode: 200,
+              body: '{"choices":[{"message":{"role":"assistant"}}]}',
+            );
+          }
+          return const AiHttpResponse(statusCode: 404, body: '{}');
+        },
+      ),
+    );
+
+    final result = await tester.testConnection(
+      providerType: AiProviderType.openai,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.4',
+      apiKey: 'sk-test',
+    );
+
+    expect(result.status, AiConnectionStatus.invalidResponse);
+    expect(result.message, contains('未包含文本内容'));
+    expect(result.message, contains('assistant'));
   });
 }
 

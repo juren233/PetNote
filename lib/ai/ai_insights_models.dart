@@ -899,33 +899,11 @@ class AiPetCareReport {
       throw const AiGenerationException('AI 返回的结构化结果缺少宠物标识。');
     }
     final score = _optionalInt(json['score']) ?? scorecard?.overallScore ?? 0;
-    final statusLabel = _optionalString(json['statusLabel']) ??
-        _optionalString(json['scoreLabel']) ??
-        scorecard?.overallScoreLabel ??
-        aiStatusLabelForScore(score);
-    final whyThisScore = _firstStringList(
-      json,
-      const ['whyThisScore', 'scoreReasons'],
-      fallback: scorecard?.scoreReasons,
-    );
-    final topPriority = _firstStringList(
-      json,
-      const ['topPriority', 'recommendedActions'],
-    );
-    final missedItems = _firstStringList(
-      json,
-      const ['missedItems', 'dataQualityNotes'],
-      fallback: scorecard?.dataQualityNotes,
-    );
-    final recentChanges = _firstStringList(
-      json,
-      const ['recentChanges', 'keyEvents'],
-      fallback: scorecard?.recentEventTitles,
-    );
-    final followUpPlan = _firstStringList(
-      json,
-      const ['followUpPlan', 'recommendedActions'],
-    );
+    final statusLabel = aiStatusLabelForScore(score);
+    final whyThisScore = _requiredStringList(json, 'whyThisScore');
+    final topPriority = _requiredStringList(json, 'topPriority');
+    final missedItems = _requiredStringList(json, 'missedItems');
+    final followUpPlan = _requiredStringList(json, 'followUpPlan');
     final summary = _firstString(
       json,
       const ['summary', 'careFocus'],
@@ -936,10 +914,7 @@ class AiPetCareReport {
       const ['careFocus'],
       fallback: topPriority.isNotEmpty ? topPriority.first : summary,
     );
-    final trendAnalysis = _firstStringList(
-      json,
-      const ['trendAnalysis', 'recentChanges'],
-    );
+    final trendAnalysis = _stringList(json['trendAnalysis']);
     final riskAssessment = _firstStringList(
       json,
       const ['riskAssessment', 'missedItems'],
@@ -948,22 +923,14 @@ class AiPetCareReport {
       petId: petId,
       petName: petName,
       score: score,
-      scoreLabel: _optionalString(json['scoreLabel']) ?? statusLabel,
+      scoreLabel: statusLabel,
       scoreConfidence: scorecard?.scoreConfidence ?? AiScoreConfidence.medium,
       summary: summary,
       careFocus: careFocus,
-      keyEvents: _firstStringList(
-        json,
-        const ['keyEvents', 'recentChanges'],
-        fallback: recentChanges,
-      ),
+      keyEvents: const <String>[],
       trendAnalysis: trendAnalysis,
       riskAssessment: riskAssessment,
-      recommendedActions: _firstStringList(
-        json,
-        const ['recommendedActions', 'followUpPlan', 'topPriority'],
-        fallback: followUpPlan,
-      ),
+      recommendedActions: followUpPlan,
       followUpFocus: _firstString(
         json,
         const ['followUpFocus'],
@@ -973,7 +940,7 @@ class AiPetCareReport {
       whyThisScore: whyThisScore,
       topPriority: topPriority,
       missedItems: missedItems,
-      recentChanges: recentChanges,
+      recentChanges: const <String>[],
       followUpPlan: followUpPlan,
     );
   }
@@ -1062,6 +1029,8 @@ class AiCareReport {
     required this.priorityActions,
     required this.dataQualityNotes,
     required this.perPetReports,
+    this.promptPayloadVersion = 'full',
+    this.promptPayloadVersionLabel = '全量原始版（100%）',
     this.statusLabel = '',
     this.oneLineSummary = '',
     this.recommendationRankings = const [],
@@ -1080,6 +1049,8 @@ class AiCareReport {
   final List<String> priorityActions;
   final List<String> dataQualityNotes;
   final List<AiPetCareReport> perPetReports;
+  final String promptPayloadVersion;
+  final String promptPayloadVersionLabel;
   final String statusLabel;
   final String oneLineSummary;
   final List<AiRecommendationRanking> recommendationRankings;
@@ -1102,6 +1073,8 @@ class AiCareReport {
       'priorityActions': priorityActions,
       'dataQualityNotes': dataQualityNotes,
       'perPetReports': perPetReports.map((item) => item.toJson()).toList(),
+      'promptPayloadVersion': promptPayloadVersion,
+      'promptPayloadVersionLabel': promptPayloadVersionLabel,
       'statusLabel': statusLabel,
       'oneLineSummary': oneLineSummary,
       'recommendationRankings':
@@ -1115,7 +1088,9 @@ class AiCareReport {
   }) {
     final rawPetReports = json['perPetReports'];
     if (rawPetReports is! List) {
-      throw const AiGenerationException('AI 返回的结构化结果缺少 perPetReports。');
+      throw const AiGenerationException(
+        'AI 返回了 JSON，但结构化输出不完整：缺少 perPetReports。根因更像模型未按 schema 输出，而不是本地解析丢失。',
+      );
     }
     final reportsByPetId = <String, Map<String, dynamic>>{};
     for (final item in rawPetReports) {
@@ -1134,7 +1109,7 @@ class AiCareReport {
             final rawReport = reportsByPetId[petScorecard.petId];
             if (rawReport == null) {
               throw AiGenerationException(
-                'AI 返回的结构化结果缺少 ${petScorecard.petName} 的专项报告。',
+                'AI 返回了 JSON，但结构化输出不完整：缺少 ${petScorecard.petName} 的专项报告。根因更像模型漏字段，而不是本地解析丢失。',
               );
             }
             return AiPetCareReport.fromJson(
@@ -1149,9 +1124,7 @@ class AiCareReport {
     );
     final overallScore =
         _optionalInt(json['overallScore']) ?? scorecard.overallScore;
-    final statusLabel = _optionalString(json['statusLabel']) ??
-        _optionalString(json['overallScoreLabel']) ??
-        scorecard.overallScoreLabel;
+    final statusLabel = aiStatusLabelForScore(overallScore);
     final priorityActions = _firstStringList(
       json,
       const ['priorityActions'],
@@ -1163,8 +1136,7 @@ class AiCareReport {
 
     return AiCareReport(
       overallScore: overallScore,
-      overallScoreLabel:
-          _optionalString(json['overallScoreLabel']) ?? statusLabel,
+      overallScoreLabel: statusLabel,
       scoreConfidence: scorecard.scoreConfidence,
       scoreBreakdown: scorecard.scoreBreakdown,
       scoreReasons: scorecard.scoreReasons,
@@ -1194,6 +1166,10 @@ class AiCareReport {
         fallback: scorecard.dataQualityNotes,
       ),
       perPetReports: perPetReports,
+      promptPayloadVersion:
+          _optionalString(json['promptPayloadVersion']) ?? 'full',
+      promptPayloadVersionLabel:
+          _optionalString(json['promptPayloadVersionLabel']) ?? '全量原始版（100%）',
       statusLabel: statusLabel,
       oneLineSummary: oneLineSummary,
       recommendationRankings: recommendationRankings,
@@ -1231,6 +1207,10 @@ class AiCareReport {
                   Map<String, dynamic>.from(item)))
               .toList(growable: false)
           : const <AiPetCareReport>[],
+      promptPayloadVersion:
+          _optionalString(json['promptPayloadVersion']) ?? 'full',
+      promptPayloadVersionLabel:
+          _optionalString(json['promptPayloadVersionLabel']) ?? '全量原始版（100%）',
       statusLabel: _optionalString(json['statusLabel']) ?? '',
       oneLineSummary: _optionalString(json['oneLineSummary']) ?? '',
       recommendationRankings: rawRecommendationRankings is List

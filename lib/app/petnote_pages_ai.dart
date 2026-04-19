@@ -93,6 +93,18 @@ List<Widget> _buildCareReportCards(AiCareReport report, List<Pet> pets) {
         reports: orderedPetReports,
         pets: pets,
       ),
+    Padding(
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 4),
+      child: Text(
+        '当前使用数据版：${report.promptPayloadVersionLabel}',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 12,
+          color: Color(0xFF8C8C8C),
+          height: 1.4,
+        ),
+      ),
+    ),
   ];
 }
 
@@ -1733,7 +1745,7 @@ class _AiPetDetailPanel extends StatelessWidget {
                 ),
           ),
           TitledBulletGroup(
-            title: '现在应该处理什么？',
+            title: '现在应该怎么做？',
             items: report.topPriority,
             topPadding: 16,
             titleStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -1753,17 +1765,7 @@ class _AiPetDetailPanel extends StatelessWidget {
                 ),
           ),
           TitledBulletGroup(
-            title: '最近有哪些变化？',
-            items: report.recentChanges,
-            topPadding: 16,
-            titleStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  height: 1.4,
-                  letterSpacing: -0.2,
-                ),
-          ),
-          TitledBulletGroup(
-            title: '后续怎么跟进？',
+            title: '后续要怎么跟进？',
             items: report.followUpPlan,
             topPadding: 16,
             titleStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(

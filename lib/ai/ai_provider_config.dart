@@ -4,6 +4,7 @@ enum AiProviderType {
   openai,
   anthropic,
   openaiCompatible,
+  cloudflareWorkersAi,
 }
 
 enum AiConnectionStatus {
@@ -121,6 +122,7 @@ class AiProviderConfig {
 AiProviderType aiProviderTypeFromName(String? value) => switch (value) {
       'anthropic' => AiProviderType.anthropic,
       'openaiCompatible' => AiProviderType.openaiCompatible,
+      'cloudflareWorkersAi' => AiProviderType.cloudflareWorkersAi,
       _ => AiProviderType.openai,
     };
 
@@ -139,6 +141,7 @@ String aiProviderLabel(AiProviderType providerType) => switch (providerType) {
       AiProviderType.openai => 'OpenAI',
       AiProviderType.anthropic => 'Anthropic',
       AiProviderType.openaiCompatible => '兼容 OpenAI',
+      AiProviderType.cloudflareWorkersAi => 'Cloudflare Workers AI',
     };
 
 String defaultBaseUrlForProvider(AiProviderType providerType) =>
@@ -146,7 +149,38 @@ String defaultBaseUrlForProvider(AiProviderType providerType) =>
       AiProviderType.openai => 'https://api.openai.com/v1',
       AiProviderType.anthropic => 'https://api.anthropic.com/v1',
       AiProviderType.openaiCompatible => '',
+      AiProviderType.cloudflareWorkersAi =>
+        'https://api.cloudflare.com/client/v4/accounts/<account_id>/ai/v1',
     };
+
+String cloudflareWorkersAiBaseUrlForAccountId(String accountId) {
+  final normalizedAccountId = accountId.trim();
+  return 'https://api.cloudflare.com/client/v4/accounts/'
+      '$normalizedAccountId/ai/v1';
+}
+
+String cloudflareWorkersAiAccountIdFromBaseUrl(String baseUrl) {
+  final normalizedBaseUrl = baseUrl.trim();
+  final uri = Uri.tryParse(normalizedBaseUrl);
+  if (uri == null) {
+    return normalizedBaseUrl;
+  }
+  final segments = uri.pathSegments;
+  final accountsIndex = segments.indexOf('accounts');
+  if (accountsIndex == -1 || accountsIndex + 1 >= segments.length) {
+    return normalizedBaseUrl;
+  }
+  final accountId = segments[accountsIndex + 1].trim();
+  return accountId == '<account_id>' ? '' : accountId;
+}
+
+bool isValidCloudflareWorkersAiAccountId(String value) {
+  final accountId = value.trim();
+  if (accountId.isEmpty) {
+    return false;
+  }
+  return RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(accountId);
+}
 
 String aiConnectionStatusLabel(AiConnectionStatus status) => switch (status) {
       AiConnectionStatus.unknown => '尚未测试连接',
@@ -155,7 +189,7 @@ String aiConnectionStatusLabel(AiConnectionStatus status) => switch (status) {
       AiConnectionStatus.unreachable => '服务地址不可达',
       AiConnectionStatus.modelUnavailable => '当前模型不可用',
       AiConnectionStatus.timeout => '连接超时',
-      AiConnectionStatus.invalidResponse => '服务响应异常',
+      AiConnectionStatus.invalidResponse => 'AI 端返回格式无法解析',
       AiConnectionStatus.unavailable => '当前平台安全存储不可用',
     };
 

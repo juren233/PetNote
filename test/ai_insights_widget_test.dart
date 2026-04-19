@@ -149,8 +149,9 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('为什么是这个分数？'), findsOneWidget);
+    expect(find.text('现在应该怎么做？'), findsOneWidget);
     expect(find.text('你漏了什么重要信息？'), findsOneWidget);
-    expect(find.text('后续怎么跟进？'), findsOneWidget);
+    expect(find.text('后续要怎么跟进？'), findsOneWidget);
     expect(find.text('Luna 的提醒和记录都在跟进，但耳道问题还缺最后一步复查闭环。'), findsOneWidget);
     expect(find.text('详细分析'), findsOneWidget);
     expect(find.text('Milo 的基础提醒基本稳定，但皮肤复查后的持续跟进还不够完整。'), findsNothing);
@@ -171,8 +172,9 @@ void main() {
     expect(find.text('Luna 的提醒和记录都在跟进，但耳道问题还缺最后一步复查闭环。'), findsNothing);
     expect(find.text('Milo 的基础提醒基本稳定，但皮肤复查后的持续跟进还不够完整。'), findsOneWidget);
     expect(find.text('为什么是这个分数？'), findsOneWidget);
+    expect(find.text('现在应该怎么做？'), findsOneWidget);
     expect(find.text('你漏了什么重要信息？'), findsOneWidget);
-    expect(find.text('后续怎么跟进？'), findsOneWidget);
+    expect(find.text('后续要怎么跟进？'), findsOneWidget);
   });
 
   testWidgets(
@@ -1379,6 +1381,30 @@ void main() {
     expect(refreshService.forceRefreshValues, <bool>[true]);
   });
 
+  testWidgets('overview page shows payload version note at the bottom of report',
+      (tester) async {
+    final store = PetNoteStore.seeded();
+    store.setActiveTab(AppTab.overview);
+    final service = _FakeAiInsightsService(
+      careReport: _buildDetailedCareReport(),
+      isConfigured: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: _OverviewTabHarness(store: store, service: service),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester
+        .tap(find.byKey(const ValueKey('overview-floating-generate-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前使用数据版：全量原始版（100%）'), findsOneWidget);
+  });
+
   testWidgets('overview page restores generation setup after switching back',
       (tester) async {
     final store = PetNoteStore.seeded();
@@ -1790,6 +1816,8 @@ AiCareReport _buildDetailedCareReport({
     overallScore: 86,
     overallScoreLabel: '稳定',
     scoreConfidence: AiScoreConfidence.high,
+    promptPayloadVersion: 'full',
+    promptPayloadVersionLabel: '全量原始版（100%）',
     statusLabel: '基本稳定',
     oneLineSummary: oneLineSummary,
     recommendationRankings: const [

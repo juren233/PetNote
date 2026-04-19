@@ -113,7 +113,7 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                               ListRow(
                                 title: '还没有任何 AI 配置',
                                 subtitle:
-                                    '你可以先添加 OpenAI、Anthropic 或兼容 OpenAI 的服务配置。',
+                                    '你可以先添加 OpenAI、Anthropic、Cloudflare Workers AI 或兼容 OpenAI 的服务配置。',
                               ),
                             ]
                           : configs
@@ -361,7 +361,7 @@ class _AiConfigEditorPageState extends State<AiConfigEditorPage> {
       text: initialConfig?.displayName ?? '',
     );
     _baseUrlController = TextEditingController(
-      text: initialConfig?.baseUrl ?? defaultBaseUrlForProvider(_providerType),
+      text: _initialEndpointInput(initialConfig),
     );
     _modelController = TextEditingController(text: initialConfig?.model ?? '');
     _apiKeyController = TextEditingController();
@@ -375,6 +375,41 @@ class _AiConfigEditorPageState extends State<AiConfigEditorPage> {
     _modelController.dispose();
     _apiKeyController.dispose();
     super.dispose();
+  }
+
+  bool get _usesCloudflareAccountIdInput {
+    return _providerType == AiProviderType.cloudflareWorkersAi;
+  }
+
+  String _initialEndpointInput(AiProviderConfig? initialConfig) {
+    if (initialConfig == null) {
+      return _providerType == AiProviderType.cloudflareWorkersAi
+          ? ''
+          : defaultBaseUrlForProvider(_providerType);
+    }
+    if (initialConfig.providerType == AiProviderType.cloudflareWorkersAi) {
+      return cloudflareWorkersAiAccountIdFromBaseUrl(initialConfig.baseUrl);
+    }
+    return initialConfig.baseUrl;
+  }
+
+  String _resolvedBaseUrl() {
+    final rawValue = _baseUrlController.text.trim();
+    if (_providerType == AiProviderType.cloudflareWorkersAi) {
+      return cloudflareWorkersAiBaseUrlForAccountId(rawValue);
+    }
+    return rawValue;
+  }
+
+  String _endpointLabel() {
+    return _usesCloudflareAccountIdInput ? 'Cloudflare Account ID' : 'Base URL';
+  }
+
+  String _endpointHintText() {
+    if (_providerType == AiProviderType.cloudflareWorkersAi) {
+      return '例如：你的 Cloudflare Account ID';
+    }
+    return '例如：https://api.openai.com/v1';
   }
 
   @override
@@ -407,11 +442,21 @@ class _AiConfigEditorPageState extends State<AiConfigEditorPage> {
                       hintText: '例如：OpenAI 主账号',
                     ),
                     const SizedBox(height: 14),
+                    SectionLabel(text: _endpointLabel()),
                     HyperTextField(
                       key: const ValueKey('ai_config_base_url_field'),
                       controller: _baseUrlController,
-                      hintText: '例如：https://api.openai.com/v1',
+                      hintText: _endpointHintText(),
                     ),
+                    if (_usesCloudflareAccountIdInput) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '只需要填写 Cloudflare Account ID，App 会自动拼接官方 Workers AI 地址。',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: tokens.secondaryText,
+                            ),
+                      ),
+                    ],
                     const SizedBox(height: 14),
                     HyperTextField(
                       key: const ValueKey('ai_config_model_field'),
@@ -530,7 +575,7 @@ class _AiConfigEditorPageState extends State<AiConfigEditorPage> {
     try {
       final result = await widget.coordinator.testConnection(
         providerType: _providerType,
-        baseUrl: _baseUrlController.text.trim(),
+        baseUrl: _resolvedBaseUrl(),
         model: _modelController.text.trim(),
         apiKey: _apiKeyController.text.trim(),
         existingConfigId: widget.initialConfig?.id,
@@ -605,32 +650,39 @@ class _AiConfigEditorPageState extends State<AiConfigEditorPage> {
       builder: (context) {
         return SafeArea(
           top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            child: Column(
-              key: const ValueKey('ai_provider_bottom_sheet'),
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '选择供应商类型',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: tokens.primaryText,
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                ...AiProviderType.values.map(
-                  (providerType) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _FlutterProviderOptionTile(
-                      providerType: providerType,
-                      selected: providerType == _providerType,
-                      onTap: () => Navigator.of(context).pop(providerType),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.75,
+            ),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                child: Column(
+                  key: const ValueKey('ai_provider_bottom_sheet'),
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '选择供应商类型',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: tokens.primaryText,
+                            fontWeight: FontWeight.w800,
+                          ),
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    ...AiProviderType.values.map(
+                      (providerType) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _FlutterProviderOptionTile(
+                          providerType: providerType,
+                          selected: providerType == _providerType,
+                          onTap: () => Navigator.of(context).pop(providerType),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         );
@@ -640,14 +692,24 @@ class _AiConfigEditorPageState extends State<AiConfigEditorPage> {
 
   void _applyProviderTypeSelection(AiProviderType value) {
     final previousProviderType = _providerType;
-    final previousDefaultBaseUrl =
-        defaultBaseUrlForProvider(previousProviderType);
-    final nextDefaultBaseUrl = defaultBaseUrlForProvider(value);
+    final previousDefaultInput =
+        previousProviderType == AiProviderType.cloudflareWorkersAi
+            ? ''
+            : defaultBaseUrlForProvider(previousProviderType);
+    final nextDefaultInput = value == AiProviderType.cloudflareWorkersAi
+        ? ''
+        : defaultBaseUrlForProvider(value);
     setState(() {
       _providerType = value;
       final currentBaseUrl = _baseUrlController.text.trim();
-      if (currentBaseUrl.isEmpty || currentBaseUrl == previousDefaultBaseUrl) {
-        _baseUrlController.text = nextDefaultBaseUrl;
+      final shouldReplaceCloudflareAccountId =
+          previousProviderType == AiProviderType.cloudflareWorkersAi &&
+              value != AiProviderType.cloudflareWorkersAi &&
+              isValidCloudflareWorkersAiAccountId(currentBaseUrl);
+      if (currentBaseUrl.isEmpty || currentBaseUrl == previousDefaultInput) {
+        _baseUrlController.text = nextDefaultInput;
+      } else if (shouldReplaceCloudflareAccountId) {
+        _baseUrlController.text = nextDefaultInput;
       }
     });
   }
@@ -672,7 +734,7 @@ class _AiConfigEditorPageState extends State<AiConfigEditorPage> {
       id: initialConfig?.id ?? 'ai_${now.microsecondsSinceEpoch}',
       displayName: _displayNameController.text.trim(),
       providerType: _providerType,
-      baseUrl: _baseUrlController.text.trim(),
+      baseUrl: _resolvedBaseUrl(),
       model: _modelController.text.trim(),
       isActive: initialConfig?.isActive ?? true,
       createdAt: initialConfig?.createdAt ?? now,
@@ -702,14 +764,24 @@ class _AiConfigEditorPageState extends State<AiConfigEditorPage> {
     if (_displayNameController.text.trim().isEmpty) {
       return '请填写显示名称。';
     }
-    final baseUrl = _baseUrlController.text.trim();
-    if (baseUrl.isEmpty) {
+    final endpointInput = _baseUrlController.text.trim();
+    if (endpointInput.isEmpty) {
+      if (_providerType == AiProviderType.cloudflareWorkersAi) {
+        return '请填写 Cloudflare Account ID。';
+      }
       return _providerType == AiProviderType.openaiCompatible
           ? '兼容 OpenAI 的配置需要填写 Base URL。'
           : '请填写 Base URL。';
     }
+    if (_providerType == AiProviderType.cloudflareWorkersAi &&
+        !isValidCloudflareWorkersAiAccountId(endpointInput)) {
+      return '请填写合法的 Cloudflare Account ID。';
+    }
+    final baseUrl = _resolvedBaseUrl();
     if (!isValidAiBaseUrl(baseUrl)) {
-      return '请填写合法的 Base URL，例如 https://api.openai.com/v1 。';
+      return _providerType == AiProviderType.cloudflareWorkersAi
+          ? '生成的 Cloudflare Workers AI 地址无效，请检查 Account ID。'
+          : '请填写合法的 Base URL，例如 https://api.openai.com/v1 。';
     }
     if (_modelController.text.trim().isEmpty) {
       return '请填写模型名称。';

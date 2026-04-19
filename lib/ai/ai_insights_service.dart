@@ -28,6 +28,8 @@ abstract class AiInsightsService {
 
 class NetworkAiInsightsService implements AiInsightsService {
   static const Duration _generationRequestTimeout = Duration(seconds: 45);
+  static const Duration _cloudflareGenerationRequestTimeout =
+      Duration(seconds: 90);
   static const AiCareScorecardBuilder _scorecardBuilder =
       AiCareScorecardBuilder();
 
@@ -194,34 +196,55 @@ class NetworkAiInsightsService implements AiInsightsService {
     );
     for (var index = 0; index < promptPlans.length; index += 1) {
       final plan = promptPlans[index];
-      try {
-        final jsonObject = await _generateStructuredJson(
-          client: client,
-          systemPrompt: _careReportSystemPrompt,
-          userPrompt: plan.prompt,
-        );
-        return AiCareReport.fromJson(
-          jsonObject,
-          scorecard: scorecard,
-        );
-      } on _AiRetryableGenerationException catch (error) {
-        if (index == promptPlans.length - 1) {
-          throw const AiGenerationException(
-            '当前 AI 服务基础连接可用，但在生成较长专业报告时仍然超时或过载。请先切换到较短时间范围，或更换更稳定的模型/供应商后再试。',
+      final maxAttempts = plan.detailLevel == _CarePromptDetailLevel.full ? 2 : 1;
+      for (var attempt = 0; attempt < maxAttempts; attempt += 1) {
+        try {
+          final jsonObject = await _generateStructuredJson(
+            client: client,
+            systemPrompt: _careReportSystemPrompt,
+            userPrompt: plan.prompt,
           );
+          jsonObject['promptPayloadVersion'] = plan.detailLevel.name;
+          jsonObject['promptPayloadVersionLabel'] = plan.detailLevel.displayLabel;
+          return AiCareReport.fromJson(
+            jsonObject,
+            scorecard: scorecard,
+          );
+        } on _AiRetryableGenerationException catch (error) {
+          if (index == promptPlans.length - 1) {
+            throw AiGenerationException(
+              ' 已经尝试使用更轻量的上下文重试，但当前模型仍无法稳定完成总览生成。请先切换到较短时间范围，或更换更稳定的模型/供应商后再试。',
+            );
+          }
+          final nextPlan = promptPlans[index + 1];
+          appLogController?.warning(
+            category: AppLogCategory.ai,
+            title: 'AI 总览降载重试',
+            message: '当前服务在上下文下未稳定返回，改用上下文重试。',
+            details: error.message,
+          );
+          break;
+        } on AiGenerationException catch (error) {
+          if (_looksLikeRetryableSchemaGap(error) &&
+              _shouldRetrySamePayloadLevel(
+                plan: plan,
+                attempt: attempt,
+                maxAttempts: maxAttempts,
+              )) {
+            appLogController?.warning(
+              category: AppLogCategory.ai,
+              title: 'AI 总览缺字段同档重试',
+              message: '当前服务在上下文下漏了必填字段，先保持当前数据版重试。',
+              details: error.message,
+            );
+            continue;
+          }
+          rethrow;
         }
-        final nextPlan = promptPlans[index + 1];
-        appLogController?.warning(
-          category: AppLogCategory.ai,
-          title: 'AI 总览降载重试',
-          message: '当前服务在${plan.label}上下文下未稳定返回，改用${nextPlan.label}上下文重试。',
-          details: error.message,
-        );
       }
     }
     throw const AiGenerationException('AI 总览生成失败，请稍后重试。');
   }
-
   Future<AiVisitSummary> _generateVisitSummary(
     AiProviderClient client,
     AiGenerationContext context,
@@ -256,8 +279,19 @@ class NetworkAiInsightsService implements AiInsightsService {
     );
     final jsonObject = _extractJsonObject(content);
     if (jsonObject == null) {
+      if (_looksLikeLengthTruncatedResponse(
+        providerType: client.providerType,
+        rawBody: response.body,
+      )) {
+        throw const _AiRetryableGenerationException(
+          'AI 输出因长度限制被截断，已切换更轻量的上下文重试。',
+        );
+      }
       throw AiGenerationException(
-        _structuredJsonFailureMessage(client.providerType),
+        _buildInvalidAiContentMessage(
+          baseMessage: _structuredJsonFailureMessage(client.providerType),
+          rawContent: content,
+        ),
       );
     }
     return jsonObject;
@@ -277,6 +311,11 @@ class NetworkAiInsightsService implements AiInsightsService {
             useStructuredOutput: true,
           ),
         AiProviderType.openaiCompatible => _sendOpenAiCompatiblePrompt(
+            client: client,
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+          ),
+        AiProviderType.cloudflareWorkersAi => _sendOpenAiCompatiblePrompt(
             client: client,
             systemPrompt: systemPrompt,
             userPrompt: userPrompt,
@@ -366,11 +405,13 @@ class NetworkAiInsightsService implements AiInsightsService {
     required String systemPrompt,
     required String userPrompt,
   }) async {
+    var useStructuredOutput = true;
     var request = _buildOpenAiRequest(
       client: client,
       systemPrompt: systemPrompt,
       userPrompt: userPrompt,
-      useStructuredOutput: true,
+      useStructuredOutput: useStructuredOutput,
+      stream: false,
     );
     appLogController?.info(
       category: AppLogCategory.ai,
@@ -380,16 +421,37 @@ class NetworkAiInsightsService implements AiInsightsService {
     );
     var response = await _transport.send(request);
     if (_looksLikeStructuredOutputUnsupportedResponse(response)) {
+      useStructuredOutput = false;
       request = _buildOpenAiRequest(
         client: client,
         systemPrompt: systemPrompt,
         userPrompt: userPrompt,
-        useStructuredOutput: false,
+        useStructuredOutput: useStructuredOutput,
+        stream: false,
       );
       appLogController?.warning(
         category: AppLogCategory.ai,
         title: 'AI 请求降级重试',
         message: '当前兼容服务不支持 response_format，改用普通 JSON 提示词重试。',
+        details: '${request.method} ${request.uri}',
+      );
+      response = await _transport.send(request);
+    }
+    if (shouldRetryOpenAiCompatibleWithStreamResponse(
+      providerType: client.providerType,
+      response: response,
+    )) {
+      request = _buildOpenAiRequest(
+        client: client,
+        systemPrompt: systemPrompt,
+        userPrompt: userPrompt,
+        useStructuredOutput: useStructuredOutput,
+        stream: true,
+      );
+      appLogController?.warning(
+        category: AppLogCategory.ai,
+        title: 'AI 请求流式重试',
+        message: '兼容服务非流式返回缺少正文，改用 stream=true 重试。',
         details: '${request.method} ${request.uri}',
       );
       response = await _transport.send(request);
@@ -430,7 +492,7 @@ class NetworkAiInsightsService implements AiInsightsService {
           },
         ],
       }),
-      timeout: _generationRequestTimeout,
+      timeout: _generationRequestTimeoutFor(client),
     );
     appLogController?.info(
       category: AppLogCategory.ai,
@@ -454,6 +516,7 @@ class NetworkAiInsightsService implements AiInsightsService {
     required String systemPrompt,
     required String userPrompt,
     required bool useStructuredOutput,
+    bool stream = false,
   }) {
     final baseUrl = normalizeAiBaseUrl(client.baseUrl);
     final body = <String, dynamic>{
@@ -470,22 +533,42 @@ class NetworkAiInsightsService implements AiInsightsService {
       ],
       'temperature': 0.2,
     };
+    final maxTokens = aiProviderDefaultMaxTokens(
+      client.providerType,
+      baseUrl: client.baseUrl,
+      model: client.model,
+    );
+    if (maxTokens != null) {
+      body['max_tokens'] = maxTokens;
+    }
     if (useStructuredOutput) {
       body['response_format'] = const {
         'type': 'json_object',
       };
+    }
+    if (stream) {
+      body['stream'] = true;
     }
     return AiHttpRequest(
       method: 'POST',
       uri: Uri.parse('$baseUrl/chat/completions'),
       headers: {
         'Authorization': 'Bearer ${client.apiKey}',
-        'Accept': 'application/json',
+        'Accept': stream ? 'text/event-stream' : 'application/json',
         'Content-Type': 'application/json',
       },
       body: jsonEncode(body),
-      timeout: _generationRequestTimeout,
+      timeout: _generationRequestTimeoutFor(client),
     );
+  }
+
+  Duration _generationRequestTimeoutFor(AiProviderClient client) {
+    if (client.providerType == AiProviderType.cloudflareWorkersAi ||
+        client.providerType == AiProviderType.openaiCompatible &&
+            looksLikeCloudflareWorkersAiUrl(client.baseUrl)) {
+      return _cloudflareGenerationRequestTimeout;
+    }
+    return _generationRequestTimeout;
   }
 
   void _throwIfFailure(AiHttpResponse response) {
@@ -498,6 +581,7 @@ class NetworkAiInsightsService implements AiInsightsService {
     if (response.statusCode == 429) {
       throw const _AiRetryableGenerationException('AI 服务当前限流，请稍后再试。');
     }
+    final providerMessage = _extractErrorMessage(response.body);
     if (response.statusCode == 408 ||
         response.statusCode == 425 ||
         response.statusCode == 500 ||
@@ -505,11 +589,17 @@ class NetworkAiInsightsService implements AiInsightsService {
         response.statusCode == 503 ||
         response.statusCode == 504) {
       throw _AiRetryableGenerationException(
-        'AI 服务暂时不可用，服务返回 ${response.statusCode}。',
+        providerMessage == null || providerMessage.isEmpty
+            ? 'AI 服务暂时不可用，服务返回 ${response.statusCode}。'
+            : 'AI 服务暂时不可用：$providerMessage',
       );
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AiGenerationException('AI 服务暂时不可用，服务返回 ${response.statusCode}。');
+      throw AiGenerationException(
+        providerMessage == null || providerMessage.isEmpty
+            ? 'AI 服务暂时不可用，服务返回 ${response.statusCode}。'
+            : 'AI 服务返回错误：$providerMessage',
+      );
     }
   }
 
@@ -560,29 +650,74 @@ class NetworkAiInsightsService implements AiInsightsService {
   }) {
     final decoded = _tryDecodeJson(response.body);
     if (decoded is! Map<String, dynamic>) {
-      throw const AiGenerationException('AI 服务响应异常，未返回合法 JSON。');
+      if (providerType != AiProviderType.anthropic) {
+        final fallbackText =
+            _extractTextFromMalformedOpenAiResponse(response.body);
+        if (fallbackText != null && fallbackText.trim().isNotEmpty) {
+          return fallbackText.trim();
+        }
+        if (_looksLikeLengthTruncatedResponse(
+          providerType: providerType,
+          rawBody: response.body,
+        )) {
+          throw const _AiRetryableGenerationException(
+            'AI 输出因长度限制被截断，已切换更轻量的上下文重试。',
+          );
+        }
+      }
+      throw AiGenerationException(
+        _buildInvalidAiResponseMessage(
+          baseMessage: 'AI 端返回不是合法 JSON。',
+          responseBody: response.body,
+        ),
+      );
     }
 
     return switch (providerType) {
       AiProviderType.openai ||
-      AiProviderType.openaiCompatible =>
-        _extractOpenAiContent(decoded),
-      AiProviderType.anthropic => _extractAnthropicContent(decoded),
+      AiProviderType.openaiCompatible ||
+      AiProviderType.cloudflareWorkersAi =>
+        _extractOpenAiContent(providerType, decoded, response.body),
+      AiProviderType.anthropic =>
+        _extractAnthropicContent(decoded, response.body),
     };
   }
 
-  String _extractOpenAiContent(Map<String, dynamic> decoded) {
+  String _extractOpenAiContent(
+    AiProviderType providerType,
+    Map<String, dynamic> decoded,
+    String rawBody,
+  ) {
+    final providerMessage = _extractErrorMessage(rawBody);
     final choices = decoded['choices'];
     if (choices is! List || choices.isEmpty) {
-      throw const AiGenerationException('AI 服务响应异常，未返回聊天结果。');
+      throw AiGenerationException(
+        _buildInvalidAiResponseMessage(
+          baseMessage: 'AI 端返回未包含聊天结果。',
+          responseBody: rawBody,
+          providerMessage: providerMessage,
+        ),
+      );
     }
     final firstChoice = choices.first;
     if (firstChoice is! Map) {
-      throw const AiGenerationException('AI 服务响应异常，未返回聊天结果。');
+      throw AiGenerationException(
+        _buildInvalidAiResponseMessage(
+          baseMessage: 'AI 端返回未包含聊天结果。',
+          responseBody: rawBody,
+          providerMessage: providerMessage,
+        ),
+      );
     }
     final message = firstChoice['message'];
     if (message is! Map) {
-      throw const AiGenerationException('AI 服务响应异常，未返回聊天结果。');
+      throw AiGenerationException(
+        _buildInvalidAiResponseMessage(
+          baseMessage: 'AI 端返回未包含聊天结果。',
+          responseBody: rawBody,
+          providerMessage: providerMessage,
+        ),
+      );
     }
     final buffer = StringBuffer();
     _appendTextContent(message['content'], buffer);
@@ -590,13 +725,34 @@ class NetworkAiInsightsService implements AiInsightsService {
     if (text.isNotEmpty) {
       return text;
     }
-    throw const AiGenerationException('AI 服务响应异常，未返回文本内容。');
+    if (_looksLikeLengthTruncatedChoice(firstChoice)) {
+      throw const _AiRetryableGenerationException(
+        'AI 输出因长度限制被截断，已切换更轻量的上下文重试。',
+      );
+    }
+    throw AiGenerationException(
+      _buildInvalidAiResponseMessage(
+        baseMessage: providerType == AiProviderType.cloudflareWorkersAi
+            ? 'Cloudflare Workers AI 返回 stop，但没有正文内容，根因更像兼容层非流式聚合异常。'
+            : 'AI 端返回未包含文本内容，根因更像兼容层未返回正文。',
+        responseBody: rawBody,
+        providerMessage: providerMessage,
+      ),
+    );
   }
 
-  String _extractAnthropicContent(Map<String, dynamic> decoded) {
+  String _extractAnthropicContent(
+      Map<String, dynamic> decoded, String rawBody) {
+    final providerMessage = _extractErrorMessage(rawBody);
     final content = decoded['content'];
     if (content is! List || content.isEmpty) {
-      throw const AiGenerationException('AI 服务响应异常，未返回消息内容。');
+      throw AiGenerationException(
+        _buildInvalidAiResponseMessage(
+          baseMessage: 'AI 端返回未包含消息内容。',
+          responseBody: rawBody,
+          providerMessage: providerMessage,
+        ),
+      );
     }
     final buffer = StringBuffer();
     for (final item in content) {
@@ -606,7 +762,13 @@ class NetworkAiInsightsService implements AiInsightsService {
     }
     final text = buffer.toString().trim();
     if (text.isEmpty) {
-      throw const AiGenerationException('AI 服务响应异常，未返回文本内容。');
+      throw AiGenerationException(
+        _buildInvalidAiResponseMessage(
+          baseMessage: 'AI 端返回未包含文本内容。',
+          responseBody: rawBody,
+          providerMessage: providerMessage,
+        ),
+      );
     }
     return text;
   }
@@ -617,20 +779,42 @@ class NetworkAiInsightsService implements AiInsightsService {
       return direct;
     }
 
-    final fencedMatch =
-        RegExp(r'```(?:json)?\s*([\s\S]*?)```').firstMatch(text);
-    if (fencedMatch != null) {
-      final fenced = _tryDecodeJson(fencedMatch.group(1)!.trim());
+    for (final fencedMatch
+        in RegExp(r'```(?:json)?\s*([\s\S]*?)```').allMatches(text)) {
+      final fencedText = fencedMatch.group(1)!.trim();
+      final fenced = _tryDecodeJson(fencedText);
       if (fenced is Map<String, dynamic>) {
         return fenced;
       }
+      final nested = _extractJsonObjectFromText(fencedText);
+      if (nested != null) {
+        return nested;
+      }
     }
 
-    final startIndex = text.indexOf('{');
-    if (startIndex == -1) {
-      return null;
-    }
+    return _extractJsonObjectFromText(text);
+  }
 
+  Map<String, dynamic>? _extractJsonObjectFromText(String text) {
+    for (var startIndex = text.indexOf('{');
+        startIndex != -1;
+        startIndex = text.indexOf('{', startIndex + 1)) {
+      if (!_looksLikeJsonObjectStart(text, startIndex)) {
+        continue;
+      }
+      final candidate = _readBalancedJsonObject(text, startIndex);
+      if (candidate == null) {
+        continue;
+      }
+      final decoded = _tryDecodeJson(candidate);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+    }
+    return null;
+  }
+
+  String? _readBalancedJsonObject(String text, int startIndex) {
     var depth = 0;
     var inString = false;
     var escaped = false;
@@ -656,16 +840,31 @@ class NetworkAiInsightsService implements AiInsightsService {
       } else if (char == '}') {
         depth -= 1;
         if (depth == 0) {
-          final candidate = text.substring(startIndex, index + 1);
-          final decoded = _tryDecodeJson(candidate);
-          if (decoded is Map<String, dynamic>) {
-            return decoded;
-          }
-          return null;
+          return text.substring(startIndex, index + 1);
         }
       }
     }
     return null;
+  }
+
+  bool _looksLikeJsonObjectStart(String text, int startIndex) {
+    if (startIndex < 0 ||
+        startIndex >= text.length ||
+        text[startIndex] != '{') {
+      return false;
+    }
+    for (var index = startIndex + 1; index < text.length; index += 1) {
+      final char = text[index];
+      if (_isJsonWhitespace(char)) {
+        continue;
+      }
+      return char == '"' || char == '}';
+    }
+    return true;
+  }
+
+  bool _isJsonWhitespace(String char) {
+    return char == ' ' || char == '\n' || char == '\r' || char == '\t';
   }
 
   Object? _tryDecodeJson(String raw) {
@@ -710,7 +909,112 @@ class NetworkAiInsightsService implements AiInsightsService {
     }
   }
 
+  String? _extractTextFromMalformedOpenAiResponse(String rawBody) {
+    final content = _extractMalformedJsonStringField(
+      rawBody,
+      fieldName: 'content',
+    );
+    if (content != null && content.trim().isNotEmpty) {
+      return content;
+    }
+    final text = _extractMalformedJsonStringField(
+      rawBody,
+      fieldName: 'text',
+    );
+    if (text != null && text.trim().isNotEmpty) {
+      return text;
+    }
+    return null;
+  }
+
+  String? _extractMalformedJsonStringField(
+    String rawBody, {
+    required String fieldName,
+  }) {
+    final marker = '"$fieldName"';
+    var searchStart = 0;
+    while (searchStart < rawBody.length) {
+      final fieldIndex = rawBody.indexOf(marker, searchStart);
+      if (fieldIndex == -1) {
+        return null;
+      }
+      var cursor = fieldIndex + marker.length;
+      while (cursor < rawBody.length && _isJsonWhitespace(rawBody[cursor])) {
+        cursor += 1;
+      }
+      if (cursor >= rawBody.length || rawBody[cursor] != ':') {
+        searchStart = fieldIndex + marker.length;
+        continue;
+      }
+      cursor += 1;
+      while (cursor < rawBody.length && _isJsonWhitespace(rawBody[cursor])) {
+        cursor += 1;
+      }
+      if (cursor >= rawBody.length) {
+        return null;
+      }
+      if (rawBody.startsWith('null', cursor)) {
+        return null;
+      }
+      if (rawBody[cursor] != '"') {
+        searchStart = fieldIndex + marker.length;
+        continue;
+      }
+      return _readLenientJsonString(rawBody, cursor);
+    }
+    return null;
+  }
+
+  String? _readLenientJsonString(String rawBody, int openingQuoteIndex) {
+    final buffer = StringBuffer();
+    var index = openingQuoteIndex + 1;
+    var escaped = false;
+    while (index < rawBody.length) {
+      final char = rawBody[index];
+      if (escaped) {
+        if (char == 'u' && index + 4 < rawBody.length) {
+          final hex = rawBody.substring(index + 1, index + 5);
+          final codePoint = int.tryParse(hex, radix: 16);
+          if (codePoint != null) {
+            buffer.writeCharCode(codePoint);
+            index += 5;
+            escaped = false;
+            continue;
+          }
+        }
+        buffer.write(switch (char) {
+          'n' => '\n',
+          'r' => '\r',
+          't' => '\t',
+          'b' => '\b',
+          'f' => '\f',
+          '"' => '"',
+          '\\' => '\\',
+          '/' => '/',
+          _ => char,
+        });
+        escaped = false;
+        index += 1;
+        continue;
+      }
+      if (char == r'\') {
+        escaped = true;
+        index += 1;
+        continue;
+      }
+      if (char == '"') {
+        return buffer.toString();
+      }
+      buffer.write(char);
+      index += 1;
+    }
+    return buffer.toString();
+  }
+
   String _structuredJsonFailureMessage(AiProviderType providerType) {
+    if (providerType == AiProviderType.cloudflareWorkersAi) {
+      return 'Cloudflare Workers AI 返回的内容不是结构化 JSON，请检查该模型是否支持 JSON Mode，或适当增大输出长度。';
+    }
     if (providerType == AiProviderType.openaiCompatible) {
       return '当前兼容服务返回的内容不是结构化 JSON，请检查该服务是否支持 JSON 模式或更换模型。';
     }
@@ -727,25 +1031,131 @@ class NetworkAiInsightsService implements AiInsightsService {
     }
     return '${trimmed.substring(0, 800)}…';
   }
+
+  String _buildInvalidAiResponseMessage({
+    required String baseMessage,
+    required String responseBody,
+    String? providerMessage,
+  }) {
+    final normalizedProviderMessage = providerMessage?.trim();
+    if (normalizedProviderMessage != null &&
+        normalizedProviderMessage.isNotEmpty) {
+      return normalizedProviderMessage;
+    }
+    final preview = _previewText(responseBody);
+    if (preview == 'empty') {
+      return baseMessage;
+    }
+    return '$baseMessage AI 端返回：$preview';
+  }
+
+  String _buildInvalidAiContentMessage({
+    required String baseMessage,
+    required String rawContent,
+  }) {
+    final preview = _previewText(rawContent);
+    if (preview == 'empty') {
+      return baseMessage;
+    }
+    return '$baseMessage AI 端返回：$preview';
+  }
+
+  bool _looksLikeLengthTruncatedResponse({
+    required AiProviderType providerType,
+    required String rawBody,
+  }) {
+    if (providerType == AiProviderType.anthropic) {
+      return false;
+    }
+    final normalizedBody = rawBody.toLowerCase();
+    if (normalizedBody.contains('"finish_reason":"length"') ||
+        normalizedBody.contains('"finish_reason": "length"') ||
+        normalizedBody.contains('"stop_reason":"max_tokens"') ||
+        normalizedBody.contains('"stop_reason": "max_tokens"')) {
+      return true;
+    }
+    final decoded = _tryDecodeJson(rawBody);
+    if (decoded is! Map<String, dynamic>) {
+      final fallbackText = _extractTextFromMalformedOpenAiResponse(rawBody);
+      return fallbackText != null &&
+          _looksLikeIncompleteJsonObject(fallbackText);
+    }
+    final choices = decoded['choices'];
+    if (choices is! List || choices.isEmpty) {
+      return false;
+    }
+    final firstChoice = choices.first;
+    if (firstChoice is! Map) {
+      return false;
+    }
+    return _looksLikeLengthTruncatedChoice(firstChoice);
+  }
+
+  bool _looksLikeLengthTruncatedChoice(Map choice) {
+    final finishReason = choice['finish_reason'];
+    if (finishReason is String) {
+      final normalized = finishReason.trim().toLowerCase();
+      if (normalized == 'length' || normalized == 'max_tokens') {
+        return true;
+      }
+    }
+    final stopReason = choice['stop_reason'];
+    if (stopReason is String &&
+        stopReason.trim().toLowerCase() == 'max_tokens') {
+      return true;
+    }
+    final message = choice['message'];
+    if (message is Map) {
+      final buffer = StringBuffer();
+      _appendTextContent(message['content'], buffer);
+      if (_looksLikeIncompleteJsonObject(buffer.toString())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _looksLikeIncompleteJsonObject(String text) {
+    for (var startIndex = text.indexOf('{');
+        startIndex != -1;
+        startIndex = text.indexOf('{', startIndex + 1)) {
+      if (!_looksLikeJsonObjectStart(text, startIndex)) {
+        continue;
+      }
+      if (_readBalancedJsonObject(text, startIndex) == null) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 const String _careReportSystemPrompt = '''
-你是宠物日常照护分析助手。你只能基于给定数据做总结、风险关注和下一步建议，不能编造事实，不能输出诊断结论，也不能假装自己是兽医。
+你是宠物日常照护分析助手。你只能基于给定数据，从宠物当前状态、变化趋势、照护缺口和后续照护重点出发做总结、风险关注和下一步建议，不能编造事实，不能输出诊断结论，也不能假装自己是兽医。
 
 始终使用简体中文，输出必须是一个 JSON object，不能出现 Markdown、解释文字或代码块之外的额外内容。
 
 JSON schema:
 {
   "overallScore": 0,
-  "statusLabel": "必须严格遵守分数档位映射",
-  "oneLineSummary": "一句话总结，直接告诉用户当前最值得关注的结论",
-  "executiveSummary": "80-140字的完整自然段，概括当前周期执行质量、变化趋势和主要关注点",
+  "perPetReports": [
+    {
+      "petId": "必须与输入里的 petId 一致",
+      "petName": "必须与输入里的 petName 一致",
+      "score": 0,
+      "whyThisScore": ["为什么是这个分数"],
+      "topPriority": ["现在应该怎么做"],
+      "missedItems": ["你漏了什么重要信息"],
+      "followUpPlan": ["后续要怎么跟进"]
+    }
+  ],
+  "oneLineSummary": "一句话总结，直接概括宠物当前最值得关注的状态结论",
+  "executiveSummary": "60-100字的完整自然段，概括当前周期执行质量、变化趋势和主要关注点",
   "overallAssessment": ["1-3条总体判断"],
   "keyFindings": ["2-4条关键事实或发现"],
   "trendAnalysis": ["1-3条趋势分析"],
   "riskAssessment": ["0-4条风险说明，必须写清依据与建议"],
   "priorityActions": ["3-5条优先行动"],
-  "dataQualityNotes": ["1-3条关于样本量、记录完整度、可信度的说明"],
   "recommendationRankings": [
     {
       "rank": 1,
@@ -754,40 +1164,25 @@ JSON schema:
       "petNames": ["涉及的宠物名称"],
       "title": "建议标题",
       "summary": "为什么这条建议重要且紧急",
-      "suggestedAction": "用户下一步应该怎么做"
-    }
-  ],
-  "perPetReports": [
-    {
-      "petId": "必须与输入里的 petId 一致",
-      "petName": "必须与输入里的 petName 一致",
-      "score": 0,
-      "statusLabel": "必须严格遵守分数档位映射",
-      "whyThisScore": ["为什么是这个分数"],
-      "topPriority": ["当前最该处理什么"],
-      "missedItems": ["你漏了什么"],
-      "recentChanges": ["最近有哪些变化"],
-      "followUpPlan": ["后续怎么跟"],
-      "summary": "该宠物的完整自然段摘要，可与 whyThisScore 互相印证",
-      "careFocus": "一句本周期照护重点",
-      "keyEvents": ["2-4条关键事件"],
-      "trendAnalysis": ["1-3条趋势分析"],
-      "riskAssessment": ["0-3条风险说明"],
-      "recommendedActions": ["2-4条建议行动"],
-      "followUpFocus": "一句后续观察重点"
+      "suggestedAction": "围绕宠物当前状态与照护重点的下一步建议"
     }
   ]
 }
 
 约束:
+- 顶层必填字段固定为：overallScore、perPetReports、oneLineSummary、executiveSummary、overallAssessment、keyFindings、trendAnalysis、riskAssessment、priorityActions、recommendationRankings；缺少任何一个都视为输出不合格
+- recommendationRankings 中每一项都必须包含：rank、kind、petIds、petNames、title、summary、suggestedAction；没有内容也要返回空数组或保守表述，不能省略键名
+- perPetReports 中每一项都必须包含：petId、petName、score、whyThisScore、topPriority、missedItems、followUpPlan；没有内容也要返回空数组，不能省略键名
+- 输出前先逐项自检所有必填字段是否齐全、类型是否正确；如果发现缺字段，先补齐再结束输出
 - 你要基于输入事实自行给出全局总分和单宠物分数，不要引用不存在的数值
-- statusLabel 必须遵守固定档位：90-100=状态不错，80-89=状态还行，70-79=需要关注，60-69=急需关注，0-59=存在隐患
+- 先完整输出 perPetReports，再输出全局总结和 recommendationRankings，避免遗漏单宠物专项报告
 - recommendationRankings 必须按“重要且紧急”排序，数量至少为 max(5, 已选宠物数)
 - recommendationRankings 必须覆盖每只已选宠物；多宠物场景下每条建议都要在 petNames 中显式点名对应宠物
 - executiveSummary 不能是一句话简报，必须是紧凑但完整的短版摘要
 - 每一段结论都要引用输入中的事实、统计或时间范围，不准空泛
 - perPetReports 必须覆盖输入中的每一只宠物，且 petId/petName 不得串位
-- 单宠物详细分析必须围绕五个固定段落展开：为什么是这个分数、当前最该处理什么、你漏了什么、最近有哪些变化、后续怎么跟
+- 单宠物详细分析只围绕四个固定段落展开：为什么是这个分数、现在应该怎么做、你漏了什么重要信息、后续要怎么跟进；不要重复输出额外的小结字段，也不要把本地统计说明改写成额外段落
+- 所有结论与建议都要优先围绕宠物本身展开，例如宠物最近状态如何、当前更需要补什么照护、接下来该关注哪些变化；不要站在人类任务管理视角输出“主人应该如何监控、记得观察、记得打卡”这类空泛表述
 - 没有足够证据时，明确写“样本不足，仅供参考”或“建议继续观察”
 - 不要给用药剂量、诊断名称或确定性医疗结论
 - 所有字段都必须返回；没有内容时返回空数组或保守表述
@@ -824,22 +1219,9 @@ String _buildCareReportPrompt(
     detailLevel: detailLevel,
   );
   return '''
-请基于以下宠物照护上下文生成一份“高密度、能直接帮助用户决策”的短版 AI 总览。
+请基于以下逐宠物照护数据生成 AI 总览，并从 pets 数组自行归纳全局结论。
 
-分析目标:
-- 输出全局总分、全局状态语和一句话总结
-- 输出按重要且紧急排序的建议排行榜
-- 给出关键事实、风险依据和优先行动
-- 按宠物分别输出独立专项报告，并完成五段式详细分析
-
-已知规则:
-- 只能基于输入中的事实、缺口和规则模板判断，不要编造未提供的观察
-- 优先依据宠物档案、expectedCare、missingCare、recentSignals 和关键统计下结论
-- detailLevel 越低，说明这是为了提高生成稳定性而进行的降载版本，不要因为缺少细枝末节而编造内容
-- 建议排行榜必须先保证宠物覆盖，再按重要且紧急排序
-- detailLevel 越低，说明这是为了提高生成稳定性而进行的降载版本，不要因为缺少细枝末节而编造内容
-
-压缩上下文:
+上下文:
 ${jsonEncode(payload)}
 ''';
 }
@@ -872,6 +1254,7 @@ List<_CareReportPromptPlan> _buildCareReportPromptPlans(
             scorecard: scorecard,
             detailLevel: detailLevel,
           ),
+          detailLevel: detailLevel,
         ),
       )
       .toList(growable: false);
@@ -883,67 +1266,17 @@ Map<String, dynamic> _buildCareReportPayload(
   required _CarePromptDetailLevel detailLevel,
 }) {
   final config = detailLevel.config;
-  final summaryPackage = AiPortableSummaryBuilder().build(
-    title: context.title,
-    context: context,
-    generatedAt: context.rangeEnd,
-  );
   return {
-    'analysisConfig': {
+    'context': {
       'detailLevel': detailLevel.name,
       'title': context.title,
       'rangeLabel': context.rangeLabel,
       'rangeStart': context.rangeStart.toIso8601String(),
       'rangeEnd': context.rangeEnd.toIso8601String(),
       'rangeDays': context.rangeEnd.difference(context.rangeStart).inDays,
-      'selectedPetIds':
-          context.pets.map((pet) => pet.id).toList(growable: false),
       'selectedPetCount': context.pets.length,
       'languageTag': context.languageTag,
     },
-    'scoringGuidelines': {
-      'statusBands': const [
-        {'min': 90, 'max': 100, 'label': '状态不错'},
-        {'min': 80, 'max': 89, 'label': '状态还行'},
-        {'min': 70, 'max': 79, 'label': '需要关注'},
-        {'min': 60, 'max': 69, 'label': '急需关注'},
-        {'min': 0, 'max': 59, 'label': '存在隐患'},
-      ],
-      'scoringFocus': const [
-        '宠物特性决定的应做事项是否被安排和跟进',
-        '提醒和待办是否及时完成，逾期与跳过需要扣分',
-        '重点问题是否有连续记录和复查闭环',
-        '样本不足时要明确提示信息缺口，不要强行下结论',
-      ],
-      'recommendationRules': {
-        'sortBy': '重要且紧急',
-        'minimumCount': context.pets.length < 5 ? 5 : context.pets.length,
-        'mustCoverEverySelectedPet': true,
-        'mentionPetNamesWhenMultiplePets': context.pets.length > 1,
-      },
-      'globalEvidence': {
-        'todoStats': _countByName(
-          context.todos.map((item) => item.status.name),
-        ),
-        'reminderStats': _countByName(
-          context.reminders.map((item) => item.status.name),
-        ),
-        'recordStats': _countByName(
-          context.records.map((item) => item.type.name),
-        ),
-        'recentSignals': _buildGlobalRecentSignals(
-          context,
-          config: config,
-        ),
-        'riskSignals': scorecard.riskCandidates
-            .take(config.maxRiskCandidates)
-            .toList(growable: false),
-        'dataQualityNotes': scorecard.dataQualityNotes
-            .take(config.maxDataQualityNotes)
-            .toList(growable: false),
-      },
-    },
-    'summaryPackage': summaryPackage.toJson(),
     'pets': context.pets
         .map(
           (pet) => _buildPetPromptSnapshot(
@@ -985,167 +1318,18 @@ Map<String, dynamic> _buildPetPromptSnapshot(
       'allergies': _trimPromptText(pet.allergies, 50),
       'note': _trimPromptText(pet.note, 80),
     },
-    'expectedCare': _buildExpectedCare(
-      context,
-      pet: pet,
-      records: records,
-    ),
-    'missingCare': _buildMissingCare(
-      pet: pet,
-      todos: todos,
-      reminders: reminders,
-      records: records,
-      scorecard: scorecard,
-    ),
     'evidence': {
       'todoStats': _countByName(todos.map((item) => item.status.name)),
       'reminderStats': _countByName(reminders.map((item) => item.status.name)),
       'recordStats': _countByName(records.map((item) => item.type.name)),
-      'recentSignals': _buildPetRecentSignals(
-        pet: pet,
-        todos: todos,
-        reminders: reminders,
-        records: records,
-        config: config,
+      'todos': _sampleTodos(todos, keepRatio: config.itemKeepRatio),
+      'reminders': _sampleReminders(
+        reminders,
+        keepRatio: config.itemKeepRatio,
       ),
-      'riskSignals': scorecard.riskCandidates
-          .take(config.maxRiskCandidates)
-          .toList(growable: false),
-      'dataQualityNotes': scorecard.dataQualityNotes
-          .take(config.maxDataQualityNotes)
-          .toList(growable: false),
+      'records': _sampleRecords(records, keepRatio: config.itemKeepRatio),
     },
   };
-}
-
-List<String> _buildExpectedCare(
-  AiGenerationContext context, {
-  required Pet pet,
-  required List<PetRecord> records,
-}) {
-  final items = <String>{
-    '保持饮食、排便、精神状态等基础观察的连续记录',
-  };
-  final ageYears = _estimatePetAgeYears(context.rangeEnd, pet.birthday);
-  if (ageYears != null && ageYears < 1.5) {
-    items.add('按成长阶段持续关注疫苗、驱虫和体重变化');
-  }
-  if (ageYears != null && ageYears >= 7) {
-    items.add('关注老年期体重、活动量和定期检查安排');
-  }
-  if (pet.allergies.trim().isNotEmpty) {
-    items.add('围绕过敏相关饮食和症状变化补充观察记录');
-  }
-  if (pet.note.trim().isNotEmpty) {
-    items.add('围绕已知特性或既往备注问题做持续跟进');
-  }
-  final hasClinicalHistory = records.any(
-    (item) =>
-        item.type == PetRecordType.medical ||
-        item.type == PetRecordType.testResult,
-  );
-  if (hasClinicalHistory) {
-    items.add('针对既往医疗问题安排复查或后续观察闭环');
-  }
-  return items.toList(growable: false);
-}
-
-List<String> _buildMissingCare({
-  required Pet pet,
-  required List<TodoItem> todos,
-  required List<ReminderItem> reminders,
-  required List<PetRecord> records,
-  required AiPetCareScorecard scorecard,
-}) {
-  final items = <String>[];
-  final overdueTodos =
-      todos.where((item) => item.status == TodoStatus.overdue).length;
-  final skippedTodos =
-      todos.where((item) => item.status == TodoStatus.skipped).length;
-  final overdueReminders =
-      reminders.where((item) => item.status == ReminderStatus.overdue).length;
-  final skippedReminders =
-      reminders.where((item) => item.status == ReminderStatus.skipped).length;
-  if (overdueTodos > 0) {
-    items.add('${pet.name} 还有$overdueTodos条待办没有及时闭环');
-  }
-  if (skippedTodos > 0) {
-    items.add('${pet.name} 有$skippedTodos条待办被跳过，说明关键跟进可能缺口');
-  }
-  if (overdueReminders > 0) {
-    items.add('${pet.name} 有$overdueReminders条定期提醒未按时完成');
-  }
-  if (skippedReminders > 0) {
-    items.add('${pet.name} 有$skippedReminders条提醒被跳过，需要确认是否仍然必要');
-  }
-  if (records.isEmpty) {
-    items.add('${pet.name} 当前时间段缺少观察记录，难以判断真实状态');
-  }
-  if (pet.allergies.trim().isNotEmpty && records.isEmpty) {
-    items.add('${pet.name} 已知有过敏特性，但当前缺少相关跟进证据');
-  }
-  for (final candidate in scorecard.riskCandidates.take(2)) {
-    if (!items.contains(candidate)) {
-      items.add(candidate);
-    }
-  }
-  if (items.isEmpty) {
-    items.add('${pet.name} 当前没有明确缺口，但仍建议保持连续记录');
-  }
-  return items;
-}
-
-List<String> _buildGlobalRecentSignals(
-  AiGenerationContext context, {
-  required _CarePromptPayloadConfig config,
-}) {
-  final items = <String>[];
-  for (final todo in _sampleTodos(
-    context.todos,
-    maxItems: config.maxGlobalTodoSamples,
-  )) {
-    items.add('待办：${todo['title']}（${todo['status']}）');
-  }
-  for (final reminder in _sampleReminders(
-    context.reminders,
-    maxItems: config.maxGlobalReminderSamples,
-  )) {
-    items.add('提醒：${reminder['title']}（${reminder['status']}）');
-  }
-  for (final record in _sampleRecords(
-    context.records,
-    maxItems: config.maxGlobalRecordSamples,
-  )) {
-    items.add('记录：${record['title']}（${record['type']}）');
-  }
-  return items;
-}
-
-List<String> _buildPetRecentSignals({
-  required Pet pet,
-  required List<TodoItem> todos,
-  required List<ReminderItem> reminders,
-  required List<PetRecord> records,
-  required _CarePromptPayloadConfig config,
-}) {
-  final items = <String>[];
-  for (final todo
-      in _sampleTodos(todos, maxItems: config.maxPerPetTodoSamples)) {
-    items.add('${pet.name} 待办：${todo['title']}（${todo['status']}）');
-  }
-  for (final reminder in _sampleReminders(
-    reminders,
-    maxItems: config.maxPerPetReminderSamples,
-  )) {
-    items.add('${pet.name} 提醒：${reminder['title']}（${reminder['status']}）');
-  }
-  for (final record in _sampleRecords(
-    records,
-    maxItems: config.maxPerPetRecordSamples,
-  )) {
-    items.add('${pet.name} 记录：${record['title']}（${record['type']}）');
-  }
-  return items;
 }
 
 double? _estimatePetAgeYears(DateTime reference, String birthday) {
@@ -1170,7 +1354,7 @@ Map<String, int> _countByName(Iterable<String> values) {
 
 List<Map<String, dynamic>> _sampleTodos(
   List<TodoItem> todos, {
-  required int maxItems,
+  required double keepRatio,
 }) {
   final sampled = List<TodoItem>.from(todos)
     ..sort((a, b) {
@@ -1180,7 +1364,7 @@ List<Map<String, dynamic>> _sampleTodos(
       }
       return b.dueAt.compareTo(a.dueAt);
     });
-  return sampled.take(maxItems).map((todo) {
+  return _selectEvenly(sampled, keepRatio: keepRatio).map((todo) {
     return {
       'petId': todo.petId,
       'title': todo.title,
@@ -1193,7 +1377,7 @@ List<Map<String, dynamic>> _sampleTodos(
 
 List<Map<String, dynamic>> _sampleReminders(
   List<ReminderItem> reminders, {
-  required int maxItems,
+  required double keepRatio,
 }) {
   final sampled = List<ReminderItem>.from(reminders)
     ..sort((a, b) {
@@ -1204,7 +1388,7 @@ List<Map<String, dynamic>> _sampleReminders(
       }
       return b.scheduledAt.compareTo(a.scheduledAt);
     });
-  return sampled.take(maxItems).map((reminder) {
+  return _selectEvenly(sampled, keepRatio: keepRatio).map((reminder) {
     return {
       'petId': reminder.petId,
       'kind': reminder.kind.name,
@@ -1219,7 +1403,7 @@ List<Map<String, dynamic>> _sampleReminders(
 
 List<Map<String, dynamic>> _sampleRecords(
   List<PetRecord> records, {
-  required int maxItems,
+  required double keepRatio,
 }) {
   final sampled = List<PetRecord>.from(records)
     ..sort((a, b) {
@@ -1229,7 +1413,7 @@ List<Map<String, dynamic>> _sampleRecords(
       }
       return b.recordDate.compareTo(a.recordDate);
     });
-  return sampled.take(maxItems).map((record) {
+  return _selectEvenly(sampled, keepRatio: keepRatio).map((record) {
     return {
       'petId': record.petId,
       'type': record.type.name,
@@ -1239,6 +1423,61 @@ List<Map<String, dynamic>> _sampleRecords(
       'note': _trimPromptText(record.note, 100),
     };
   }).toList(growable: false);
+}
+
+List<T> _selectEvenly<T>(
+  List<T> items, {
+  required double keepRatio,
+}) {
+  if (items.isEmpty || keepRatio >= 1) {
+    return List<T>.from(items, growable: false);
+  }
+  final targetCount = (items.length * keepRatio).ceil().clamp(1, items.length);
+  if (targetCount >= items.length) {
+    return List<T>.from(items, growable: false);
+  }
+  final selected = <T>[];
+  final usedIndexes = <int>{};
+  final priorityCount = targetCount <= 2 ? 1 : 2;
+  for (var index = 0; index < priorityCount && index < items.length; index += 1) {
+    selected.add(items[index]);
+    usedIndexes.add(index);
+  }
+  if (selected.length >= targetCount) {
+    return selected.take(targetCount).toList(growable: false);
+  }
+  final remainingSlots = targetCount - selected.length;
+  final candidateIndexes = [
+    for (var index = priorityCount; index < items.length; index += 1) index,
+  ];
+  if (remainingSlots >= candidateIndexes.length) {
+    selected.addAll(candidateIndexes.map((index) => items[index]));
+    return selected.toList(growable: false);
+  }
+  if (remainingSlots == 1) {
+    final midIndex = candidateIndexes[(candidateIndexes.length - 1) ~/ 2];
+    selected.add(items[midIndex]);
+    return selected.toList(growable: false);
+  }
+  final lastPosition = candidateIndexes.length - 1;
+  for (var slot = 0; slot < remainingSlots; slot += 1) {
+    final rawIndex = (slot * lastPosition / (remainingSlots - 1)).round();
+    final candidateIndex = candidateIndexes[rawIndex];
+    if (usedIndexes.add(candidateIndex)) {
+      selected.add(items[candidateIndex]);
+    }
+  }
+  if (selected.length < targetCount) {
+    for (final candidateIndex in candidateIndexes) {
+      if (usedIndexes.add(candidateIndex)) {
+        selected.add(items[candidateIndex]);
+        if (selected.length >= targetCount) {
+          break;
+        }
+      }
+    }
+  }
+  return selected.toList(growable: false);
 }
 
 int _todoPriority(TodoItem item) => switch (item.status) {
@@ -1276,76 +1515,59 @@ String _trimPromptText(String value, int maxLength) {
   return '${trimmed.substring(0, maxLength)}…';
 }
 
+bool _looksLikeRetryableSchemaGap(AiGenerationException error) {
+  final message = error.message;
+  return message.contains('结构化输出不完整') ||
+      message.contains('模型未按 schema 输出') ||
+      message.contains('AI 返回的结构化结果缺少');
+}
+
+bool _shouldRetrySamePayloadLevel({
+  required _CareReportPromptPlan plan,
+  required int attempt,
+  required int maxAttempts,
+}) {
+  return plan.detailLevel == _CarePromptDetailLevel.full &&
+      attempt < maxAttempts - 1;
+}
+
 class _CareReportPromptPlan {
   const _CareReportPromptPlan({
     required this.label,
     required this.prompt,
+    required this.detailLevel,
   });
 
   final String label;
   final String prompt;
+  final _CarePromptDetailLevel detailLevel;
 }
 
 class _CarePromptPayloadConfig {
   const _CarePromptPayloadConfig({
-    required this.maxRiskCandidates,
-    required this.maxDataQualityNotes,
-    required this.maxGlobalTodoSamples,
-    required this.maxGlobalReminderSamples,
-    required this.maxGlobalRecordSamples,
-    required this.maxPerPetTodoSamples,
-    required this.maxPerPetReminderSamples,
-    required this.maxPerPetRecordSamples,
+    required this.itemKeepRatio,
   });
 
-  final int maxRiskCandidates;
-  final int maxDataQualityNotes;
-  final int maxGlobalTodoSamples;
-  final int maxGlobalReminderSamples;
-  final int maxGlobalRecordSamples;
-  final int maxPerPetTodoSamples;
-  final int maxPerPetReminderSamples;
-  final int maxPerPetRecordSamples;
+  final double itemKeepRatio;
 }
 
 enum _CarePromptDetailLevel {
-  standard(
-    '标准',
+  full(
+    '全量原始版',
     _CarePromptPayloadConfig(
-      maxRiskCandidates: 8,
-      maxDataQualityNotes: 4,
-      maxGlobalTodoSamples: 12,
-      maxGlobalReminderSamples: 12,
-      maxGlobalRecordSamples: 16,
-      maxPerPetTodoSamples: 8,
-      maxPerPetReminderSamples: 8,
-      maxPerPetRecordSamples: 10,
+      itemKeepRatio: 1,
     ),
   ),
-  compact(
-    '压缩',
+  balanced(
+    '均衡压缩版',
     _CarePromptPayloadConfig(
-      maxRiskCandidates: 6,
-      maxDataQualityNotes: 3,
-      maxGlobalTodoSamples: 7,
-      maxGlobalReminderSamples: 7,
-      maxGlobalRecordSamples: 10,
-      maxPerPetTodoSamples: 5,
-      maxPerPetReminderSamples: 5,
-      maxPerPetRecordSamples: 6,
+      itemKeepRatio: 0.5,
     ),
   ),
   minimal(
-    '极简',
+    '极限压缩版',
     _CarePromptPayloadConfig(
-      maxRiskCandidates: 4,
-      maxDataQualityNotes: 2,
-      maxGlobalTodoSamples: 4,
-      maxGlobalReminderSamples: 4,
-      maxGlobalRecordSamples: 6,
-      maxPerPetTodoSamples: 3,
-      maxPerPetReminderSamples: 3,
-      maxPerPetRecordSamples: 4,
+      itemKeepRatio: 0.25,
     ),
   );
 
@@ -1353,6 +1575,12 @@ enum _CarePromptDetailLevel {
 
   final String label;
   final _CarePromptPayloadConfig config;
+
+  String get displayLabel => switch (this) {
+        _CarePromptDetailLevel.full => '全量原始版（100%）',
+        _CarePromptDetailLevel.balanced => '均衡压缩版（约50%）',
+        _CarePromptDetailLevel.minimal => '极限压缩版（约25%）',
+      };
 }
 
 class _AiRetryableGenerationException extends AiGenerationException {

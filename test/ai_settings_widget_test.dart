@@ -559,7 +559,7 @@ void main() {
 
     expect(picker.requests, hasLength(1));
     expect(picker.requests.single.selectedValue, 'openai');
-    expect(picker.requests.single.options, hasLength(3));
+    expect(picker.requests.single.options, hasLength(4));
     expect(find.text('Anthropic'), findsOneWidget);
     expect(
       tester
@@ -1003,6 +1003,7 @@ void main() {
       'sk-live-demo',
     );
 
+    await tester.ensureVisible(visibilityButton);
     await tester.tap(visibilityButton);
     await tester.pump();
 
@@ -1107,6 +1108,166 @@ void main() {
           .controller
           .text,
       'https://api.anthropic.com/v1',
+    );
+  });
+
+  testWidgets('provider picker shows Cloudflare Workers AI option on Android',
+      (tester) async {
+    final settingsController = await AppSettingsController.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light).copyWith(
+          platform: TargetPlatform.android,
+        ),
+        home: AiConfigEditorPage(
+          settingsController: settingsController,
+          coordinator: _testCoordinator(settingsController),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('ai_config_provider_field')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cloudflare Workers AI'), findsOneWidget);
+
+    await tester.tap(find.text('Cloudflare Workers AI').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cloudflare Workers AI'), findsOneWidget);
+    expect(
+      tester
+          .widget<HyperTextField>(
+            find.byKey(const ValueKey('ai_config_base_url_field')),
+          )
+          .controller
+          .text,
+      '',
+    );
+    expect(find.text('Cloudflare Account ID'), findsOneWidget);
+  });
+
+  testWidgets('cloudflare workers ai editor shows account id label when selected',
+      (tester) async {
+    final settingsController = await AppSettingsController.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light).copyWith(
+          platform: TargetPlatform.android,
+        ),
+        home: AiConfigEditorPage(
+          settingsController: settingsController,
+          coordinator: _testCoordinator(settingsController),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('ai_config_provider_field')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cloudflare Workers AI').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cloudflare Account ID'), findsOneWidget);
+    expect(find.text('Base URL'), findsNothing);
+  });
+
+  testWidgets('cloudflare workers ai saves generated base url from account id',
+      (tester) async {
+    final settingsController = await AppSettingsController.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light).copyWith(
+          platform: TargetPlatform.android,
+        ),
+        home: AiConfigEditorPage(
+          settingsController: settingsController,
+          coordinator: _testCoordinator(settingsController),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('ai_config_provider_field')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cloudflare Workers AI').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('只需要填写 Cloudflare Account ID，App 会自动拼接官方 Workers AI 地址。'),
+        findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('ai_config_display_name_field')),
+      'Cloudflare Workers AI',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('ai_config_base_url_field')),
+      'demo-account-id',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('ai_config_model_field')),
+      '@cf/meta/llama-3.1-8b-instruct-fast',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('ai_config_api_key_field')),
+      'cf-test-token',
+    );
+    await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('ai_config_save_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      settingsController.activeAiProviderConfig?.baseUrl,
+      cloudflareWorkersAiBaseUrlForAccountId('demo-account-id'),
+    );
+  });
+
+  testWidgets(
+      'switching away from cloudflare replaces account id with next provider default url',
+      (tester) async {
+    final settingsController = await AppSettingsController.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light).copyWith(
+          platform: TargetPlatform.android,
+        ),
+        home: AiConfigEditorPage(
+          settingsController: settingsController,
+          coordinator: _testCoordinator(settingsController),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('ai_config_provider_field')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cloudflare Workers AI').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('ai_config_base_url_field')),
+      'demo-account-id',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('ai_config_provider_field')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OpenAI').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<HyperTextField>(
+            find.byKey(const ValueKey('ai_config_base_url_field')),
+          )
+          .controller
+          .text,
+      'https://api.openai.com/v1',
     );
   });
 
