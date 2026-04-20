@@ -232,59 +232,7 @@ class MetricOverview extends StatelessWidget {
                           color: item.background,
                           borderRadius: BorderRadius.circular(24),
                         ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Padding(
-                                padding: item.contentPadding ?? EdgeInsets.zero,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.value,
-                                      style: (Theme.of(context)
-                                                  .textTheme
-                                                  .headlineSmall
-                                                  ?.copyWith(
-                                                    color: item.foreground,
-                                                    fontWeight: FontWeight.w800,
-                                                    letterSpacing: -0.8,
-                                                  ) ??
-                                                  const TextStyle())
-                                          .merge(item.valueTextStyle),
-                                    ),
-                                    SizedBox(height: item.valueLabelSpacing),
-                                    Padding(
-                                      padding:
-                                          item.labelPadding ?? EdgeInsets.zero,
-                                      child: Text(
-                                        item.label,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color: item.foreground
-                                                  .withValues(alpha: 0.74),
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (item.trailing != null) ...[
-                              const SizedBox(width: 10),
-                              Align(
-                                alignment: Alignment.center,
-                                child: item.trailing!,
-                              ),
-                            ],
-                          ],
-                        ),
+                        child: _MetricOverviewContent(item: item),
                       ),
                     ),
                   ),
@@ -295,6 +243,93 @@ class MetricOverview extends StatelessWidget {
           .toList(),
     );
   }
+}
+
+class _MetricOverviewContent extends StatelessWidget {
+  const _MetricOverviewContent({
+    required this.item,
+  });
+
+  final MetricItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final textGroup = Padding(
+      padding: item.contentPadding ?? EdgeInsets.zero,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment:
+            item.contentAlignment == MetricContentAlignment.center
+                ? CrossAxisAlignment.center
+                : CrossAxisAlignment.start,
+        children: [
+          Text(
+            item.value,
+            textAlign: item.contentAlignment == MetricContentAlignment.center
+                ? TextAlign.center
+                : TextAlign.start,
+            style: (Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          color: item.foreground,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.8,
+                        ) ??
+                    const TextStyle())
+                .merge(item.valueTextStyle),
+          ),
+          SizedBox(height: item.valueLabelSpacing),
+          Padding(
+            padding: item.labelPadding ?? EdgeInsets.zero,
+            child: Text(
+              item.label,
+              textAlign: item.contentAlignment == MetricContentAlignment.center
+                  ? TextAlign.center
+                  : TextAlign.start,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: item.foreground.withValues(alpha: 0.74),
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (item.contentAlignment == MetricContentAlignment.center) {
+      return Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            textGroup,
+            if (item.trailing != null) ...[
+              const SizedBox(width: 10),
+              item.trailing!,
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(child: textGroup),
+        if (item.trailing != null) ...[
+          const SizedBox(width: 10),
+          Align(
+            alignment: Alignment.center,
+            child: item.trailing!,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+enum MetricContentAlignment {
+  start,
+  center,
 }
 
 class MetricItem {
@@ -310,6 +345,7 @@ class MetricItem {
     this.valueTextStyle,
     this.labelPadding,
     this.valueLabelSpacing = 8,
+    this.contentAlignment = MetricContentAlignment.start,
   });
 
   final String label;
@@ -323,6 +359,7 @@ class MetricItem {
   final TextStyle? valueTextStyle;
   final EdgeInsetsGeometry? labelPadding;
   final double valueLabelSpacing;
+  final MetricContentAlignment contentAlignment;
 }
 
 class HyperSegmentedControl extends StatelessWidget {
@@ -840,6 +877,10 @@ class StatusListRow extends StatelessWidget {
     this.leadingText,
     this.leading,
     this.onTap,
+    this.onLongPress,
+    this.selected = false,
+    this.selectedBorderColor,
+    this.selectedBackgroundColor,
   });
 
   final String title;
@@ -851,6 +892,10 @@ class StatusListRow extends StatelessWidget {
   final String? leadingText;
   final Widget? leading;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool selected;
+  final Color? selectedBorderColor;
+  final Color? selectedBackgroundColor;
 
   @override
   Widget build(BuildContext context) {
@@ -880,6 +925,10 @@ class StatusListRow extends StatelessWidget {
       leading: effectiveLeading,
       trailing: trailing,
       onTap: onTap,
+      onLongPress: onLongPress,
+      selected: selected,
+      selectedBorderColor: selectedBorderColor,
+      selectedBackgroundColor: selectedBackgroundColor,
     );
   }
 }
@@ -985,7 +1034,8 @@ class ChecklistCard extends StatelessWidget {
           Material(
             color: Colors.transparent,
             child: InkWell(
-              key: ValueKey('checklist_card_body_${item.sourceType}-${item.id}'),
+              key:
+                  ValueKey('checklist_card_body_${item.sourceType}-${item.id}'),
               borderRadius: BorderRadius.circular(22),
               onTap: onTap,
               child: Padding(
@@ -1012,31 +1062,37 @@ class ChecklistCard extends StatelessWidget {
                         children: [
                           Text(
                             item.title,
-                            style:
-                                Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      color: tokens.primaryText,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: -0.3,
-                                    ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  color: tokens.primaryText,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.3,
+                                ),
                           ),
                           const SizedBox(height: 6),
                           Text(
                             '${item.petName} · ${item.kindLabel} · ${item.dueLabel}',
-                            style:
-                                Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: tokens.secondaryText,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: tokens.secondaryText,
+                                  fontWeight: FontWeight.w500,
+                                ),
                           ),
                           if (item.note.isNotEmpty) ...[
                             const SizedBox(height: 10),
                             Text(
                               item.note,
-                              style:
-                                  Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        color: tokens.secondaryText,
-                                        height: 1.45,
-                                      ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: tokens.secondaryText,
+                                    height: 1.45,
+                                  ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1234,6 +1290,10 @@ class ListRow extends StatelessWidget {
     this.leading,
     this.trailing,
     this.onTap,
+    this.onLongPress,
+    this.selected = false,
+    this.selectedBorderColor,
+    this.selectedBackgroundColor,
   });
 
   final String title;
@@ -1241,6 +1301,10 @@ class ListRow extends StatelessWidget {
   final Widget? leading;
   final Widget? trailing;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool selected;
+  final Color? selectedBorderColor;
+  final Color? selectedBackgroundColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1248,8 +1312,17 @@ class ListRow extends StatelessWidget {
     final content = Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: tokens.listRowBackground,
+        color: selected
+            ? (selectedBackgroundColor ??
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.10))
+            : tokens.listRowBackground,
         borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: selected
+              ? (selectedBorderColor ?? Theme.of(context).colorScheme.primary)
+              : Colors.transparent,
+          width: 1.3,
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1289,7 +1362,7 @@ class ListRow extends StatelessWidget {
       ),
     );
 
-    if (onTap == null) {
+    if (onTap == null && onLongPress == null) {
       return content;
     }
 
@@ -1298,6 +1371,7 @@ class ListRow extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
         onTap: onTap,
+        onLongPress: onLongPress,
         child: content,
       ),
     );

@@ -1,6 +1,6 @@
 part of 'petnote_pages.dart';
 
-class PetDetailsPage extends StatelessWidget {
+class PetDetailsPage extends StatefulWidget {
   const PetDetailsPage({
     super.key,
     required this.store,
@@ -11,32 +11,129 @@ class PetDetailsPage extends StatelessWidget {
   final Pet pet;
 
   @override
+  State<PetDetailsPage> createState() => _PetDetailsPageState();
+}
+
+class _PetDetailsPageState extends State<PetDetailsPage> {
+  final Set<String> _selectedRecordIds = <String>{};
+
+  bool get _isSelecting => _selectedRecordIds.isNotEmpty;
+
+  void _enterSelectionMode(String recordId) {
+    setState(() {
+      _selectedRecordIds
+        ..clear()
+        ..add(recordId);
+    });
+  }
+
+  void _clearSelectionMode() {
+    if (!_isSelecting) {
+      return;
+    }
+    setState(_selectedRecordIds.clear);
+  }
+
+  void _toggleRecordSelection(String recordId) {
+    setState(() {
+      if (_selectedRecordIds.contains(recordId)) {
+        _selectedRecordIds.remove(recordId);
+      } else {
+        _selectedRecordIds.add(recordId);
+      }
+    });
+  }
+
+  Future<void> _confirmDeleteRecords(List<PetRecord> records) async {
+    final ids = _selectedRecordIds.toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('删除 ${ids.length} 条资料记录？'),
+        content: const Text('删除后将无法恢复，请确认这次批量删除操作。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete != true) {
+      return;
+    }
+    await widget.store.deleteRecords(ids);
+    if (!mounted) {
+      return;
+    }
+    _clearSelectionMode();
+  }
+
+  @override
   Widget build(BuildContext context) {
     const pagePadding = EdgeInsets.fromLTRB(18, 8, 18, 20);
 
     return AnimatedBuilder(
-      animation: store,
+      animation: widget.store,
       builder: (context, _) {
-        final records = store.records
-            .where((item) => item.petId == pet.id)
+        final records = widget.store.records
+            .where((item) => item.petId == widget.pet.id)
             .toList(growable: false)
           ..sort((a, b) => b.recordDate.compareTo(a.recordDate));
+        final visibleRecordIds = records.map((item) => item.id).toSet();
+        _selectedRecordIds.removeWhere((id) => !visibleRecordIds.contains(id));
+        final allSelected =
+            records.isNotEmpty && _selectedRecordIds.length == records.length;
 
         return Scaffold(
           appBar: AppBar(
             title: const Text('资料记录'),
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                if (_isSelecting) {
+                  _clearSelectionMode();
+                  return;
+                }
+                Navigator.pop(context);
+              },
             ),
           ),
           body: ListView(
             padding: pagePadding,
             children: [
               PageHeader(
-                title: pet.name,
+                title: widget.pet.name,
                 subtitle:
-                    '${petTypeLabel(pet.type)} · ${pet.breed} · ${pet.ageLabel}',
+                    '${petTypeLabel(widget.pet.type)} · ${widget.pet.breed} · ${widget.pet.ageLabel}',
+                trailing: _isSelecting
+                    ? _PetRecordBatchActions(
+                        allSelected: allSelected,
+                        canDelete: _selectedRecordIds.isNotEmpty,
+                        onToggleSelectAll: () {
+                          setState(() {
+                            if (allSelected) {
+                              _selectedRecordIds.clear();
+                              return;
+                            }
+                            _selectedRecordIds
+                              ..clear()
+                              ..addAll(records.map((item) => item.id));
+                          });
+                        },
+                        onDelete: () => _confirmDeleteRecords(records),
+                      )
+                    : null,
               ),
               const SizedBox(height: 8),
               if (records.isEmpty)
@@ -59,19 +156,34 @@ class PetDetailsPage extends StatelessWidget {
                           leadingBackgroundColor: const Color(0xFFE8F7EE),
                           leadingIconColor: const Color(0xFF4FB57C),
                           leading: _RecordListLeading(record: item),
-                          trailing: HyperBadge(
-                            text: _petRecordPurposeLabel(
-                              item.purpose,
-                              customPurposeLabel: item.customPurposeLabel,
-                            ),
-                            foreground: const Color(0xFF2F8F5B),
-                            background: const Color(0xFFE8F7EE),
+                          trailing: _PetRecordRowTrailing(
+                            record: item,
+                            selected: _selectedRecordIds.contains(item.id),
+                            selecting: _isSelecting,
                           ),
+                          selected: _selectedRecordIds.contains(item.id),
+                          selectedBorderColor:
+                              Theme.of(context).colorScheme.primary,
+                          selectedBackgroundColor: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.10),
+                          onLongPress: () {
+                            if (_isSelecting) {
+                              _toggleRecordSelection(item.id);
+                              return;
+                            }
+                            _enterSelectionMode(item.id);
+                          },
                           onTap: () {
+                            if (_isSelecting) {
+                              _toggleRecordSelection(item.id);
+                              return;
+                            }
                             Navigator.of(context).push(
                               MaterialPageRoute<void>(
                                 builder: (context) => RecordDetailPage(
-                                  store: store,
+                                  store: widget.store,
                                   recordId: item.id,
                                 ),
                               ),
@@ -85,6 +197,100 @@ class PetDetailsPage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _PetRecordBatchActions extends StatelessWidget {
+  const _PetRecordBatchActions({
+    required this.allSelected,
+    required this.canDelete,
+    required this.onToggleSelectAll,
+    required this.onDelete,
+  });
+
+  final bool allSelected;
+  final bool canDelete;
+  final VoidCallback onToggleSelectAll;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OutlinedButton(
+          key: const ValueKey('pet-record-batch-select-button'),
+          onPressed: onToggleSelectAll,
+          child: Text(allSelected ? '取消全选' : '全选'),
+        ),
+        TextButton(
+          key: const ValueKey('pet-record-batch-delete-button'),
+          onPressed: canDelete ? onDelete : null,
+          style: TextButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.error,
+          ),
+          child: const Text('删除'),
+        ),
+      ],
+    );
+  }
+}
+
+class _PetRecordRowTrailing extends StatelessWidget {
+  const _PetRecordRowTrailing({
+    required this.record,
+    required this.selected,
+    required this.selecting,
+  });
+
+  final PetRecord record;
+  final bool selected;
+  final bool selecting;
+
+  @override
+  Widget build(BuildContext context) {
+    final purposeBadge = HyperBadge(
+      text: _petRecordPurposeLabel(
+        record.purpose,
+        customPurposeLabel: record.customPurposeLabel,
+      ),
+      foreground: const Color(0xFF2F8F5B),
+      background: const Color(0xFFE8F7EE),
+    );
+    if (!selecting) {
+      return purposeBadge;
+    }
+
+    final primary = Theme.of(context).colorScheme.primary;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        purposeBadge,
+        const SizedBox(width: 8),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: selected ? primary : Colors.transparent,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected ? primary : primary.withValues(alpha: 0.42),
+              width: 1.6,
+            ),
+          ),
+          child: selected
+              ? Icon(
+                  Icons.check_rounded,
+                  key: ValueKey('pet-record-selection-badge-${record.id}'),
+                  size: 16,
+                  color: Colors.white,
+                )
+              : null,
+        ),
+      ],
     );
   }
 }
@@ -177,7 +383,7 @@ class _RecordDetailPageState extends State<RecordDetailPage> {
                   await _cancelEditing();
                 }
                 if (mounted) {
-                  Navigator.pop(context);
+                  Navigator.of(this.context).pop();
                 }
               },
             ),
@@ -872,7 +1078,8 @@ class _PetPhotoPreviewDialogState extends State<_PetPhotoPreviewDialog> {
                                 padding:
                                     const EdgeInsets.fromLTRB(24, 28, 24, 56),
                                 child: PageView.builder(
-                                  key: const ValueKey('pet-photo-preview-pager'),
+                                  key:
+                                      const ValueKey('pet-photo-preview-pager'),
                                   controller: _pageController,
                                   physics: const BouncingScrollPhysics(),
                                   onPageChanged: (value) {
@@ -883,8 +1090,7 @@ class _PetPhotoPreviewDialogState extends State<_PetPhotoPreviewDialog> {
                                     return Center(
                                       child: PetPhotoContainFrame(
                                         photoPath: widget.photoPaths[index],
-                                        borderRadius:
-                                            BorderRadius.circular(26),
+                                        borderRadius: BorderRadius.circular(26),
                                         fallback: const Center(
                                           child: Icon(
                                             Icons.broken_image_rounded,
@@ -1101,23 +1307,6 @@ String _petRecordPurposeLabel(
       return customLabel?.isNotEmpty ?? false ? customLabel! : '其他';
     case null:
       return '未分类';
-  }
-}
-
-String _petReminderKindLabel(ReminderKind kind) {
-  switch (kind) {
-    case ReminderKind.medication:
-      return '用药';
-    case ReminderKind.review:
-      return '就诊';
-    case ReminderKind.vaccine:
-      return '疫苗';
-    case ReminderKind.grooming:
-      return '美容';
-    case ReminderKind.deworming:
-      return '驱虫';
-    case ReminderKind.custom:
-      return '其他';
   }
 }
 

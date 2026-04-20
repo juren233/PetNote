@@ -141,17 +141,14 @@ class _PetsPageState extends State<PetsPage> {
                                 background: const Color(0xFFF5F0FF),
                                 foreground: const Color(0xFF6B51C9),
                                 trailing: const _RecordsFolderMetricIcon(),
-                                contentPadding:
-                                    const EdgeInsets.only(left: 18),
                                 valueTextStyle: const TextStyle(
                                   fontSize: 60,
                                   height: 0.88,
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: -2.2,
                                 ),
-                                labelPadding:
-                                    const EdgeInsets.only(left: 12, top: 1),
                                 valueLabelSpacing: 2,
+                                contentAlignment: MetricContentAlignment.center,
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute<void>(
@@ -205,6 +202,7 @@ class _RecordsFolderMetricIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
+      key: const ValueKey('records-folder-metric-icon'),
       width: 138,
       height: 104,
       child: Image.asset(

@@ -375,137 +375,750 @@ class _OverviewHeaderActions extends StatelessWidget {
 class _OverviewRangeActionButton extends StatelessWidget {
   const _OverviewRangeActionButton({
     required this.config,
-    this.nativeOptionPicker,
-    this.iosRangeButtonBuilder,
+    required this.referenceDate,
     required this.onSelectRange,
+    required this.onSelectCustomRange,
   });
 
   final OverviewAnalysisConfig config;
-  final NativeOptionPicker? nativeOptionPicker;
-  final IosOverviewRangeButtonBuilder? iosRangeButtonBuilder;
+  final DateTime referenceDate;
   final Future<void> Function(OverviewRange range) onSelectRange;
+  final Future<void> Function(DateTimeRange range) onSelectCustomRange;
 
   @override
   Widget build(BuildContext context) {
-    if (supportsIosNativeOverviewRangeButton(Theme.of(context).platform)) {
-      final label = _overviewRangeButtonLabel(config);
-      final builder = iosRangeButtonBuilder;
-      if (builder != null) {
-        return builder(context, label, () => _openIosRangePicker(context));
-      }
-      return IosNativeOverviewRangeButtonHost(
-        label: label,
-        onPressed: () => _openIosRangePicker(context),
-      );
-    }
     return _OverviewRangeMenuButton(
       config: config,
+      referenceDate: referenceDate,
       onSelectRange: onSelectRange,
+      onSelectCustomRange: onSelectCustomRange,
     );
-  }
-
-  Future<void> _openIosRangePicker(BuildContext context) async {
-    final picker = nativeOptionPicker ?? MethodChannelNativeOptionPicker();
-    final result = await picker.pickSingleOption(
-      NativeOptionPickerRequest(
-        title: '选择总览时间范围',
-        selectedValue: config.range.name,
-        options: [
-          for (final option in const [
-            OverviewRange.sevenDays,
-            OverviewRange.oneMonth,
-            OverviewRange.threeMonths,
-            OverviewRange.sixMonths,
-            OverviewRange.oneYear,
-            OverviewRange.custom,
-          ])
-            NativeOptionItem(
-              value: option.name,
-              label: _overviewRangeChipLabel(option),
-            ),
-        ],
-      ),
-    );
-    if (!result.isSuccess || result.selectedValue == null) {
-      return;
-    }
-    final selectedValue = result.selectedValue!;
-    final matches =
-        OverviewRange.values.where((item) => item.name == selectedValue);
-    if (matches.isEmpty) {
-      return;
-    }
-    await onSelectRange(matches.first);
   }
 }
 
-class _OverviewRangeMenuButton extends StatelessWidget {
+class _OverviewRangeMenuButton extends StatefulWidget {
   const _OverviewRangeMenuButton({
     required this.config,
+    required this.referenceDate,
     required this.onSelectRange,
+    required this.onSelectCustomRange,
   });
 
   final OverviewAnalysisConfig config;
+  final DateTime referenceDate;
   final Future<void> Function(OverviewRange range) onSelectRange;
+  final Future<void> Function(DateTimeRange range) onSelectCustomRange;
+
+  @override
+  State<_OverviewRangeMenuButton> createState() =>
+      _OverviewRangeMenuButtonState();
+}
+
+class _OverviewRangeMenuButtonState extends State<_OverviewRangeMenuButton> {
+  bool _pressed = false;
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final accentColor = tabAccentFor(context, AppTab.overview).label;
+    return Listener(
+      onPointerDown: (_) => _setPressed(true),
+      onPointerUp: (_) => _setPressed(false),
+      onPointerCancel: (_) => _setPressed(false),
+      child: GestureDetector(
+        key: const ValueKey('overview-range-menu-button'),
+        onTap: _busy ? null : () => _handleTap(context),
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          scale: _pressed ? 0.97 : 1,
+          child: AnimatedSlide(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            offset: Offset(0, _pressed ? 0.035 : 0),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: accentColor,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: accentColor,
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color:
+                        accentColor.withValues(alpha: _pressed ? 0.18 : 0.28),
+                    blurRadius: _pressed ? 10 : 18,
+                    spreadRadius: _pressed ? -2 : 0,
+                    offset: Offset(0, _pressed ? 5 : 10),
+                  ),
+                ],
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Opacity(
+                    key: const ValueKey(
+                      'overview-range-menu-button-pressed-scope',
+                    ),
+                    opacity: _pressed ? 0.14 : 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _overviewRangeButtonLabel(widget.config),
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.1,
+                            ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _setPressed(bool value) {
+    if (!mounted || _pressed == value) {
+      return;
+    }
+    setState(() {
+      _pressed = value;
+    });
+  }
+
+  Future<void> _handleTap(BuildContext context) async {
+    _busy = true;
+    triggerSelectionHaptic();
+    await Future<void>.delayed(const Duration(milliseconds: 55));
+    _setPressed(false);
+    await _openRangePicker(context);
+    _busy = false;
+  }
+
+  Future<void> _openRangePicker(BuildContext context) async {
+    await _showRangePickerBottomSheet(context);
+  }
+
+  Future<void> _showRangePickerBottomSheet(
+    BuildContext context,
+  ) {
+    final tokens = context.petNoteTokens;
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      backgroundColor: tokens.panelBackground,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.75,
+            ),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                child: Column(
+                  key: const ValueKey('overview_range_bottom_sheet'),
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '选择总览时间范围',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: tokens.primaryText,
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    for (final option in const [
+                      OverviewRange.sevenDays,
+                      OverviewRange.oneMonth,
+                      OverviewRange.threeMonths,
+                      OverviewRange.sixMonths,
+                      OverviewRange.oneYear,
+                      OverviewRange.custom,
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _OverviewRangeOptionTile(
+                          key: ValueKey(
+                            'overview-range-option-${option.name}',
+                          ),
+                          label: _overviewRangeChipLabel(option),
+                          selected: option == widget.config.range,
+                          onTap: () async {
+                            if (option != OverviewRange.custom) {
+                              await widget.onSelectRange(option);
+                              if (!context.mounted) {
+                                return;
+                              }
+                              Navigator.of(context).pop();
+                              return;
+                            }
+                            final customRange =
+                                await _openCustomRangePage(context);
+                            if (!context.mounted) {
+                              return;
+                            }
+                            if (customRange != null) {
+                              await widget.onSelectCustomRange(customRange);
+                            }
+                            if (!context.mounted) {
+                              return;
+                            }
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<DateTimeRange?> _openCustomRangePage(BuildContext context) {
+    final now = DateUtils.dateOnly(widget.referenceDate);
+    final initialRange = widget.config.range == OverviewRange.custom &&
+            widget.config.customRangeStart != null &&
+            widget.config.customRangeEnd != null
+        ? DateTimeRange(
+            start: DateUtils.dateOnly(widget.config.customRangeStart!),
+            end: DateUtils.dateOnly(widget.config.customRangeEnd!),
+          )
+        : DateTimeRange(
+            start: now.subtract(const Duration(days: 7)),
+            end: now,
+          );
+    return Navigator.of(context, rootNavigator: true).push<DateTimeRange?>(
+      _OverviewCustomRangePageRoute(
+        initialRange: initialRange,
+      ),
+    );
+  }
+}
+
+class _OverviewRangeOptionTile extends StatefulWidget {
+  const _OverviewRangeOptionTile({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final Future<void> Function() onTap;
+
+  @override
+  State<_OverviewRangeOptionTile> createState() =>
+      _OverviewRangeOptionTileState();
+}
+
+class _OverviewRangeOptionTileState extends State<_OverviewRangeOptionTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 130),
+  );
+  late final Animation<double> _depthAnimation = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+  bool _isAnimatingTap = false;
+  bool _pressed = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.petNoteTokens;
-    final accentColor = tabAccentFor(context, AppTab.overview).label;
-    final menuBackground = tokens.panelBackground.withAlpha(255);
-    return PopupMenuButton<OverviewRange>(
-      key: const ValueKey('overview-range-menu-button'),
-      onSelected: (value) {
-        unawaited(onSelectRange(value));
-      },
-      offset: const Offset(0, 10),
-      color: menuBackground,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      itemBuilder: (context) => [
-        for (final option in const [
-          OverviewRange.sevenDays,
-          OverviewRange.oneMonth,
-          OverviewRange.threeMonths,
-          OverviewRange.sixMonths,
-          OverviewRange.oneYear,
-          OverviewRange.custom,
-        ])
-          PopupMenuItem(
-            value: option,
-            child: Text(_overviewRangeChipLabel(option)),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, 2 * _depthAnimation.value),
+          child: Transform.scale(
+            scale: 1 - (0.022 * _depthAnimation.value),
+            child: child,
           ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: accentColor,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: accentColor,
-            width: 1,
+        );
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTapDown: (_) => _setPressed(true),
+          onTapCancel: () => _setPressed(false),
+          onTap: _handleTap,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? tokens.segmentedSelectedBackground.withValues(alpha: 0.16)
+                  : tokens.panelStrongBackground,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: widget.selected
+                    ? tokens.segmentedSelectedBackground
+                    : tokens.panelBorder,
+                width: widget.selected ? 1.4 : 1,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.label,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: tokens.primaryText,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ),
+                  Icon(
+                    widget.selected
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    color: widget.selected
+                        ? tokens.segmentedSelectedBackground
+                        : tokens.secondaryText,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _overviewRangeButtonLabel(config),
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.1,
+      ),
+    );
+  }
+
+  Future<void> _handleTap() async {
+    if (_isAnimatingTap) {
+      return;
+    }
+    _isAnimatingTap = true;
+    triggerSelectionHaptic();
+    _setPressed(true);
+    await _controller.forward(from: 0);
+    _setPressed(false);
+    if (!mounted) {
+      return;
+    }
+    await widget.onTap();
+    _isAnimatingTap = false;
+  }
+
+  void _setPressed(bool value) {
+    if (!mounted || _pressed == value) {
+      return;
+    }
+    setState(() {
+      _pressed = value;
+    });
+  }
+}
+
+class _OverviewCustomRangePageRoute extends PageRouteBuilder<DateTimeRange?> {
+  _OverviewCustomRangePageRoute({
+    required DateTimeRange initialRange,
+  }) : super(
+          opaque: true,
+          barrierDismissible: false,
+          transitionDuration: const Duration(milliseconds: 280),
+          reverseTransitionDuration: const Duration(milliseconds: 220),
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              _OverviewCustomRangePage(initialRange: initialRange),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final fade = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInCubic,
+            );
+            final slide = Tween<Offset>(
+              begin: const Offset(0, 0.035),
+              end: Offset.zero,
+            ).animate(fade);
+            return FadeTransition(
+              opacity: fade,
+              child: SlideTransition(position: slide, child: child),
+            );
+          },
+        );
+}
+
+class _OverviewCustomRangePage extends StatefulWidget {
+  const _OverviewCustomRangePage({
+    required this.initialRange,
+  });
+
+  final DateTimeRange initialRange;
+
+  @override
+  State<_OverviewCustomRangePage> createState() =>
+      _OverviewCustomRangePageState();
+}
+
+enum _OverviewCustomRangeStage { start, end }
+
+class _OverviewCustomRangePageState extends State<_OverviewCustomRangePage> {
+  late DateTime _startDate = DateUtils.dateOnly(widget.initialRange.start);
+  late DateTime _endDate = DateUtils.dateOnly(widget.initialRange.end);
+  _OverviewCustomRangeStage _activeStage = _OverviewCustomRangeStage.start;
+
+  DateTime get _referenceNow => DateUtils.dateOnly(DateTime.now());
+  bool get _canApply => !_endDate.isBefore(_startDate);
+  DateTime get _displayedMonth =>
+      _activeStage == _OverviewCustomRangeStage.start ? _startDate : _endDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.petNoteTokens;
+    final localizations = MaterialLocalizations.of(context);
+    final accent = tokens.segmentedSelectedBackground;
+    final overlayStyle = petNoteOverlayStyleForTheme(theme).copyWith(
+      statusBarColor: tokens.panelBackground,
+      systemNavigationBarColor: tokens.panelBackground,
+    );
+    final topInset = MediaQuery.paddingOf(context).top;
+    final calendarTheme = theme.copyWith(
+      colorScheme: theme.colorScheme.copyWith(
+        primary: accent,
+        onPrimary: Colors.white,
+        surface: tokens.panelBackground,
+        onSurface: tokens.primaryText,
+      ),
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: tokens.panelStrongBackground,
+        headerBackgroundColor: Colors.transparent,
+        headerForegroundColor: tokens.primaryText,
+        surfaceTintColor: Colors.transparent,
+        dayForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.white;
+          }
+          return tokens.primaryText;
+        }),
+        dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return accent;
+          }
+          return Colors.transparent;
+        }),
+        todayForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.white;
+          }
+          return accent;
+        }),
+        todayBackgroundColor: WidgetStateProperty.all(Colors.transparent),
+        todayBorder: BorderSide(color: accent, width: 1.2),
+      ),
+    );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: Scaffold(
+        key: const ValueKey('overview-custom-range-scaffold'),
+        backgroundColor: tokens.panelBackground,
+        body: ColoredBox(
+          key: const ValueKey('overview-custom-range-page'),
+          color: tokens.panelBackground,
+          child: Column(
+            children: [
+              ColoredBox(
+                key: const ValueKey('overview-custom-range-top-surface'),
+                color: tokens.panelBackground,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(18, topInset + 16, 18, 8),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        key: const ValueKey(
+                            'overview-custom-range-close-button'),
+                        onPressed: _close,
+                        style: IconButton.styleFrom(
+                          backgroundColor: tokens.panelStrongBackground,
+                          foregroundColor: tokens.primaryText,
+                        ),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              '自定义时间范围',
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                color: tokens.primaryText,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '先选开始日期，再补齐结束日期',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: tokens.secondaryText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      FilledButton(
+                        key: const ValueKey(
+                            'overview-custom-range-apply-button'),
+                        onPressed: _canApply ? _apply : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('应用'),
+                      ),
+                    ],
                   ),
+                ),
+              ),
+              Expanded(
+                child: SafeArea(
+                  top: false,
+                  bottom: true,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _OverviewCustomRangeStageCard(
+                                key: const ValueKey(
+                                  'overview-custom-range-stage-start',
+                                ),
+                                label: '开始日期',
+                                value:
+                                    localizations.formatMediumDate(_startDate),
+                                selected: _activeStage ==
+                                    _OverviewCustomRangeStage.start,
+                                onTap: () =>
+                                    _setStage(_OverviewCustomRangeStage.start),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _OverviewCustomRangeStageCard(
+                                key: const ValueKey(
+                                  'overview-custom-range-stage-end',
+                                ),
+                                label: '结束日期',
+                                value: localizations.formatMediumDate(_endDate),
+                                selected: _activeStage ==
+                                    _OverviewCustomRangeStage.end,
+                                onTap: () =>
+                                    _setStage(_OverviewCustomRangeStage.end),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _activeStage == _OverviewCustomRangeStage.start
+                                ? '当前正在选择开始日期'
+                                : '当前正在选择结束日期',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: accent,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: tokens.panelStrongBackground,
+                              borderRadius: BorderRadius.circular(30),
+                              border: Border.all(
+                                color: tokens.panelBorder,
+                                width: 1,
+                              ),
+                            ),
+                            child: Theme(
+                              data: calendarTheme,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+                                child: CalendarDatePicker(
+                                  key: const ValueKey(
+                                    'overview-custom-range-calendar',
+                                  ),
+                                  initialDate: _displayedMonth,
+                                  currentDate: _referenceNow,
+                                  firstDate:
+                                      DateTime(_referenceNow.year - 2, 1, 1),
+                                  lastDate:
+                                      DateTime(_referenceNow.year + 1, 12, 31),
+                                  onDateChanged: _handleDateSelected,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleDateSelected(DateTime value) {
+    final normalized = DateUtils.dateOnly(value);
+    triggerSelectionHaptic();
+    setState(() {
+      switch (_activeStage) {
+        case _OverviewCustomRangeStage.start:
+          _startDate = normalized;
+          if (_startDate.isAfter(_endDate)) {
+            _endDate = _startDate;
+          }
+          _activeStage = _OverviewCustomRangeStage.end;
+          break;
+        case _OverviewCustomRangeStage.end:
+          _endDate = normalized;
+          if (_endDate.isBefore(_startDate)) {
+            _startDate = _endDate;
+          }
+          break;
+      }
+    });
+  }
+
+  void _setStage(_OverviewCustomRangeStage stage) {
+    triggerSelectionHaptic();
+    setState(() {
+      _activeStage = stage;
+    });
+  }
+
+  void _close() {
+    triggerSelectionHaptic();
+    Navigator.of(context).pop();
+  }
+
+  void _apply() {
+    if (!_canApply) {
+      return;
+    }
+    triggerLightImpactHaptic();
+    Navigator.of(context).pop(
+      DateTimeRange(
+        start: _startDate,
+        end: _endDate,
+      ),
+    );
+  }
+}
+
+class _OverviewCustomRangeStageCard extends StatelessWidget {
+  const _OverviewCustomRangeStageCard({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.petNoteTokens;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: selected
+                ? tokens.segmentedSelectedBackground.withValues(alpha: 0.14)
+                : tokens.panelStrongBackground,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: selected
+                  ? tokens.segmentedSelectedBackground
+                  : tokens.panelBorder,
+              width: selected ? 1.4 : 1,
             ),
-            const SizedBox(width: 6),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: Colors.white,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: tokens.secondaryText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: tokens.primaryText,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

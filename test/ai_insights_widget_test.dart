@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:petnote/ai/ai_client_factory.dart';
 import 'package:petnote/ai/ai_connection_tester.dart';
 import 'package:petnote/ai/ai_insights_models.dart';
@@ -99,15 +101,11 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('overview-range-menu-button')));
     await tester.pumpAndSettle();
-    final menuMaterial = tester.widget<Material>(
-      find
-          .ancestor(
-            of: find.text('1个月').last,
-            matching: find.byType(Material),
-          )
-          .last,
+    expect(
+      find.byKey(const ValueKey('overview_range_bottom_sheet')),
+      findsOneWidget,
     );
-    expect((menuMaterial.color!).a, 1);
+    expect(find.text('选择总览时间范围'), findsWidgets);
     await tester.tapAt(const Offset(1, 1));
     await tester.pumpAndSettle();
 
@@ -813,25 +811,29 @@ void main() {
     expect(find.text('医生建议一周后继续观察，没有感染迹象。'), findsOneWidget);
     expect(find.text('继续减少洗澡频率。'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('pet-record-detail-edit-button')));
+    await tester
+        .tap(find.byKey(const ValueKey('pet-record-detail-edit-button')));
     await tester.pumpAndSettle();
 
     await tester.enterText(
       find.byKey(const ValueKey('pet-record-detail-summary-field')),
       '这次修改先取消',
     );
-    await tester.tap(find.byKey(const ValueKey('pet-record-detail-cancel-button')));
+    await tester
+        .tap(find.byKey(const ValueKey('pet-record-detail-cancel-button')));
     await tester.pumpAndSettle();
     expect(find.text('这次修改先取消'), findsNothing);
     expect(find.text('医生建议一周后继续观察，没有感染迹象。'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('pet-record-detail-edit-button')));
+    await tester
+        .tap(find.byKey(const ValueKey('pet-record-detail-edit-button')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const ValueKey('pet-record-detail-summary-field')),
       '医生建议继续观察两周，并记录耳道清洁后的反应。',
     );
-    await tester.tap(find.byKey(const ValueKey('pet-record-detail-save-button')));
+    await tester
+        .tap(find.byKey(const ValueKey('pet-record-detail-save-button')));
     await tester.pumpAndSettle();
 
     expect(
@@ -843,6 +845,234 @@ void main() {
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
     expect(find.textContaining('医生建议继续观察两周'), findsOneWidget);
+  });
+
+  testWidgets('pets page record metric keeps text stack aligned',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = PetNoteStore.seeded();
+    for (var index = 0; index < 11; index += 1) {
+      await store.addRecord(
+        petId: 'pet-1',
+        title: '补充记录 $index',
+        recordDate: DateTime.parse('2026-03-24T12:00:00+08:00')
+            .subtract(Duration(hours: index)),
+        summary: '用于验证大数字布局。',
+        note: '',
+      );
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: Scaffold(
+          body: PetsPage(
+            store: store,
+            onAddFirstPet: () {},
+            onEditPet: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final metricCard = find.ancestor(
+      of: find.text('资料记录').first,
+      matching: find.byType(Ink),
+    );
+    final valueCenter =
+        tester.getCenter(find.text('${store.recordsForSelectedPet.length}'));
+    final labelCenter = tester.getCenter(find.text('资料记录').first);
+
+    expect(metricCard, findsOneWidget);
+    expect((valueCenter.dx - labelCenter.dx).abs(), lessThanOrEqualTo(18));
+  });
+
+  testWidgets('pets page record metric keeps text and folder group centered',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = PetNoteStore.seeded();
+    for (var index = 0; index < 11; index += 1) {
+      await store.addRecord(
+        petId: 'pet-1',
+        title: '补充记录 $index',
+        recordDate: DateTime.parse('2026-03-24T12:00:00+08:00')
+            .subtract(Duration(hours: index)),
+        summary: '用于验证图标与文本整体居中。',
+        note: '',
+      );
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: Scaffold(
+          body: PetsPage(
+            store: store,
+            onAddFirstPet: () {},
+            onEditPet: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final metricCard = find.ancestor(
+      of: find.text('资料记录').first,
+      matching: find.byType(Ink),
+    );
+    final folderIcon = find.byKey(const ValueKey('records-folder-metric-icon'));
+    expect(folderIcon, findsOneWidget);
+
+    final cardCenter = tester.getCenter(metricCard.first);
+    final valueBox =
+        tester.getRect(find.text('${store.recordsForSelectedPet.length}'));
+    final labelBox = tester.getRect(find.text('资料记录').first);
+    final iconBox = tester.getRect(folderIcon);
+    final contentLeft = math.min(
+      valueBox.left,
+      math.min(labelBox.left, iconBox.left),
+    );
+    final contentRight = math.max(
+      valueBox.right,
+      math.max(labelBox.right, iconBox.right),
+    );
+    final groupCenterX = (contentLeft + contentRight) / 2;
+
+    expect((groupCenterX - cardCenter.dx).abs(), lessThanOrEqualTo(28));
+  });
+
+  testWidgets('pet details page supports long press multi-select batch delete',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = PetNoteStore.seeded();
+    await store.addRecord(
+      petId: 'pet-1',
+      title: '补充记录 A',
+      recordDate: DateTime.parse('2026-03-24T11:00:00+08:00'),
+      summary: '批量删除测试 A',
+      note: '',
+    );
+    await store.addRecord(
+      petId: 'pet-1',
+      title: '补充记录 B',
+      recordDate: DateTime.parse('2026-03-24T10:00:00+08:00'),
+      summary: '批量删除测试 B',
+      note: '',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: Scaffold(
+          body: PetsPage(
+            store: store,
+            onAddFirstPet: () {},
+            onEditPet: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('资料记录').first);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pet-record-batch-select-button')),
+        findsNothing);
+
+    await tester
+        .longPress(find.byKey(const ValueKey('pet-record-row-record-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pet-record-batch-select-button')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('pet-record-batch-delete-button')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('pet-record-selection-badge-record-1')),
+        findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('pet-record-row-record-4')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('pet-record-selection-badge-record-4')),
+        findsOneWidget);
+
+    await tester
+        .tap(find.byKey(const ValueKey('pet-record-batch-select-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('pet-record-selection-badge-record-5')),
+        findsOneWidget);
+
+    await tester
+        .tap(find.byKey(const ValueKey('pet-record-batch-delete-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('删除 3 条资料记录？'), findsOneWidget);
+    expect(find.text('删除后将无法恢复，请确认这次批量删除操作。'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, '删除').last);
+    await tester.pumpAndSettle();
+
+    expect(store.recordsForSelectedPet, isEmpty);
+    expect(find.text('暂无资料记录'), findsOneWidget);
+    expect(find.byKey(const ValueKey('pet-record-batch-select-button')),
+        findsNothing);
+  });
+
+  testWidgets('pet details page keeps selection after canceling batch delete',
+      (tester) async {
+    final store = PetNoteStore.seeded();
+    await store.addRecord(
+      petId: 'pet-1',
+      title: '补充记录 C',
+      recordDate: DateTime.parse('2026-03-24T09:00:00+08:00'),
+      summary: '批量删除取消测试',
+      note: '',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: Scaffold(
+          body: PetsPage(
+            store: store,
+            onAddFirstPet: () {},
+            onEditPet: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('资料记录').first);
+    await tester.pumpAndSettle();
+
+    await tester
+        .longPress(find.byKey(const ValueKey('pet-record-row-record-1')));
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.byKey(const ValueKey('pet-record-batch-delete-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除 1 条资料记录？'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, '取消'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pet-record-batch-select-button')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('pet-record-selection-badge-record-1')),
+        findsOneWidget);
+    expect(store.recordById('record-1'), isNotNull);
   });
 
   testWidgets(
@@ -1060,6 +1290,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('overview-range-menu-button')),
         warnIfMissed: false);
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('overview_range_bottom_sheet')),
+      findsOneWidget,
+    );
+    expect(find.text('选择总览时间范围'), findsWidgets);
 
     await tester.tap(find.text('1个月').last, warnIfMissed: false);
     await tester.pumpAndSettle();
@@ -1087,6 +1322,249 @@ void main() {
           .inDays,
       30,
     );
+  });
+
+  testWidgets('overview range custom picker keeps current value when cancelled',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final store = PetNoteStore.seeded();
+    final service = _FakeAiInsightsService(
+      careReport: _buildDetailedCareReport(),
+      isConfigured: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('zh', 'CN')],
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(store.overviewAnalysisConfig.range, OverviewRange.sevenDays);
+
+    await tester.tap(find.byKey(const ValueKey('overview-range-menu-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('overview_range_bottom_sheet')),
+      findsOneWidget,
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('overview-range-option-custom')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('overview-range-option-custom')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('overview-custom-range-page')),
+        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('overview-custom-range-scaffold')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('overview-custom-range-top-surface')),
+      findsOneWidget,
+    );
+    expect(find.byType(DateRangePickerDialog), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey('overview-custom-range-close-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(store.overviewAnalysisConfig.range, OverviewRange.sevenDays);
+    expect(find.text('7天'), findsWidgets);
+  });
+
+  testWidgets('overview custom range page applies selected start and end dates',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final store = PetNoteStore.seeded();
+    final service = _FakeAiInsightsService(
+      careReport: _buildDetailedCareReport(),
+      isConfigured: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('zh', 'CN')],
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('overview-range-menu-button')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('overview-range-option-custom')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('overview-range-option-custom')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('overview-custom-range-page')),
+        findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('overview-custom-range-scaffold')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('overview-custom-range-top-surface')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('overview-custom-range-apply-button')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('overview-custom-range-stage-start')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('overview-custom-range-calendar')),
+            matching: find.text('10'),
+          )
+          .last,
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('overview-custom-range-stage-end')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('overview-custom-range-calendar')),
+            matching: find.text('18'),
+          )
+          .last,
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('overview-custom-range-apply-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(store.overviewAnalysisConfig.range, OverviewRange.custom);
+    expect(
+      store.overviewAnalysisConfig.customRangeStart,
+      DateTime.parse('2026-03-10T00:00:00.000'),
+    );
+    expect(
+      store.overviewAnalysisConfig.customRangeEnd,
+      DateTime.parse('2026-03-18T00:00:00.000'),
+    );
+  });
+
+  testWidgets(
+      'overview range trigger button shows a pressed state before sheet',
+      (tester) async {
+    final store = PetNoteStore.seeded();
+    final service = _FakeAiInsightsService(
+      careReport: _buildDetailedCareReport(),
+      isConfigured: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final gesture = await tester.startGesture(
+      tester
+          .getCenter(find.byKey(const ValueKey('overview-range-menu-button'))),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final pressedScope = find.byKey(
+      const ValueKey('overview-range-menu-button-pressed-scope'),
+    );
+    expect(pressedScope, findsOneWidget);
+
+    final pressedOpacity = tester.widget<Opacity>(pressedScope);
+    expect(pressedOpacity.opacity, greaterThan(0));
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('overview_range_bottom_sheet')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('overview range options do not render gray corner shadows',
+      (tester) async {
+    final store = PetNoteStore.seeded();
+    final service = _FakeAiInsightsService(
+      careReport: _buildDetailedCareReport(),
+      isConfigured: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: _OverviewPageHarness(
+          store: store,
+          service: service,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('overview-range-menu-button')));
+    await tester.pumpAndSettle();
+
+    final optionInk = tester.widget<Ink>(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('overview-range-option-sevenDays')),
+            matching: find.byType(Ink),
+          )
+          .first,
+    );
+    final decoration = optionInk.decoration! as BoxDecoration;
+    expect(decoration.boxShadow, isNull);
   });
 
   testWidgets(
@@ -1392,7 +1870,8 @@ void main() {
     expect(refreshService.forceRefreshValues, <bool>[true]);
   });
 
-  testWidgets('overview page shows payload version note at the bottom of report',
+  testWidgets(
+      'overview page shows payload version note at the bottom of report',
       (tester) async {
     final store = PetNoteStore.seeded();
     store.setActiveTab(AppTab.overview);
@@ -1978,13 +2457,11 @@ AiCareReport _buildDetailedCareReport({
 class _FakeAiInsightsService implements AiInsightsService {
   _FakeAiInsightsService({
     this.careReport,
-    this.visitSummary,
     this.isConfigured = true,
     this.generateCareReportError,
   });
 
   final AiCareReport? careReport;
-  final AiVisitSummary? visitSummary;
   final bool isConfigured;
   final AiGenerationException? generateCareReportError;
   int generateCareReportCalls = 0;
@@ -2013,10 +2490,7 @@ class _FakeAiInsightsService implements AiInsightsService {
     AiGenerationContext context, {
     bool forceRefresh = false,
   }) async {
-    if (visitSummary == null) {
-      throw const AiGenerationException('missing visit summary');
-    }
-    return visitSummary!;
+    throw const AiGenerationException('missing visit summary');
   }
 
   @override

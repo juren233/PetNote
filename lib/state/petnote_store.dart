@@ -1658,6 +1658,26 @@ class PetNoteStore extends ChangeNotifier {
     await _saveState();
   }
 
+  Future<void> deleteRecords(Iterable<String> recordIds) async {
+    final ids =
+        recordIds.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+
+    final originalLength = _records.length;
+    _records.removeWhere((item) => ids.contains(item.id));
+    if (_records.length == originalLength) {
+      return;
+    }
+
+    _activeTab = AppTab.pets;
+    _invalidateOverviewDerivedData();
+    _invalidateSelectedPetDerivedData();
+    notifyListeners();
+    await _saveState();
+  }
+
   Future<void> addPet({
     required String name,
     required PetType type,

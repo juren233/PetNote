@@ -123,7 +123,9 @@ class _OverviewPageState extends State<OverviewPage> {
           trailing: showGenerationSetup
               ? _OverviewRangeMenuButton(
                   config: widget.store.overviewAnalysisConfig,
+                  referenceDate: widget.store.referenceNow,
                   onSelectRange: _selectOverviewRangeFromSetup,
+                  onSelectCustomRange: _applyCustomOverviewDateRange,
                 )
               : reportState.isLoading
                   ? _OverviewGeneratingHeaderActions(
@@ -504,6 +506,15 @@ class _OverviewPageState extends State<OverviewPage> {
       selectedPetIds: selectedPetIds,
       customRangeStart: currentConfig.customRangeStart,
       customRangeEnd: currentConfig.customRangeEnd,
+    );
+  }
+
+  Future<void> _applyCustomOverviewDateRange(DateTimeRange range) async {
+    widget.store.updateOverviewAnalysisConfig(
+      range: OverviewRange.custom,
+      selectedPetIds: widget.store.overviewAnalysisConfig.selectedPetIds,
+      customRangeStart: range.start,
+      customRangeEnd: range.end,
     );
   }
 
