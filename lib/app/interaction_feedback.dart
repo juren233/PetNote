@@ -9,10 +9,7 @@ bool _supportsHaptics() {
   }
   return switch (defaultTargetPlatform) {
     TargetPlatform.android || TargetPlatform.iOS => true,
-    TargetPlatform.fuchsia ||
-    TargetPlatform.linux ||
-    TargetPlatform.macOS ||
-    TargetPlatform.windows => false,
+    _ => false,
   };
 }
 
@@ -29,3 +26,4 @@ void triggerLightImpactHaptic() {
   }
   unawaited(HapticFeedback.lightImpact().catchError((_) {}));
 }
+

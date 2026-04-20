@@ -71,6 +71,19 @@ function getFlutterStateRoot(flutterProjectPath: string, stateName: string): str
   return path.join(flutterProjectPath, '.tooling', 'flutter-state', stateName)
 }
 
+function getFlutterPluginsDependenciesPath(flutterProjectPath: string): string {
+  const defaultPath = path.join(flutterProjectPath, '.flutter-plugins-dependencies')
+  const ohosStatePath = path.join(getFlutterStateRoot(flutterProjectPath, 'ohos'), '.flutter-plugins-dependencies')
+  if (
+    normalizeComparablePath(ohosStatePath) !== normalizeComparablePath(defaultPath) &&
+    fs.existsSync(ohosStatePath)
+  ) {
+    return ohosStatePath
+  }
+
+  return defaultPath
+}
+
 function backupManagedFlutterState(flutterProjectPath: string): string {
   const backupRoot = path.join(
     flutterProjectPath,
@@ -330,7 +343,7 @@ export function flutterHvigorPlugin(flutterProjectPath: string, flutterProjectTy
     pluginId: 'flutter-hvigor-plugin',
     apply(rootNode: HvigorNode) {
       const appContext = rootNode.getContext(OhosPluginId.OHOS_APP_PLUGIN) as OhosAppContext
-      const flutterPluginsDependenciesPath = path.join(flutterProjectPath, '.flutter-plugins-dependencies')
+      const flutterPluginsDependenciesPath = getFlutterPluginsDependenciesPath(flutterProjectPath)
       const nativePlugins = findFlutterPlugins(flutterPluginsDependenciesPath)
       const ohosDir = flutterProjectType === 1 ? '.ohos' : 'ohos'
       const properties = loadProperties(path.join(flutterProjectPath, ohosDir, 'local.properties'))
@@ -467,7 +480,7 @@ export function injectNativeModules(nativeProjectPath: string, flutterProjectPat
       srcPath
     )
   }
-  const flutterPluginsDependenciesPath = path.join(flutterProjectPath, '.flutter-plugins-dependencies')
+  const flutterPluginsDependenciesPath = getFlutterPluginsDependenciesPath(flutterProjectPath)
   findFlutterPlugins(flutterPluginsDependenciesPath).forEach(nativePlugin => {
     const srcPath = relativePath(nativeProjectPath, path.join(nativePlugin.path, 'ohos'))
     hvigorConfig.includeNode(
@@ -741,4 +754,3 @@ function findFlutterPlugins(flutterPluginsDependenciesPath: string): JSON[] {
     : []
   return ohosPlugins.filter(plugin => plugin.native_build !== false)
 }
-

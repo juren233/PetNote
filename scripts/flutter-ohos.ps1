@@ -234,6 +234,19 @@ function getFlutterStateRoot(flutterProjectPath: string, stateName: string): str
   return path.join(flutterProjectPath, '.tooling', 'flutter-state', stateName)
 }
 
+function getFlutterPluginsDependenciesPath(flutterProjectPath: string): string {
+  const defaultPath = path.join(flutterProjectPath, '.flutter-plugins-dependencies')
+  const ohosStatePath = path.join(getFlutterStateRoot(flutterProjectPath, 'ohos'), '.flutter-plugins-dependencies')
+  if (
+    normalizeComparablePath(ohosStatePath) !== normalizeComparablePath(defaultPath) &&
+    fs.existsSync(ohosStatePath)
+  ) {
+    return ohosStatePath
+  }
+
+  return defaultPath
+}
+
 function backupManagedFlutterState(flutterProjectPath: string): string {
   const backupRoot = path.join(
     flutterProjectPath,
@@ -487,10 +500,21 @@ function restoreFlutterSharedState(flutterProjectPath: string, sessionStateBacku
     $content = $content.Replace($oldPluginSnippet, $newPluginSnippet)
   }
 
+  $oldPluginsPathAssignments = @(
+    "const flutterPluginsDependenciesPath = path.join(flutterProjectPath, '.flutter-plugins-dependencies')"
+  )
+  foreach ($oldPluginsPathAssignment in $oldPluginsPathAssignments) {
+    if ($content.Contains($oldPluginsPathAssignment)) {
+      $content = $content.Replace(
+        $oldPluginsPathAssignment,
+        "const flutterPluginsDependenciesPath = getFlutterPluginsDependenciesPath(flutterProjectPath)"
+      )
+    }
+  }
+
   if ($content -eq $originalContent) {
     return
   }
-
   Set-Content -Path $FilePath -Value ($content.Replace("`n", "`r`n")) -Encoding utf8
 }
 
@@ -886,3 +910,4 @@ finally {
   }
   Pop-Location
 }
+

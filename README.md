@@ -577,6 +577,8 @@ open -a "DevEco Studio" .
   因为 hvigor 插件会在构建前自动备份共享状态、切换到 OHOS Flutter、必要时刷新 `package_config`，构建后再恢复。
 - “为什么 DevEco 运行前有时仍然建议先跑一次 Harmony 脚本？”
   因为脚本会顺手完成子模块初始化、本机 `ohos/local.properties` 校正、签名修复和 hvigor 补丁兜底，适合首次拉仓库或本地环境刚变化之后使用。
+- “为什么 `GeneratedPluginRegistrant.ets` 偶发报 `Cannot find module 'url_launcher_harmonyos'`？”
+  这通常是 DevEco / hvigor daemon 或 ArkTS / OHPM 增量缓存还在使用旧依赖图。先在 [ohos](./ohos) 下执行 `./hvigorw.bat --stop-daemon` 后重试；如果仍失败，再删除本地生成的 `ohos/.hvigor`、`ohos/entry/build`、`ohos/oh_modules` 后重新执行 `./hvigorw.bat assembleHap --stacktrace`。这些目录都是本地生成物，不要提交。
 - “为什么我只改了 `ohos/build-profile.json5` 里的密文，自己机器能跑，别人却在 `SignHap` 报 `Signature material verification failed`？”
   因为这两个密文和本机 `ohos/sign/material` 是配套关系，不是通用密码。只提密文、不带成套材料，其他机器大概率无法解密通过；这种 diff 默认应视为本地签名噪音，而不是共享改动。
 - “为什么不要直接把 OHOS Flutter SDK 当普通目录提交？”
