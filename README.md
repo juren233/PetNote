@@ -200,6 +200,7 @@ Android release 安装包现在统一走同一套本地忽略文件：
 - `android/signing/pet-release.jks`
 
 这两个文件都不要手写、不要提交，统一通过签名脚本生成。
+任何 Android keystore 原件都不能放进仓库历史，包括根目录 `pet-release.jks`、`*.jks`、`*.keystore`、`*.p12`、`*.pfx` 等文件；如果需要交给协作同事或 GitHub Actions，只能通过线下安全渠道或 GitHub Secrets 传递。
 
 如果旧正式签名已经丢失，需要直接重建一套新的 Android 正式签名，可在项目根目录执行：
 
@@ -536,13 +537,15 @@ open -a "DevEco Studio" .
 - `.dart_tool/`
 - `.flutter-plugins`
 - `.flutter-plugins-dependencies`
+- `*.iml`、`.idea/`、`.vscode/` 等 IDE 本地工程状态
 - `ohos/.idea/` 本地 IDE 状态文件
 - `ohos/node_modules/`
 - `ohos/oh_modules/`
-- `ohos/sign/` 下除 [ohos/sign/debug-profile.json](./ohos/sign/debug-profile.json) 之外的本地签名产物
+- `ohos/sign/` 下除 [ohos/sign/debug-profile.json](./ohos/sign/debug-profile.json) 之外的任何文件，包括证书、签名链、`p7b`、`cer`、`p12`、设备绑定 profile、本机签名材料和临时辅助脚本
 - `.signing-temp/`
 - `android/key.properties`
 - `android/signing/`
+- 根目录或任意子目录下的 Android keystore / 证书原件，例如 `pet-release.jks`、`*.jks`、`*.keystore`、`*.p12`、`*.pfx`
 - 构建产物目录
 
 特别注意：
@@ -550,6 +553,7 @@ open -a "DevEco Studio" .
 - 如果 [`.flutter_ohos_sdk_gitcode`](./.flutter_ohos_sdk_gitcode) 在主仓库里显示为 `dirty`，先清掉子模块内部的本地改动再提主仓库。
 - 根目录 [pubspec.lock](./pubspec.lock) 提交前应保持“官方 Flutter 默认状态”。
 - 如果需要改 DevEco 直跑逻辑，请优先改 [tooling/ohos-hvigor-plugin](./tooling/ohos-hvigor-plugin)，不要去改子模块里的 upstream hvigor 插件源码。
+- 如果确实需要共享 Harmony 签名辅助脚本，不要放在 `ohos/sign/` 下，应放到 [scripts](./scripts) 或其他受控源码目录，并在 README 中说明用途和验证方式。
 - 如果 diff 里出现 [ohos/build-profile.json5](./ohos/build-profile.json5)，先肉眼检查是否只改了 `storePassword` / `keyPassword` 或签名文件路径；这类改动默认不该提交，除非你正在做一次经过验证的共享签名基线升级。
 - 不要把“本机能在 DevEco 里点运行”当成 [ohos/build-profile.json5](./ohos/build-profile.json5) 可提交的依据；必须以脚本构建通过为准，再决定是否允许进入评审。
 

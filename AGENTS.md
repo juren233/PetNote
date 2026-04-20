@@ -82,6 +82,7 @@
   - 只改单独的 `storePassword` / `keyPassword` 密文
   - 把本机生成的证书、`p7b`、`cer`、设备绑定 profile 当成共享文件提交
 - [ohos/sign/debug-profile.json](./ohos/sign/debug-profile.json) 是共享基线；`ohos/sign/` 下其他签名产物默认视为本地文件。
+- `ohos/sign/` 下除 [ohos/sign/debug-profile.json](./ohos/sign/debug-profile.json) 之外的任何文件都不得提交，包括证书、签名链、`p7b`、`cer`、`p12`、设备绑定 profile、本机签名材料和临时辅助脚本；如果确实要共享签名辅助脚本，应放到 [scripts](./scripts) 或其他受控源码目录，并同步 README 说明。
 - 如果签名链路出问题，优先核对 README、脚本和受控基线，不要先入为主地把责任归因到“用户没配环境”。
 
 ### 6.4 OHOS 工具链归属规则
@@ -93,10 +94,14 @@
 ## 7. 提交边界与本地噪音控制
 
 - 不要提交 README 已明确标记为本地生成物、缓存、构建产物、IDE 状态、签名临时文件的内容。
+- 不要提交 Android keystore 或证书原件，包括根目录 `pet-release.jks`、`*.jks`、`*.keystore`、`*.p12`、`*.pfx`、`android/key.properties` 和 `android/signing/`。
+- 不要提交 IDE 本地工程状态，包括 `*.iml`、`.idea/`、`.vscode/`、`.fleet/` 等文件或目录。
 - 不要因为本机能跑，就把本机路径、本机凭据、本机状态快照提交进仓库。
 - 看到以下 diff 时要高度警惕，它们默认更像环境噪音而不是共享价值：
   - `local.properties`
   - `.dart_tool/`
+  - `*.iml`
+  - `pet-release.jks` 或其他 keystore / 证书原件
   - `ohos/node_modules/`
   - `ohos/oh_modules/`
   - `ohos/sign/` 下本地签名产物

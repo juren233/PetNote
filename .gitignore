@@ -45,6 +45,12 @@ node_modules/
 package-lock.json
 
 # Signing
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.p7b
+*.cer
 ohos/sign/*
 !ohos/sign/debug-profile.json
 .signing-temp/
