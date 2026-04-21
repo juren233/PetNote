@@ -49,7 +49,6 @@ const MANAGED_FLUTTER_STATE_FILES = [
   '.dart_tool/package_graph.json',
   '.dart_tool/version',
   'android/local.properties',
-  'ohos/local.properties',
 ]
 
 function ensureParentDirectory(targetPath: string) {
@@ -62,9 +61,26 @@ function removePathIfExists(targetPath: string) {
   }
 }
 
+const LOCKFILE_HOSTED_URL = 'https://pub.flutter-io.cn'
+
+function normalizePubspecLockHostedUrl(targetPath: string) {
+  if (path.basename(targetPath) !== 'pubspec.lock' || !fs.existsSync(targetPath)) {
+    return
+  }
+
+  const content = fs.readFileSync(targetPath, 'utf-8')
+  const normalizedContent = content.replace(/https:\/\/pub\.dev/g, LOCKFILE_HOSTED_URL)
+  if (normalizedContent === content) {
+    return
+  }
+
+  fs.writeFileSync(targetPath, normalizedContent, 'utf-8')
+}
+
 function copyFilePreservingParent(sourcePath: string, destinationPath: string) {
   ensureParentDirectory(destinationPath)
   fs.copyFileSync(sourcePath, destinationPath)
+  normalizePubspecLockHostedUrl(destinationPath)
 }
 
 function getFlutterStateRoot(flutterProjectPath: string, stateName: string): string {
@@ -158,6 +174,42 @@ function getFlutterProjectPackageName(flutterProjectPath: string): string | null
   } catch (error) {
     console.warn(`Failed to inspect pubspec.yaml for package name, refresh Flutter packages by default. ${error}`)
     return null
+  }
+}
+
+function getFlutterProjectVersionInfo(flutterProjectPath: string): {
+  versionName: string | null
+  versionCode: string | null
+} {
+  const pubspecPath = path.join(flutterProjectPath, 'pubspec.yaml')
+  if (!fs.existsSync(pubspecPath)) {
+    return { versionName: null, versionCode: null }
+  }
+
+  try {
+    const pubspecContent = fs.readFileSync(pubspecPath, 'utf-8')
+    const versionMatch = pubspecContent.match(/^version:\s*([^\s#]+)\s*$/m)
+    const versionValue = versionMatch?.[1]?.trim()
+    if (!versionValue) {
+      return { versionName: null, versionCode: null }
+    }
+
+    const [versionName, buildNumber = '1'] = versionValue.split('+', 2)
+    if (!versionName) {
+      return { versionName: null, versionCode: null }
+    }
+    if (!/^\d+$/.test(buildNumber)) {
+      console.warn(`pubspec.yaml build number is not numeric: ${buildNumber}`)
+      return { versionName: versionName.trim(), versionCode: null }
+    }
+
+    return {
+      versionName: versionName.trim(),
+      versionCode: buildNumber.trim(),
+    }
+  } catch (error) {
+    console.warn(`Failed to inspect pubspec.yaml for version info. ${error}`)
+    return { versionName: null, versionCode: null }
   }
 }
 
@@ -267,6 +319,63 @@ function getOhosRoot(flutterProjectPath: string): string {
   return path.join(flutterProjectPath, 'ohos')
 }
 
+
+function getFlutterOhosStorePath(flutterProjectPath: string): string | null {
+  const lockfilePath = path.join(getOhosRoot(flutterProjectPath), 'oh_modules', '.ohpm', 'lock.json5')
+  if (!fs.existsSync(lockfilePath)) {
+    return null
+  }
+
+  try {
+    const lockfileContent = fs.readFileSync(lockfilePath, 'utf-8')
+    const match = lockfileContent.match(/"@ohos\/flutter_ohos@file:[^"]+"\s*:\s*\{\s*"storePath"\s*:\s*"([^"]+)"/s)
+    return match?.[1] ?? null
+  } catch (error) {
+    console.warn(`Failed to inspect OHPM lockfile for flutter_ohos store path. ${error}`)
+    return null
+  }
+}
+
+function clearStaleFlutterOhosArkTsCache(flutterProjectPath: string, expectedStorePath: string | null) {
+  if (!expectedStorePath) {
+    return
+  }
+
+  const entryBuildPath = path.join(getOhosRoot(flutterProjectPath), 'entry', 'build')
+  if (!fs.existsSync(entryBuildPath)) {
+    return
+  }
+
+  const normalizedExpectedStorePath = expectedStorePath.replace(/\\/g, '/')
+  const cachedTsFiles = listFiles(entryBuildPath).filter(filePath => filePath.endsWith('.ts'))
+  const hasStaleFlutterOhosStorePath = cachedTsFiles.some(filePath => {
+    try {
+      const fileContent = fs.readFileSync(filePath, 'utf-8')
+      return fileContent.includes('@ohos/flutter_ohos') &&
+        fileContent.includes('pkg_modules/.ohpm/') &&
+        !fileContent.includes(normalizedExpectedStorePath)
+    } catch (error) {
+      console.warn(`Failed to inspect ArkTS cache file ${filePath}. ${error}`)
+      return false
+    }
+  })
+
+  if (!hasStaleFlutterOhosStorePath) {
+    return
+  }
+
+  console.warn(`Detected stale flutter_ohos ArkTS cache. Clear incremental build outputs before rebuild.`)
+  const staleBuildPaths = [
+    path.join(entryBuildPath, 'default', 'cache'),
+    path.join(entryBuildPath, 'default', 'intermediates', 'loader'),
+    path.join(entryBuildPath, 'default', 'intermediates', 'loader_out'),
+    path.join(entryBuildPath, 'default', 'intermediates', 'source_map'),
+    path.join(entryBuildPath, 'default', 'intermediates', 'package'),
+    path.join(entryBuildPath, 'default', 'outputs'),
+  ]
+  staleBuildPaths.forEach(removePathIfExists)
+}
+
 function getRepoOwnedHvigorPluginPath(flutterProjectPath: string): string {
   return path.join(flutterProjectPath, 'tooling', 'ohos-hvigor-plugin')
 }
@@ -347,6 +456,7 @@ export function flutterHvigorPlugin(flutterProjectPath: string, flutterProjectTy
       const nativePlugins = findFlutterPlugins(flutterPluginsDependenciesPath)
       const ohosDir = flutterProjectType === 1 ? '.ohos' : 'ohos'
       const properties = loadProperties(path.join(flutterProjectPath, ohosDir, 'local.properties'))
+      const flutterVersionInfo = getFlutterProjectVersionInfo(flutterProjectPath)
       const sdkPath = properties['flutter.sdk']
       const productName = appContext.getCurrentProduct().getProductName()
       const targetPlatforms = getParameters(TARGET_PLATFORM, DEFAULT_PLATFORMS)
@@ -355,8 +465,11 @@ export function flutterHvigorPlugin(flutterProjectPath: string, flutterProjectTy
         // app.json5
         if (flutterProjectType === 0) {
           const appJsonOpt = appContext.getAppJsonOpt()
-          appJsonOpt['app']['versionCode'] = Number(properties['flutter.versionCode'] ?? 1)
-          appJsonOpt['app']['versionName'] = properties['flutter.versionName'] ?? '1.0'
+          appJsonOpt['app']['versionCode'] = Number(
+            flutterVersionInfo.versionCode ?? properties['flutter.versionCode'] ?? 1
+          )
+          appJsonOpt['app']['versionName'] =
+            flutterVersionInfo.versionName ?? properties['flutter.versionName'] ?? '1.0'
           appContext.setAppJsonOpt(appJsonOpt)
         }
         // build-profile.json5
@@ -564,6 +677,8 @@ function registerFlutterTask(node: HvigorNode, sdkPath: string, buildMode: strin
         flutterProjectPath,
         sdkPath,
       )
+      const flutterOhosStorePath = getFlutterOhosStorePath(flutterProjectPath)
+      clearStaleFlutterOhosArkTsCache(flutterProjectPath, flutterOhosStorePath)
       try {
         let targetNames: string[]
         if (buildMode === 'debug') {

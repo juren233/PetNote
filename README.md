@@ -468,8 +468,12 @@ open -a "DevEco Studio" .
 - macOS 可走 DevEco Studio 一键编译 / 运行，也可以走上面的 `ohpm + hvigorw` 终端构建命令
 - Windows 新机器第一次使用 Harmony / DevEco 前，先执行一次 `powershell -ExecutionPolicy Bypass -File .\scripts\flutter-ohos.ps1 -Mode init`
 - 脚本会自动处理本地调试签名
-- `-Mode init` 会自动生成 / 校正本机的 [ohos/local.properties](./ohos/local.properties)，并固定让 Harmony 继续使用项目内 OHOS Flutter，不会把 Android / iOS 切到 OHOS Flutter
+- Harmony 安装包的版本号和构建号默认跟随根目录 [pubspec.yaml](./pubspec.yaml) 的 `version`
+- `-Mode init` 会自动生成 / 校正本机的 [ohos/local.properties](./ohos/local.properties)，并固定让 Harmony 继续使用项目内 OHOS Flutter，不会把 Android / iOS 切到 OHOS Flutter，同时会把根目录 `pubspec.yaml` 的 `version` 同步成 `flutter.versionName` / `flutter.versionCode`
 - 脚本也会自动校验仓库内 hvigor 插件副本，避免 IDE / hvigor 误读根目录的官方 Flutter `package_config`
+- DevEco 一键编译 / 运行也会优先读取根目录 `pubspec.yaml` 的 `version`，在构建期覆盖 Harmony 包的版本号和构建号，不需要额外手动改 [ohos/AppScope/app.json5](./ohos/AppScope/app.json5) 或 [ohos/local.properties](./ohos/local.properties)
+- 如果 OHPM 重新生成了 `@ohos/flutter_ohos` 的 storePath，脚本和 DevEco 直跑会自动清理过期的 ArkTS / loader 构建缓存，避免首次启动还去引用旧的 `pkg_modules/.ohpm/...` 哈希路径
+- 如果要修改 Harmony 安装包版本号或构建号，只改根目录 [pubspec.yaml](./pubspec.yaml) 即可
 - DevEco 直跑链路也会做同样的状态隔离，不需要额外手动切 Flutter SDK
 
 ## 依赖状态管理
@@ -489,7 +493,6 @@ open -a "DevEco Studio" .
 - `.dart_tool/package_graph.json`
 - `.dart_tool/version`
 - [android/local.properties](./android/local.properties)
-- [ohos/local.properties](./ohos/local.properties)
 
 结论很简单：
 
@@ -497,6 +500,7 @@ open -a "DevEco Studio" .
 - 需要哪一端，就走哪一端脚本
 - 如果你在 macOS 上按 README 直接执行 Android / iOS 原生命令，这属于“明确留在 official 状态下”的例外场景
 - Harmony 构建完后，根目录会恢复成官方 Flutter 状态，这是设计如此，不是状态错乱
+- [ohos/local.properties](./ohos/local.properties) 是 Harmony 本地配置，不属于 `official` / `ohos` 共享 Flutter 状态快照；`-Mode init` 校正后的版本号和 OHOS Flutter 路径会保留在当前机器上
 - DevEco 直跑 Harmony 时，也会先备份根目录共享生成物，再切到 OHOS 状态，结束后恢复
 
 ## OHOS Hvigor 插件归属

@@ -5,6 +5,7 @@ import 'package:petnote/ai/ai_connection_tester.dart';
 import 'package:petnote/ai/ai_insights_service.dart';
 import 'package:petnote/ai/ai_secret_store.dart';
 import 'package:petnote/ai/ai_settings_coordinator.dart';
+import 'package:petnote/app/app_version_info.dart';
 import 'package:petnote/app/app_theme.dart';
 import 'package:petnote/app/native_pet_photo_picker.dart';
 import 'package:petnote/app/petnote_root.dart';
@@ -23,6 +24,7 @@ class PetNoteApp extends StatefulWidget {
     this.aiInsightsService,
     this.appLogController,
     this.nativePetPhotoPicker,
+    this.appVersionInfo = AppVersionInfo.empty,
   });
 
   final AppSettingsController? settingsController;
@@ -31,6 +33,7 @@ class PetNoteApp extends StatefulWidget {
   final AiInsightsService? aiInsightsService;
   final AppLogController? appLogController;
   final NativePetPhotoPicker? nativePetPhotoPicker;
+  final AppVersionInfo appVersionInfo;
 
   @override
   State<PetNoteApp> createState() => _PetNoteAppState();
@@ -39,23 +42,37 @@ class PetNoteApp extends StatefulWidget {
 class _PetNoteAppState extends State<PetNoteApp> {
   AppSettingsController? _settingsController;
   AppLogController? _appLogController;
+  late AppVersionInfo _appVersionInfo;
 
   @override
   void initState() {
     super.initState();
+    _appVersionInfo = widget.appVersionInfo;
     if (widget.settingsController != null) {
       _settingsController = widget.settingsController;
       _appLogController = widget.appLogController ?? AppLogController.memory();
       _activateCrashDiagnostics(_appLogController!);
+      if (_appVersionInfo == AppVersionInfo.empty) {
+        _loadAppVersionInfo();
+      }
     } else {
       _loadControllers();
     }
   }
 
   Future<void> _loadControllers() async {
-    final controller = await AppSettingsController.load();
-    final appLogController =
-        widget.appLogController ?? await AppLogController.load();
+    final results = await Future.wait<Object>([
+      AppSettingsController.load(),
+      widget.appLogController == null
+          ? AppLogController.load()
+          : Future<AppLogController>.value(widget.appLogController!),
+      _appVersionInfo == AppVersionInfo.empty
+          ? AppVersionInfo.load()
+          : Future<AppVersionInfo>.value(_appVersionInfo),
+    ]);
+    final controller = results[0] as AppSettingsController;
+    final appLogController = results[1] as AppLogController;
+    final appVersionInfo = results[2] as AppVersionInfo;
     if (!mounted) {
       return;
     }
@@ -63,6 +80,17 @@ class _PetNoteAppState extends State<PetNoteApp> {
     setState(() {
       _settingsController = controller;
       _appLogController = appLogController;
+      _appVersionInfo = appVersionInfo;
+    });
+  }
+
+  Future<void> _loadAppVersionInfo() async {
+    final appVersionInfo = await AppVersionInfo.load();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _appVersionInfo = appVersionInfo;
     });
   }
 
@@ -101,10 +129,11 @@ class _PetNoteAppState extends State<PetNoteApp> {
         theme: buildPetNoteTheme(Brightness.light),
         darkTheme: buildPetNoteTheme(Brightness.dark),
         themeMode: ThemeMode.system,
-          home: PetNoteRoot(
-            appLogController: appLogController,
-            nativePetPhotoPicker: widget.nativePetPhotoPicker,
-            aiSettingsCoordinator: _settingsController == null
+        home: PetNoteRoot(
+          appLogController: appLogController,
+          appVersionInfo: _appVersionInfo,
+          nativePetPhotoPicker: widget.nativePetPhotoPicker,
+          aiSettingsCoordinator: _settingsController == null
               ? null
               : AiSettingsCoordinator(
                   settingsController: _settingsController!,
@@ -147,6 +176,7 @@ class _PetNoteAppState extends State<PetNoteApp> {
           themeMode: settingsController.themeMode,
           home: PetNoteRoot(
             appLogController: appLogController,
+            appVersionInfo: _appVersionInfo,
             settingsController: settingsController,
             nativePetPhotoPicker: widget.nativePetPhotoPicker,
             aiSettingsCoordinator: AiSettingsCoordinator(

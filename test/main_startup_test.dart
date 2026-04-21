@@ -9,5 +9,12 @@ void main() {
     expect(source.contains('Future<void> main() async'), isFalse);
     expect(source.contains('await configureStartupSystemUi()'), isFalse);
     expect(source.contains('configureStartupSystemUi();'), isTrue);
+    expect(source.contains('lockAppToPortrait();'), isTrue);
+    expect(source.contains('AppVersionInfo.load().then('), isTrue);
+    expect(source.contains('(appVersionInfo) {'), isTrue);
+    expect(
+      source.contains('runApp(PetNoteApp(appVersionInfo: appVersionInfo));'),
+      isTrue,
+    );
   });
 }

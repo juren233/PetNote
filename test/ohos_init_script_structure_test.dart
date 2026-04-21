@@ -31,4 +31,21 @@ void main() {
       isFalse,
     );
   });
+
+  test('OHOS init script syncs version metadata from root pubspec.yaml', () {
+    final script = File('scripts/flutter-ohos.ps1').readAsStringSync();
+
+    expect(script.contains('function Get-PubspecVersionInfo {'), isTrue);
+    expect(script.contains(r"Join-Path $RepoRoot 'pubspec.yaml'"), isTrue);
+    expect(script.contains(r"if ($trimmedLine.StartsWith('version:'))"), isTrue);
+    expect(script.contains(r'$pubspecVersionInfo.VersionName'), isTrue);
+    expect(script.contains(r'$pubspecVersionInfo.VersionCode'), isTrue);
+    expect(script.contains(r'"flutter.versionName=$versionName"'), isTrue);
+    expect(script.contains(r'"flutter.versionCode=$versionCode"'), isTrue);
+    expect(script.contains(r'[long]::TryParse($versionCode, [ref]$parsedVersionCode)'), isTrue);
+    expect(script.contains(r"[string]$VersionName"), isTrue);
+    expect(script.contains(r"[string]$VersionCode"), isTrue);
+    expect(script.contains(r"$template.'version-name' = $VersionName"), isTrue);
+    expect(script.contains(r"$template.'version-code' = [int64]$VersionCode"), isTrue);
+  });
 }

@@ -9,8 +9,7 @@ function Get-ManagedFlutterStateFiles {
     '.dart_tool/package_config_subset',
     '.dart_tool/package_graph.json',
     '.dart_tool/version',
-    'android/local.properties',
-    'ohos/local.properties'
+    'android/local.properties'
   )
 }
 
@@ -23,6 +22,25 @@ function Remove-PathIfExists {
   if (Test-Path $Path) {
     Remove-Item -Path $Path -Force
   }
+}
+
+function Normalize-PubspecLockHostedUrl {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  if ((Split-Path $Path -Leaf) -ne 'pubspec.lock' -or -not (Test-Path $Path)) {
+    return
+  }
+
+  $content = Get-Content -Path $Path -Raw
+  $normalizedContent = $content.Replace('https://pub.dev', 'https://pub.flutter-io.cn')
+  if ($normalizedContent -eq $content) {
+    return
+  }
+
+  Set-Content -Path $Path -Value $normalizedContent -Encoding ascii
 }
 
 function Copy-FilePreservingParent {
@@ -39,6 +57,7 @@ function Copy-FilePreservingParent {
   }
 
   Copy-Item -Path $SourcePath -Destination $DestinationPath -Force
+  Normalize-PubspecLockHostedUrl -Path $DestinationPath
 }
 
 function Get-FlutterStateRoot {

@@ -519,10 +519,19 @@ jobs:
           if appended_count == 0:
             lines.append("- 本次推送未携带可展示的提交说明。")
 
+          lines.extend([
+            "",
+            "## 版本元数据",
+            "",
+            f"- 构建号：{os.environ['VERSION_BUILD']}",
+            "<!-- build-number: " + os.environ["VERSION_BUILD"] + " -->",
+          ])
+
           Path("release-body-initial.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
           PY
         env:
           PUBLISH_MODE: ${{ needs.resolve-release-plan.outputs.publish_mode }}
+          VERSION_BUILD: ${{ needs.resolve-release-plan.outputs.version_build }}
 
       - name: Create GitHub Release
         id: create_release

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:petnote/ai/ai_provider_config.dart';
 import 'package:petnote/ai/ai_settings_coordinator.dart';
 import 'package:petnote/app/ai_settings_page.dart';
+import 'package:petnote/app/app_update_checker.dart';
 import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/app_version_info.dart';
 import 'package:petnote/app/common_widgets.dart';
 import 'package:petnote/app/data_storage_page.dart';
 import 'package:petnote/app/layout_metrics.dart';
@@ -34,8 +35,10 @@ class MePage extends StatelessWidget {
     required this.settingsController,
     required this.aiSettingsCoordinator,
     required this.dataStorageCoordinator,
+    this.appVersionInfo = AppVersionInfo.empty,
     this.notificationCapabilities = const NotificationPlatformCapabilities(),
     this.appLogController,
+    this.appUpdateChecker = const GitHubAppUpdateChecker(),
   });
 
   final AppThemePreference themePreference;
@@ -50,6 +53,8 @@ class MePage extends StatelessWidget {
   final AppLogController? appLogController;
   final AiSettingsCoordinator? aiSettingsCoordinator;
   final DataStorageCoordinator? dataStorageCoordinator;
+  final AppVersionInfo appVersionInfo;
+  final AppUpdateChecker appUpdateChecker;
 
   @override
   Widget build(BuildContext context) {
@@ -127,7 +132,10 @@ class MePage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: _settingsEntrySpacing),
-        const _AboutPetNoteCard(),
+        _AboutPetNoteCard(
+          appVersionInfo: appVersionInfo,
+          appUpdateChecker: appUpdateChecker,
+        ),
       ],
     );
   }
@@ -491,34 +499,68 @@ class _SettingsNavigationEntry extends StatelessWidget {
 }
 
 class _AboutPetNoteCard extends StatefulWidget {
-  const _AboutPetNoteCard();
+  const _AboutPetNoteCard({
+    required this.appVersionInfo,
+    required this.appUpdateChecker,
+  });
+
+  final AppVersionInfo appVersionInfo;
+  final AppUpdateChecker appUpdateChecker;
 
   @override
   State<_AboutPetNoteCard> createState() => _AboutPetNoteCardState();
 }
 
 class _AboutPetNoteCardState extends State<_AboutPetNoteCard> {
-  String _version = '';
+  static const String _defaultGitHubUrl = 'https://github.com/juren233/PetNote';
+
+  String _releaseTileTitle = 'GitHub 仓库';
+  String _releaseTileSubtitle = '跳转查看更新';
+  String _releaseUrl = _defaultGitHubUrl;
+  int _releaseInfoRequestId = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadVersion();
+    _loadReleaseInfo();
   }
 
-  Future<void> _loadVersion() async {
-    String version = '';
-    try {
-      final packageInfo = await PackageInfo.fromPlatform();
-      version = packageInfo.version;
-    } on MissingPluginException {
-      version = '';
+  @override
+  void didUpdateWidget(covariant _AboutPetNoteCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.appVersionInfo.buildNumber != widget.appVersionInfo.buildNumber ||
+        oldWidget.appUpdateChecker != widget.appUpdateChecker) {
+      _loadReleaseInfo();
     }
-    if (!mounted) {
+  }
+
+  Future<void> _loadReleaseInfo() async {
+    final requestId = ++_releaseInfoRequestId;
+    final buildNumber = widget.appVersionInfo.buildNumber;
+    String releaseTileTitle = 'GitHub 仓库';
+    String releaseTileSubtitle = '跳转查看更新';
+    String releaseUrl = _defaultGitHubUrl;
+
+    final currentBuildNumber = int.tryParse(buildNumber);
+    if (currentBuildNumber != null) {
+      final latestUpdate = await widget.appUpdateChecker.fetchLatestUpdate(
+        currentBuildNumber: currentBuildNumber,
+      );
+      if (latestUpdate != null) {
+        releaseTileTitle = '🆕 当前App有新版 ${latestUpdate.versionLabel}';
+        releaseTileSubtitle = '点击查看 ${latestUpdate.versionLabel} 发布说明';
+        releaseUrl = latestUpdate.releaseUrl.toString();
+      }
+    }
+
+    if (!mounted || requestId != _releaseInfoRequestId) {
       return;
     }
+
     setState(() {
-      _version = version;
+      _releaseTileTitle = releaseTileTitle;
+      _releaseTileSubtitle = releaseTileSubtitle;
+      _releaseUrl = releaseUrl;
     });
   }
 
@@ -550,25 +592,21 @@ class _AboutPetNoteCardState extends State<_AboutPetNoteCard> {
     final theme = Theme.of(context);
     final tokens = context.petNoteTokens;
     final isDark = theme.brightness == Brightness.dark;
+    final version = widget.appVersionInfo.version;
     final infoListBackground = isDark
         ? tokens.listRowBackground.withValues(alpha: 0.72)
         : Colors.white.withValues(alpha: 0.72);
     final logoBoxBackground = isDark ? const Color(0xFF111111) : Colors.white;
-    final logoBoxBorderColor = isDark
-        ? Colors.white.withValues(alpha: 0.12)
-        : const Color(0xFFEAE6E0);
-    final logoShadowColor = isDark
-        ? Colors.black.withValues(alpha: 0.28)
-        : const Color(0x0D000000);
-    final logoColorFilter = isDark
-        ? const ColorFilter.mode(Colors.white, BlendMode.srcIn)
-        : null;
-    final versionBadgeBackground = isDark
-        ? Colors.white.withValues(alpha: 0.1)
-        : const Color(0xFFF6F1E9);
-    final versionBadgeBorderColor = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : const Color(0xFFE6DDD1);
+    final logoBoxBorderColor =
+        isDark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFEAE6E0);
+    final logoShadowColor =
+        isDark ? Colors.black.withValues(alpha: 0.28) : const Color(0x0D000000);
+    final logoColorFilter =
+        isDark ? const ColorFilter.mode(Colors.white, BlendMode.srcIn) : null;
+    final versionBadgeBackground =
+        isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFF6F1E9);
+    final versionBadgeBorderColor =
+        isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE6DDD1);
     return FrostedPanel(
       key: const ValueKey('me_about_card'),
       margin: EdgeInsets.zero,
@@ -634,7 +672,7 @@ class _AboutPetNoteCardState extends State<_AboutPetNoteCard> {
               ),
             ),
             child: Text(
-              'Version ${_version.isEmpty ? '--' : _version}',
+              'Version ${version.isEmpty ? '--' : version}',
               style: theme.textTheme.labelMedium?.copyWith(
                 color: tokens.secondaryText,
                 fontWeight: FontWeight.w600,
@@ -661,11 +699,9 @@ class _AboutPetNoteCardState extends State<_AboutPetNoteCard> {
               children: [
                 _AboutInfoTile(
                   icon: Icons.code_rounded,
-                  title: 'GitHub 仓库',
-                  subtitle: '跳转查看更新',
-                  onTap: () => _openExternalUrl(
-                    'https://github.com/juren233/PetNote',
-                  ),
+                  title: _releaseTileTitle,
+                  subtitle: _releaseTileSubtitle,
+                  onTap: () => _openExternalUrl(_releaseUrl),
                 ),
                 _AboutInfoDivider(color: tokens.primaryText),
                 _AboutInfoTile(

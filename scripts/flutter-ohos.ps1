@@ -140,27 +140,62 @@ function Convert-ToPropertiesPathValue {
   return $Value.Replace('\', '\\')
 }
 
+function Get-PubspecVersionInfo {
+  param(
+    [string]$RepoRoot
+  )
+
+  $pubspecPath = Join-Path $RepoRoot 'pubspec.yaml'
+  if (-not (Test-Path $pubspecPath)) {
+    throw "pubspec.yaml was not found at $pubspecPath"
+  }
+
+  $versionValue = $null
+  foreach ($line in Get-Content -Path $pubspecPath) {
+    $trimmedLine = $line.Trim()
+    if ($trimmedLine.StartsWith('version:')) {
+      $versionValue = $trimmedLine.Substring('version:'.Length).Trim()
+      break
+    }
+  }
+
+  if ([string]::IsNullOrWhiteSpace($versionValue)) {
+    throw "Could not find version in $pubspecPath"
+  }
+
+  $versionParts = $versionValue -split '\+', 2
+  $versionName = $versionParts[0].Trim()
+  $versionCode = if ($versionParts.Count -gt 1 -and -not [string]::IsNullOrWhiteSpace($versionParts[1])) {
+    $versionParts[1].Trim()
+  }
+  else {
+    '1'
+  }
+
+  if ([string]::IsNullOrWhiteSpace($versionName)) {
+    throw "pubspec.yaml versionName must not be empty."
+  }
+
+  [long]$parsedVersionCode = 0
+  if (-not [long]::TryParse($versionCode, [ref]$parsedVersionCode)) {
+    throw "pubspec.yaml build number must be numeric: $versionCode"
+  }
+
+  return [pscustomobject]@{
+    VersionName = $versionName
+    VersionCode = [string]$parsedVersionCode
+  }
+}
+
 function Ensure-OhosLocalProperties {
   param(
     [string]$LocalPropertiesPath,
     [string]$DevEcoSdkHome,
     [string]$NodejsDir,
-    [string]$FlutterSdkRoot
+    [string]$FlutterSdkRoot,
+    [string]$VersionName,
+    [string]$VersionCode
   )
-
-  $existingProperties = Get-PropertiesMap -Path $LocalPropertiesPath
-  $versionName = if ($existingProperties.ContainsKey('flutter.versionName')) {
-    [string]$existingProperties['flutter.versionName']
-  }
-  else {
-    '1.0.0'
-  }
-  $versionCode = if ($existingProperties.ContainsKey('flutter.versionCode')) {
-    [string]$existingProperties['flutter.versionCode']
-  }
-  else {
-    '1000000'
-  }
 
   $content = @(
     "hwsdk.dir=$(Convert-ToPropertiesPathValue -Value $DevEcoSdkHome)"
@@ -212,7 +247,6 @@ const MANAGED_FLUTTER_STATE_FILES = [
   '.dart_tool/package_graph.json',
   '.dart_tool/version',
   'android/local.properties',
-  'ohos/local.properties',
 ]
 
 function ensureParentDirectory(targetPath: string) {
@@ -225,9 +259,26 @@ function removePathIfExists(targetPath: string) {
   }
 }
 
+const LOCKFILE_HOSTED_URL = 'https://pub.flutter-io.cn'
+
+function normalizePubspecLockHostedUrl(targetPath: string) {
+  if (path.basename(targetPath) !== 'pubspec.lock' || !fs.existsSync(targetPath)) {
+    return
+  }
+
+  const content = fs.readFileSync(targetPath, 'utf-8')
+  const normalizedContent = content.replace(/https:\/\/pub\.dev/g, LOCKFILE_HOSTED_URL)
+  if (normalizedContent === content) {
+    return
+  }
+
+  fs.writeFileSync(targetPath, normalizedContent, 'utf-8')
+}
+
 function copyFilePreservingParent(sourcePath: string, destinationPath: string) {
   ensureParentDirectory(destinationPath)
   fs.copyFileSync(sourcePath, destinationPath)
+  normalizePubspecLockHostedUrl(destinationPath)
 }
 
 function getFlutterStateRoot(flutterProjectPath: string, stateName: string): string {
@@ -377,6 +428,62 @@ function restoreFlutterSharedState(flutterProjectPath: string, sessionStateBacku
   cleanupManagedFlutterStateBackup(sessionStateBackupRoot)
   console.info('Restore Flutter shared state end')
 }
+
+function getFlutterOhosStorePath(flutterProjectPath: string): string | null {
+  const lockfilePath = path.join(getOhosRoot(flutterProjectPath), 'oh_modules', '.ohpm', 'lock.json5')
+  if (!fs.existsSync(lockfilePath)) {
+    return null
+  }
+
+  try {
+    const lockfileContent = fs.readFileSync(lockfilePath, 'utf-8')
+    const match = lockfileContent.match(/"@ohos\/flutter_ohos@file:[^"]+"\s*:\s*\{\s*"storePath"\s*:\s*"([^"]+)"/s)
+    return match?.[1] ?? null
+  } catch (error) {
+    console.warn(`Failed to inspect OHPM lockfile for flutter_ohos store path. ${error}`)
+    return null
+  }
+}
+
+function clearStaleFlutterOhosArkTsCache(flutterProjectPath: string, expectedStorePath: string | null) {
+  if (!expectedStorePath) {
+    return
+  }
+
+  const entryBuildPath = path.join(getOhosRoot(flutterProjectPath), 'entry', 'build')
+  if (!fs.existsSync(entryBuildPath)) {
+    return
+  }
+
+  const normalizedExpectedStorePath = expectedStorePath.replace(/\\/g, '/')
+  const cachedTsFiles = listFiles(entryBuildPath).filter(filePath => filePath.endsWith('.ts'))
+  const hasStaleFlutterOhosStorePath = cachedTsFiles.some(filePath => {
+    try {
+      const fileContent = fs.readFileSync(filePath, 'utf-8')
+      return fileContent.includes('@ohos/flutter_ohos') &&
+        fileContent.includes('pkg_modules/.ohpm/') &&
+        !fileContent.includes(normalizedExpectedStorePath)
+    } catch (error) {
+      console.warn(`Failed to inspect ArkTS cache file ${filePath}. ${error}`)
+      return false
+    }
+  })
+
+  if (!hasStaleFlutterOhosStorePath) {
+    return
+  }
+
+  console.warn(`Detected stale flutter_ohos ArkTS cache. Clear incremental build outputs before rebuild.`)
+  const staleBuildPaths = [
+    path.join(entryBuildPath, 'default', 'cache'),
+    path.join(entryBuildPath, 'default', 'intermediates', 'loader'),
+    path.join(entryBuildPath, 'default', 'intermediates', 'loader_out'),
+    path.join(entryBuildPath, 'default', 'intermediates', 'source_map'),
+    path.join(entryBuildPath, 'default', 'intermediates', 'package'),
+    path.join(entryBuildPath, 'default', 'outputs'),
+  ]
+  staleBuildPaths.forEach(removePathIfExists)
+}
 '@
 
   if (-not $content.Contains($backupStateMarker)) {
@@ -441,6 +548,8 @@ function restoreFlutterSharedState(flutterProjectPath: string, sessionStateBacku
         flutterProjectPath,
         sdkPath,
       )
+      const flutterOhosStorePath = getFlutterOhosStorePath(flutterProjectPath)
+      clearStaleFlutterOhosArkTsCache(flutterProjectPath, flutterOhosStorePath)
       try {
         let targetNames: string[]
 '@
@@ -633,13 +742,15 @@ function New-DebugProfileJson {
     [string]$TemplatePath,
     [string]$BundleName,
     [string]$DeviceUdid,
+    [string]$VersionName,
+    [string]$VersionCode,
     [string]$OutFile
   )
 
   $template = Get-Content $TemplatePath -Raw | ConvertFrom-Json
   $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-  $template.'version-name' = '1.0.0'
-  $template.'version-code' = 1
+  $template.'version-name' = $VersionName
+  $template.'version-code' = [int64]$VersionCode
   $template.uuid = [guid]::NewGuid().ToString()
   $template.validity.'not-before' = $now
   $template.validity.'not-after' = $now + 315360000
@@ -658,6 +769,7 @@ function Get-CompatibleApiVersion {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$pubspecVersionInfo = Get-PubspecVersionInfo -RepoRoot $repoRoot
 $sdkRepoRoot = Join-Path $repoRoot '.flutter_ohos_sdk_gitcode'
 Ensure-OhosFlutterSubmodule -RepoRoot $repoRoot -SubmodulePath $sdkRepoRoot
 $resolvedSdkRepoRoot = (Resolve-Path $sdkRepoRoot).Path
@@ -772,7 +884,9 @@ try {
     -LocalPropertiesPath $ohosLocalPropertiesPath `
     -DevEcoSdkHome $devEcoSdkHome `
     -NodejsDir $devEcoNodeDir `
-    -FlutterSdkRoot $resolvedSdkRepoRoot
+    -FlutterSdkRoot $resolvedSdkRepoRoot `
+    -VersionName $pubspecVersionInfo.VersionName `
+    -VersionCode $pubspecVersionInfo.VersionCode
 
   if ($Mode -eq 'init') {
     Invoke-Checked -Executable $flutterSdk -Arguments @('pub', 'get')
@@ -839,7 +953,13 @@ try {
 
   Export-Certificate -Keytool $keytool -KeystoreFile $keystoreFile -StorePassword $keystorePassword -Alias 'openharmony application root ca' -OutFile $rootCaFile
   Export-Certificate -Keytool $keytool -KeystoreFile $keystoreFile -StorePassword $keystorePassword -Alias 'openharmony application ca' -OutFile $appCaFile
-  New-DebugProfileJson -TemplatePath $profileTemplate -BundleName $bundleName -DeviceUdid $deviceUdid -OutFile $profileJson
+  New-DebugProfileJson `
+    -TemplatePath $profileTemplate `
+    -BundleName $bundleName `
+    -DeviceUdid $deviceUdid `
+    -VersionName $pubspecVersionInfo.VersionName `
+    -VersionCode $pubspecVersionInfo.VersionCode `
+    -OutFile $profileJson
 
   Invoke-Checked -Executable 'java' -Arguments @(
     '-jar', $hapSignTool,
@@ -910,4 +1030,3 @@ finally {
   }
   Pop-Location
 }
-

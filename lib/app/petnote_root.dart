@@ -10,6 +10,7 @@ import 'package:petnote/app/add_sheet.dart';
 import 'package:petnote/app/android_native_dock.dart';
 import 'package:petnote/app/ai_settings_page.dart';
 import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/app_version_info.dart';
 import 'package:petnote/app/common_widgets.dart';
 import 'package:petnote/app/ios_native_dock.dart';
 import 'package:petnote/app/layout_metrics.dart';
@@ -37,6 +38,7 @@ class PetNoteRoot extends StatefulWidget {
     this.aiSettingsCoordinator,
     this.aiInsightsService,
     this.appLogController,
+    this.appVersionInfo = AppVersionInfo.empty,
     this.iosDockBuilder,
     this.storeLoader,
     this.notificationAdapter,
@@ -47,6 +49,7 @@ class PetNoteRoot extends StatefulWidget {
   final AiSettingsCoordinator? aiSettingsCoordinator;
   final AiInsightsService? aiInsightsService;
   final AppLogController? appLogController;
+  final AppVersionInfo appVersionInfo;
   final IosDockBuilder? iosDockBuilder;
   final Future<PetNoteStore> Function()? storeLoader;
   final NotificationPlatformAdapter? notificationAdapter;
@@ -294,6 +297,7 @@ class _PetNoteRootState extends State<PetNoteRoot>
           aiSettingsCoordinator: widget.aiSettingsCoordinator,
           aiInsightsService: widget.aiInsightsService,
           appLogController: widget.appLogController,
+          appVersionInfo: widget.appVersionInfo,
           notificationCoordinator: _notificationCoordinator,
           highlightedChecklistItemKey: _highlightedChecklistItemKey,
           dataStorageCoordinator: _dataStorageCoordinator,
@@ -694,6 +698,7 @@ class _PetNoteBody extends StatefulWidget {
     required this.aiSettingsCoordinator,
     required this.aiInsightsService,
     required this.appLogController,
+    required this.appVersionInfo,
     required this.notificationCoordinator,
     required this.highlightedChecklistItemKey,
     required this.dataStorageCoordinator,
@@ -721,6 +726,7 @@ class _PetNoteBody extends StatefulWidget {
   final AiSettingsCoordinator? aiSettingsCoordinator;
   final AiInsightsService? aiInsightsService;
   final AppLogController? appLogController;
+  final AppVersionInfo appVersionInfo;
   final NotificationCoordinator? notificationCoordinator;
   final String? highlightedChecklistItemKey;
   final DataStorageCoordinator? dataStorageCoordinator;
@@ -1004,6 +1010,7 @@ class _PetNoteBodyState extends State<_PetNoteBody> {
                     widget.settingsController?.setThemePreference(value),
                 settingsController: widget.settingsController,
                 appLogController: widget.appLogController,
+                appVersionInfo: widget.appVersionInfo,
                 aiSettingsCoordinator: widget.aiSettingsCoordinator,
                 dataStorageCoordinator: widget.dataStorageCoordinator,
                 notificationPermissionState:
@@ -1342,5 +1349,3 @@ class _TabButton extends StatelessWidget {
     );
   }
 }
-
-

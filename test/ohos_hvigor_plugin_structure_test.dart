@@ -149,6 +149,69 @@ void main() {
     expect(ownedPlugin.contains('Array.isArray(projectPackage.dependencies)'), isTrue);
   });
 
+  test('OHOS hvigor plugin resolves app version metadata from root pubspec first', () {
+    final ownedPlugin = File(
+      'tooling/ohos-hvigor-plugin/src/plugin/flutter-hvigor-plugin.ts',
+    ).readAsStringSync();
+
+    expect(ownedPlugin.contains('function getFlutterProjectVersionInfo('), isTrue);
+    expect(ownedPlugin.contains("const pubspecPath = path.join(flutterProjectPath, 'pubspec.yaml')"), isTrue);
+    expect(ownedPlugin.contains(r"const versionMatch = pubspecContent.match(/^version:\s*([^\s#]+)\s*$/m)"), isTrue);
+    expect(ownedPlugin.contains("const [versionName, buildNumber = '1'] = versionValue.split('+', 2)"), isTrue);
+    expect(ownedPlugin.contains('const flutterVersionInfo = getFlutterProjectVersionInfo(flutterProjectPath)'), isTrue);
+    expect(ownedPlugin.contains("appJsonOpt['app']['versionCode'] = Number("), isTrue);
+    expect(ownedPlugin.contains("flutterVersionInfo.versionCode ?? properties['flutter.versionCode'] ?? 1"), isTrue);
+    expect(ownedPlugin.contains("appJsonOpt['app']['versionName'] ="), isTrue);
+    expect(ownedPlugin.contains("flutterVersionInfo.versionName ?? properties['flutter.versionName'] ?? '1.0'"), isTrue);
+  });
+
+
+  test('OHOS hvigor plugin clears stale flutter_ohos ArkTS cache when OHPM store path changes', () {
+    final ownedPlugin = File(
+      'tooling/ohos-hvigor-plugin/src/plugin/flutter-hvigor-plugin.ts',
+    ).readAsStringSync();
+    final helperScript = File('scripts/flutter-ohos.ps1').readAsStringSync();
+
+    expect(ownedPlugin.contains('function getFlutterOhosStorePath('), isTrue);
+    expect(ownedPlugin.contains("oh_modules', '.ohpm', 'lock.json5'"), isTrue);
+    expect(ownedPlugin.contains("const entryBuildPath = path.join(getOhosRoot(flutterProjectPath), 'entry', 'build')"), isTrue);
+    expect(ownedPlugin.contains("fileContent.includes('@ohos/flutter_ohos')"), isTrue);
+    expect(ownedPlugin.contains("fileContent.includes('pkg_modules/.ohpm/')"), isTrue);
+    expect(ownedPlugin.contains("path.join(entryBuildPath, 'default', 'cache')"), isTrue);
+    expect(ownedPlugin.contains("path.join(entryBuildPath, 'default', 'intermediates', 'loader_out')"), isTrue);
+    expect(ownedPlugin.contains('clearStaleFlutterOhosArkTsCache(flutterProjectPath, flutterOhosStorePath)'), isTrue);
+    expect(helperScript.contains('function getFlutterOhosStorePath('), isTrue);
+    expect(helperScript.contains("const entryBuildPath = path.join(getOhosRoot(flutterProjectPath), 'entry', 'build')"), isTrue);
+    expect(helperScript.contains("path.join(entryBuildPath, 'default', 'intermediates', 'loader')"), isTrue);
+    expect(helperScript.contains("path.join(entryBuildPath, 'default', 'outputs')"), isTrue);
+    expect(helperScript.contains('clearStaleFlutterOhosArkTsCache(flutterProjectPath, flutterOhosStorePath)'), isTrue);
+  });
+
+  test('OHOS local.properties stays outside shared Flutter state rollback', () {
+    final flutterStateScript = File('scripts/flutter-state.ps1').readAsStringSync();
+    final ownedPlugin = File(
+      'tooling/ohos-hvigor-plugin/src/plugin/flutter-hvigor-plugin.ts',
+    ).readAsStringSync();
+    final helperScript = File('scripts/flutter-ohos.ps1').readAsStringSync();
+    final readme = File('README.md').readAsStringSync();
+
+    expect(flutterStateScript.contains("'android/local.properties'"), isTrue);
+    expect(flutterStateScript.contains("'ohos/local.properties'"), isFalse);
+    expect(ownedPlugin.contains("const MANAGED_FLUTTER_STATE_FILES = ["), isTrue);
+    expect(ownedPlugin.contains("'android/local.properties'"), isTrue);
+    expect(ownedPlugin.contains("'ohos/local.properties'"), isFalse);
+    expect(ownedPlugin.contains("const LOCKFILE_HOSTED_URL = 'https://pub.flutter-io.cn'"), isTrue);
+    expect(ownedPlugin.contains("normalizePubspecLockHostedUrl(destinationPath)"), isTrue);
+    expect(helperScript.contains("const MANAGED_FLUTTER_STATE_FILES = ["), isTrue);
+    expect(helperScript.contains("'android/local.properties',"), isTrue);
+    expect(helperScript.contains("'ohos/local.properties',"), isFalse);
+    expect(helperScript.contains("const LOCKFILE_HOSTED_URL = 'https://pub.flutter-io.cn'"), isTrue);
+    expect(helperScript.contains("normalizePubspecLockHostedUrl(destinationPath)"), isTrue);
+    expect(flutterStateScript.contains("function Normalize-PubspecLockHostedUrl {"), isTrue);
+    expect(flutterStateScript.contains("Normalize-PubspecLockHostedUrl -Path \$DestinationPath"), isTrue);
+    expect(readme.contains('ohos/local.properties) 是 Harmony 本地配置，不属于 `official` / `ohos` 共享 Flutter 状态快照'), isTrue);
+  });
+
   test('README documents the repo-owned OHOS hvigor plugin workflow', () {
     final readme = File('README.md').readAsStringSync();
 
@@ -158,5 +221,14 @@ void main() {
         isTrue);
     expect(readme.contains('ohos/hvigorfile.ts'), isTrue);
     expect(readme.contains('ohos/hvigorconfig.ts'), isTrue);
+  });
+
+  test('README documents OHOS version metadata syncing from root pubspec.yaml', () {
+    final readme = File('README.md').readAsStringSync();
+
+    expect(readme.contains('Harmony 安装包的版本号和构建号默认跟随根目录'), isTrue);
+    expect(readme.contains('DevEco 一键编译 / 运行也会优先读取根目录'), isTrue);
+    expect(readme.contains('pubspec.yaml'), isTrue);
+    expect(readme.contains('ohos/local.properties'), isTrue);
   });
 }

@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:petnote/app/app_update_checker.dart';
 import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/app_version_info.dart';
 import 'package:petnote/app/me_page.dart';
 import 'package:petnote/app/navigation_palette.dart';
 import 'package:petnote/notifications/notification_models.dart';
@@ -22,8 +24,71 @@ class _ThrowingUrlLauncherPlatform extends UrlLauncherPlatform {
   }
 }
 
+class _FakeAppUpdateChecker extends AppUpdateChecker {
+  const _FakeAppUpdateChecker({this.result});
+
+  final AppUpdateInfo? result;
+
+  @override
+  Future<AppUpdateInfo?> fetchLatestUpdate(
+      {required int currentBuildNumber}) async {
+    if (result == null || result!.buildNumber <= currentBuildNumber) {
+      return null;
+    }
+    return result;
+  }
+}
+
+class _MePageTestHost extends StatefulWidget {
+  const _MePageTestHost({
+    required this.brightness,
+    required this.appVersionInfo,
+    required this.appUpdateChecker,
+  });
+
+  final Brightness brightness;
+  final AppVersionInfo appVersionInfo;
+  final AppUpdateChecker appUpdateChecker;
+
+  @override
+  State<_MePageTestHost> createState() => _MePageTestHostState();
+}
+
+class _MePageTestHostState extends State<_MePageTestHost> {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      theme: buildPetNoteTheme(widget.brightness),
+      home: Scaffold(
+        body: MePage(
+          themePreference: AppThemePreference.system,
+          onThemePreferenceChanged: (_) {},
+          notificationPermissionState: NotificationPermissionState.unknown,
+          notificationPushToken: null,
+          onRequestNotificationPermission: null,
+          onOpenNotificationSettings: null,
+          onOpenExactAlarmSettings: null,
+          settingsController: null,
+          aiSettingsCoordinator: null,
+          dataStorageCoordinator: null,
+          appVersionInfo: widget.appVersionInfo,
+          appUpdateChecker: widget.appUpdateChecker,
+        ),
+      ),
+    );
+  }
+}
+
 void main() {
-  Future<void> pumpMePage(WidgetTester tester, Brightness brightness) async {
+  Future<void> pumpMePage(
+    WidgetTester tester,
+    Brightness brightness, {
+    AppUpdateChecker appUpdateChecker = const _FakeAppUpdateChecker(),
+    AppVersionInfo appVersionInfo = const AppVersionInfo(
+      version: '1.2.3',
+      buildNumber: '123',
+    ),
+  }) async {
     var selectedTheme = AppThemePreference.system;
 
     await tester.pumpWidget(
@@ -46,6 +111,8 @@ void main() {
                 settingsController: null,
                 aiSettingsCoordinator: null,
                 dataStorageCoordinator: null,
+                appVersionInfo: appVersionInfo,
+                appUpdateChecker: appUpdateChecker,
               ),
             );
           },
@@ -56,26 +123,23 @@ void main() {
   }
 
   testWidgets('缺少平台插件时关于卡片仍可正常展示并给出失败提示', (tester) async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('dev.fluttercommunity.plus/package_info'),
-      (call) async => throw MissingPluginException(),
-    );
     final originalUrlLauncherPlatform = UrlLauncherPlatform.instance;
     UrlLauncherPlatform.instance = _ThrowingUrlLauncherPlatform();
 
     addTearDown(() {
       UrlLauncherPlatform.instance = originalUrlLauncherPlatform;
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-        const MethodChannel('dev.fluttercommunity.plus/package_info'),
-        null,
-      );
     });
 
-    await pumpMePage(tester, Brightness.light);
+    await pumpMePage(
+      tester,
+      Brightness.light,
+      appVersionInfo: const AppVersionInfo(
+        version: '1.2.3',
+        buildNumber: '123',
+      ),
+    );
 
-    expect(find.text('Version --'), findsOneWidget);
+    expect(find.text('Version 1.2.3'), findsOneWidget);
 
     final githubTitle = find.text('GitHub 仓库');
     await tester.ensureVisible(githubTitle);
@@ -136,12 +200,85 @@ void main() {
     expect(find.text('浅色'), findsOneWidget);
     expect(find.text('深色'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('theme_option_dark')));
+    await tester.tap(
+      find.byKey(const ValueKey('theme_option_dark')),
+      warnIfMissed: false,
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('当前为深色模式'), findsNothing);
     expect(find.byKey(const ValueKey('theme_slider_selected_dark')),
         findsOneWidget);
+  });
+
+  testWidgets('关于卡片首帧直接显示已预取的版本号', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: Scaffold(
+          body: MePage(
+            themePreference: AppThemePreference.system,
+            onThemePreferenceChanged: (_) {},
+            notificationPermissionState: NotificationPermissionState.unknown,
+            notificationPushToken: null,
+            onRequestNotificationPermission: null,
+            onOpenNotificationSettings: null,
+            onOpenExactAlarmSettings: null,
+            settingsController: null,
+            aiSettingsCoordinator: null,
+            dataStorageCoordinator: null,
+            appVersionInfo: const AppVersionInfo(
+              version: '1.2.3',
+              buildNumber: '123',
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Version 1.2.3'), findsOneWidget);
+    expect(find.text('Version --'), findsNothing);
+  });
+
+  testWidgets('关于卡片在父层回填版本信息后刷新本地版本并重跑更新检查',
+      (tester) async {
+    await tester.pumpWidget(
+      const _MePageTestHost(
+        brightness: Brightness.light,
+        appVersionInfo: AppVersionInfo.empty,
+        appUpdateChecker: _FakeAppUpdateChecker(),
+      ),
+    );
+
+    expect(find.text('Version --'), findsOneWidget);
+    expect(find.text('GitHub 仓库'), findsOneWidget);
+
+    await tester.pumpWidget(
+      _MePageTestHost(
+        brightness: Brightness.light,
+        appVersionInfo: const AppVersionInfo(
+          version: '1.2.3',
+          buildNumber: '7',
+        ),
+        appUpdateChecker: _FakeAppUpdateChecker(
+          result: AppUpdateInfo(
+            versionLabel: 'v1.0.3',
+            buildNumber: 9,
+            releaseUrl: Uri.parse(
+              'https://github.com/juren233/PetNote/releases/tag/v1.0.3',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Version 1.2.3'), findsOneWidget);
+    expect(find.text('Version --'), findsNothing);
+    expect(find.text('🆕 当前App有新版 v1.0.3'), findsOneWidget);
+    expect(find.text('🆕 当前App有新版 9'), findsNothing);
+    expect(find.text('点击查看 v1.0.3 发布说明'), findsOneWidget);
   });
 
   testWidgets('关于卡片在深浅色模式下切换图标与版本胶囊样式', (tester) async {
@@ -209,6 +346,40 @@ void main() {
     );
   });
 
+  testWidgets('检测到更高构建号时关于卡片展示新版提示', (tester) async {
+    PackageInfo.setMockInitialValues(
+      appName: 'PetNote',
+      packageName: 'com.juren233.petnote',
+      version: '1.2.3',
+      buildNumber: '7',
+      buildSignature: 'test',
+      installerStore: 'test-store',
+    );
+
+    await pumpMePage(
+      tester,
+      Brightness.light,
+      appVersionInfo: const AppVersionInfo(
+        version: '1.2.3',
+        buildNumber: '7',
+      ),
+      appUpdateChecker: _FakeAppUpdateChecker(
+        result: AppUpdateInfo(
+          versionLabel: 'v1.0.3',
+          buildNumber: 9,
+          releaseUrl: Uri.parse(
+            'https://github.com/juren233/PetNote/releases/tag/v1.0.3',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Version 1.2.3'), findsOneWidget);
+    expect(find.text('🆕 当前App有新版 v1.0.3'), findsOneWidget);
+    expect(find.text('🆕 当前App有新版 9'), findsNothing);
+    expect(find.text('点击查看 v1.0.3 发布说明'), findsOneWidget);
+  });
+
   testWidgets('我的页功能型着色图标统一使用底栏我的激活色', (tester) async {
     PackageInfo.setMockInitialValues(
       appName: 'PetNote',
@@ -241,5 +412,4 @@ void main() {
       }
     }
   });
-
 }
