@@ -269,7 +269,6 @@ void main() {
     );
     coordinator.dispose();
   });
-
 }
 
 class _GateFakeNotificationPlatformAdapter
@@ -343,6 +342,13 @@ class _GateFakeNotificationPlatformAdapter
 
   @override
   Future<void> resetScheduledNotifications() async {}
+
+  @override
+  Future<void> showUpdateNotification({
+    required String title,
+    required String body,
+    required Uri releaseUrl,
+  }) async {}
 
   @override
   Future<void> scheduleLocalNotification(NotificationJob job) async {}

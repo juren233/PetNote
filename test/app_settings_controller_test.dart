@@ -13,6 +13,7 @@ void main() {
 
     expect(controller.themePreference, AppThemePreference.system);
     expect(controller.themeMode, ThemeMode.system);
+    expect(controller.updateReminderEnabled, isTrue);
   });
 
   test('persists dark theme preference across reload', () async {
@@ -33,5 +34,26 @@ void main() {
 
     expect(controller.themePreference, AppThemePreference.light);
     expect(controller.themeMode, ThemeMode.light);
+  });
+
+  test('persists update reminder preference across reload', () async {
+    final controller = await AppSettingsController.load();
+
+    await controller.setUpdateReminderEnabled(false);
+
+    final reloaded = await AppSettingsController.load();
+    expect(reloaded.updateReminderEnabled, isFalse);
+  });
+
+  test('reset non-sensitive settings restores update reminder default',
+      () async {
+    final controller = await AppSettingsController.load();
+
+    await controller.setUpdateReminderEnabled(false);
+    await controller.resetNonSensitiveSettings();
+
+    final reloaded = await AppSettingsController.load();
+    expect(controller.updateReminderEnabled, isTrue);
+    expect(reloaded.updateReminderEnabled, isTrue);
   });
 }

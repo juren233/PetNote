@@ -9,6 +9,7 @@ import 'package:petnote/ai/ai_settings_coordinator.dart';
 import 'package:petnote/app/add_sheet.dart';
 import 'package:petnote/app/android_native_dock.dart';
 import 'package:petnote/app/ai_settings_page.dart';
+import 'package:petnote/app/app_update_checker.dart';
 import 'package:petnote/app/app_theme.dart';
 import 'package:petnote/app/app_version_info.dart';
 import 'package:petnote/app/common_widgets.dart';
@@ -40,6 +41,8 @@ class PetNoteRoot extends StatefulWidget {
     this.aiInsightsService,
     this.appLogController,
     this.appVersionInfo = AppVersionInfo.empty,
+    this.appUpdateChecker = const GitHubAppUpdateChecker(),
+    this.platformNameOverride,
     this.iosDockBuilder,
     this.storeLoader,
     this.notificationAdapter,
@@ -51,6 +54,8 @@ class PetNoteRoot extends StatefulWidget {
   final AiInsightsService? aiInsightsService;
   final AppLogController? appLogController;
   final AppVersionInfo appVersionInfo;
+  final AppUpdateChecker appUpdateChecker;
+  final String? platformNameOverride;
   final IosDockBuilder? iosDockBuilder;
   final Future<PetNoteStore> Function()? storeLoader;
   final NotificationPlatformAdapter? notificationAdapter;
@@ -181,6 +186,8 @@ class _PetNoteRootState extends State<PetNoteRoot>
       return;
     }
 
+    await _maybeShowUpdateNotification(coordinator);
+
     NotificationLaunchIntent? launchIntent;
     try {
       launchIntent = await coordinator.consumeLaunchIntent();
@@ -208,6 +215,48 @@ class _PetNoteRootState extends State<PetNoteRoot>
     }
     if (launchIntent != null) {
       _applyNotificationIntent(store, launchIntent);
+    }
+  }
+
+  Future<void> _maybeShowUpdateNotification(
+    NotificationCoordinator coordinator,
+  ) async {
+    final settingsController = widget.settingsController;
+    if (settingsController == null ||
+        !settingsController.updateReminderEnabled) {
+      return;
+    }
+    final platformName =
+        widget.platformNameOverride ?? defaultTargetPlatform.name;
+    if (platformName == 'ohos' || !coordinator.hasGrantedPermission) {
+      return;
+    }
+    final currentBuildNumber =
+        int.tryParse(widget.appVersionInfo.buildNumber.trim());
+    if (currentBuildNumber == null) {
+      return;
+    }
+
+    try {
+      final update = await widget.appUpdateChecker.fetchLatestUpdate(
+        currentBuildNumber: currentBuildNumber,
+      );
+      if (update == null ||
+          !mounted ||
+          !identical(coordinator, _notificationCoordinator)) {
+        return;
+      }
+      await coordinator.showUpdateNotification(
+        versionLabel: update.versionLabel,
+        releaseUrl: update.releaseUrl,
+      );
+    } catch (error, stackTrace) {
+      widget.appLogController?.warning(
+        category: AppLogCategory.notifications,
+        title: '更新提醒检测失败',
+        message: error.toString(),
+        details: stackTrace.toString(),
+      );
     }
   }
 
@@ -325,9 +374,11 @@ class _PetNoteRootState extends State<PetNoteRoot>
           aiInsightsService: widget.aiInsightsService,
           appLogController: widget.appLogController,
           appVersionInfo: widget.appVersionInfo,
+          appUpdateChecker: widget.appUpdateChecker,
           notificationCoordinator: _notificationCoordinator,
           highlightedChecklistItemKey: _highlightedChecklistItemKey,
           dataStorageCoordinator: _dataStorageCoordinator,
+          platformNameOverride: widget.platformNameOverride,
           onSectionChanged: (value) =>
               setState(() => _activeChecklistKey = value),
           onAddFirstPet: _openManualOnboarding,
@@ -760,9 +811,11 @@ class _PetNoteBody extends StatefulWidget {
     required this.aiInsightsService,
     required this.appLogController,
     required this.appVersionInfo,
+    required this.appUpdateChecker,
     required this.notificationCoordinator,
     required this.highlightedChecklistItemKey,
     required this.dataStorageCoordinator,
+    required this.platformNameOverride,
     required this.onSectionChanged,
     required this.onAddFirstPet,
     required this.onStartOnboardingFromIntro,
@@ -788,9 +841,11 @@ class _PetNoteBody extends StatefulWidget {
   final AiInsightsService? aiInsightsService;
   final AppLogController? appLogController;
   final AppVersionInfo appVersionInfo;
+  final AppUpdateChecker appUpdateChecker;
   final NotificationCoordinator? notificationCoordinator;
   final String? highlightedChecklistItemKey;
   final DataStorageCoordinator? dataStorageCoordinator;
+  final String? platformNameOverride;
   final ValueChanged<String> onSectionChanged;
   final VoidCallback onAddFirstPet;
   final Future<void> Function() onStartOnboardingFromIntro;
@@ -1072,6 +1127,8 @@ class _PetNoteBodyState extends State<_PetNoteBody> {
                 settingsController: widget.settingsController,
                 appLogController: widget.appLogController,
                 appVersionInfo: widget.appVersionInfo,
+                appUpdateChecker: widget.appUpdateChecker,
+                platformNameOverride: widget.platformNameOverride,
                 aiSettingsCoordinator: widget.aiSettingsCoordinator,
                 dataStorageCoordinator: widget.dataStorageCoordinator,
                 notificationPermissionState:

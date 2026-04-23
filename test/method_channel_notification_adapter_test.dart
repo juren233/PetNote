@@ -155,7 +155,8 @@ void main() {
     expect(result.maxScheduledNotificationCount, 30);
   });
 
-  test('schedule local notification forwards event schedule payload to native', () async {
+  test('schedule local notification forwards event schedule payload to native',
+      () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
       expect(call.method, 'scheduleLocalNotification');
@@ -198,6 +199,32 @@ void main() {
     final result = await adapter.hasScheduledNotification('todo:todo-1');
 
     expect(result, isFalse);
+  });
+
+  test('show update notification forwards title body and release url to native',
+      () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'showUpdateNotification');
+      final arguments = Map<Object?, Object?>.from(call.arguments as Map);
+      expect(arguments['title'], '宠记App新版v2.3.0已发布');
+      expect(arguments['body'], '点击查看更新内容');
+      expect(
+        arguments['releaseUrl'],
+        'https://github.com/juren233/PetNote/releases/tag/v2.3.0',
+      );
+      return null;
+    });
+
+    final adapter = MethodChannelNotificationPlatformAdapter(channel: channel);
+
+    await adapter.showUpdateNotification(
+      title: '宠记App新版v2.3.0已发布',
+      body: '点击查看更新内容',
+      releaseUrl: Uri.parse(
+        'https://github.com/juren233/PetNote/releases/tag/v2.3.0',
+      ),
+    );
   });
 
   test('reset scheduled notifications forwards native request', () async {

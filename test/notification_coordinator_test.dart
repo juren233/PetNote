@@ -204,7 +204,8 @@ void main() {
     expect(adapter.cancelCallCount, 0);
   });
 
-  test('syncFromStore reschedules when persisted snapshot is missing on platform',
+  test(
+      'syncFromStore reschedules when persisted snapshot is missing on platform',
       () async {
     final adapter = _FakeNotificationPlatformAdapter();
     final coordinator = NotificationCoordinator(
@@ -595,6 +596,13 @@ class _FakeNotificationPlatformAdapter implements NotificationPlatformAdapter {
   }
 
   @override
+  Future<void> showUpdateNotification({
+    required String title,
+    required String body,
+    required Uri releaseUrl,
+  }) async {}
+
+  @override
   Future<void> scheduleLocalNotification(NotificationJob job) async {
     scheduleCallCount += 1;
     scheduled.removeWhere((existing) => existing.key == job.key);
@@ -616,5 +624,6 @@ class _HangingSharedPreferencesStore extends SharedPreferencesStorePlatform {
   Future<bool> remove(String key) async => true;
 
   @override
-  Future<bool> setValue(String valueType, String key, Object value) async => true;
+  Future<bool> setValue(String valueType, String key, Object value) async =>
+      true;
 }

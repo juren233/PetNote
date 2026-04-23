@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:petnote/app/app_theme.dart';
+import 'package:petnote/app/app_update_checker.dart';
+import 'package:petnote/app/app_version_info.dart';
+import 'package:petnote/state/app_settings_controller.dart';
 import 'package:petnote/app/petnote_root.dart';
 import 'package:petnote/notifications/notification_models.dart';
 import 'package:petnote/notifications/notification_platform_adapter.dart';
@@ -14,9 +17,151 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
-  setUp(() {
-    SharedPreferences.setMockInitialValues({});
+
+  testWidgets('root detects newer release and sends update notification',
+      (tester) async {
+    final store = PetNoteStore.seeded();
+    final adapter = _RootFakeNotificationPlatformAdapter(
+      permissionState: NotificationPermissionState.authorized,
+    );
+    final settingsController = await AppSettingsController.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: PetNoteRoot(
+          storeLoader: () async => store,
+          notificationAdapter: adapter,
+          settingsController: settingsController,
+          appVersionInfo:
+              const AppVersionInfo(version: '2.2.0', buildNumber: '10'),
+          appUpdateChecker: _RootFakeAppUpdateChecker(
+            result: AppUpdateInfo(
+              versionLabel: 'v2.3.0',
+              buildNumber: 11,
+              releaseUrl: Uri.parse(
+                'https://github.com/juren233/PetNote/releases/tag/v2.3.0',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(adapter.updateNotificationCallCount, 1);
+    expect(adapter.lastUpdateNotificationTitle, '宠记App新版v2.3.0已发布');
+    expect(adapter.lastUpdateNotificationBody, '点击查看更新内容');
+    expect(
+      adapter.lastUpdateReleaseUrl,
+      Uri.parse('https://github.com/juren233/PetNote/releases/tag/v2.3.0'),
+    );
   });
+
+  testWidgets('root skips update notification when reminder switch is off',
+      (tester) async {
+    final store = PetNoteStore.seeded();
+    final adapter = _RootFakeNotificationPlatformAdapter(
+      permissionState: NotificationPermissionState.authorized,
+    );
+    final settingsController = await AppSettingsController.load();
+    await settingsController.setUpdateReminderEnabled(false);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: PetNoteRoot(
+          storeLoader: () async => store,
+          notificationAdapter: adapter,
+          settingsController: settingsController,
+          appVersionInfo:
+              const AppVersionInfo(version: '2.2.0', buildNumber: '10'),
+          appUpdateChecker: _RootFakeAppUpdateChecker(
+            result: AppUpdateInfo(
+              versionLabel: 'v2.3.0',
+              buildNumber: 11,
+              releaseUrl: Uri.parse(
+                'https://github.com/juren233/PetNote/releases/tag/v2.3.0',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(adapter.updateNotificationCallCount, 0);
+  });
+
+  testWidgets('root skips update notification on harmony override',
+      (tester) async {
+    final store = PetNoteStore.seeded();
+    final adapter = _RootFakeNotificationPlatformAdapter(
+      permissionState: NotificationPermissionState.authorized,
+    );
+    final settingsController = await AppSettingsController.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: PetNoteRoot(
+          storeLoader: () async => store,
+          notificationAdapter: adapter,
+          settingsController: settingsController,
+          platformNameOverride: 'ohos',
+          appVersionInfo:
+              const AppVersionInfo(version: '2.2.0', buildNumber: '10'),
+          appUpdateChecker: _RootFakeAppUpdateChecker(
+            result: AppUpdateInfo(
+              versionLabel: 'v2.3.0',
+              buildNumber: 11,
+              releaseUrl: Uri.parse(
+                'https://github.com/juren233/PetNote/releases/tag/v2.3.0',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(adapter.updateNotificationCallCount, 0);
+  });
+
+  testWidgets('root skips update notification when build number is invalid',
+      (tester) async {
+    final store = PetNoteStore.seeded();
+    final adapter = _RootFakeNotificationPlatformAdapter(
+      permissionState: NotificationPermissionState.authorized,
+    );
+    final settingsController = await AppSettingsController.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildPetNoteTheme(Brightness.light),
+        home: PetNoteRoot(
+          storeLoader: () async => store,
+          notificationAdapter: adapter,
+          settingsController: settingsController,
+          appVersionInfo:
+              const AppVersionInfo(version: '2.2.0', buildNumber: 'abc'),
+          appUpdateChecker: _RootFakeAppUpdateChecker(
+            result: AppUpdateInfo(
+              versionLabel: 'v2.3.0',
+              buildNumber: 11,
+              releaseUrl: Uri.parse(
+                'https://github.com/juren233/PetNote/releases/tag/v2.3.0',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(adapter.updateNotificationCallCount, 0);
+  });
+
   testWidgets(
       'notification launch intent switches to checklist and highlights target item',
       (tester) async {
@@ -118,7 +263,8 @@ void main() {
     );
   });
 
-  testWidgets('saving reminder closes add sheet while native scheduling continues',
+  testWidgets(
+      'saving reminder closes add sheet while native scheduling continues',
       (tester) async {
     final store = await PetNoteStore.load(
       nowProvider: () => DateTime.parse('2026-03-27T10:00:00+08:00'),
@@ -174,7 +320,8 @@ void main() {
     );
   });
 
-  testWidgets('granting permission from reminder save closes sheet and continues scheduling',
+  testWidgets(
+      'granting permission from reminder save closes sheet and continues scheduling',
       (tester) async {
     final store = await PetNoteStore.load(
       nowProvider: () => DateTime.parse('2026-03-27T10:00:00+08:00'),
@@ -388,7 +535,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 220));
   });
 
-  testWidgets('notification permission request does not wait for pending initialization',
+  testWidgets(
+      'notification permission request does not wait for pending initialization',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     final store = PetNoteStore.seeded();
@@ -454,6 +602,10 @@ class _RootFakeNotificationPlatformAdapter
   int scheduleCallCount = 0;
   bool failNextSchedule = false;
   bool holdSchedules = false;
+  int updateNotificationCallCount = 0;
+  String? lastUpdateNotificationTitle;
+  String? lastUpdateNotificationBody;
+  Uri? lastUpdateReleaseUrl;
 
   @override
   Future<void> cancelNotification(String key) async {}
@@ -543,6 +695,18 @@ class _RootFakeNotificationPlatformAdapter
   }
 
   @override
+  Future<void> showUpdateNotification({
+    required String title,
+    required String body,
+    required Uri releaseUrl,
+  }) async {
+    updateNotificationCallCount += 1;
+    lastUpdateNotificationTitle = title;
+    lastUpdateNotificationBody = body;
+    lastUpdateReleaseUrl = releaseUrl;
+  }
+
+  @override
   Future<void> scheduleLocalNotification(NotificationJob job) async {
     scheduleCallCount += 1;
     if (failNextSchedule) {
@@ -557,5 +721,21 @@ class _RootFakeNotificationPlatformAdapter
     final completer = Completer<void>();
     pendingScheduleCompleter = completer;
     await completer.future;
+  }
+}
+
+class _RootFakeAppUpdateChecker extends AppUpdateChecker {
+  const _RootFakeAppUpdateChecker({this.result});
+
+  final AppUpdateInfo? result;
+
+  @override
+  Future<AppUpdateInfo?> fetchLatestUpdate({
+    required int currentBuildNumber,
+  }) async {
+    if (result == null || result!.buildNumber <= currentBuildNumber) {
+      return null;
+    }
+    return result;
   }
 }

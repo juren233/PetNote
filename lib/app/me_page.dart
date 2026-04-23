@@ -1,4 +1,11 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:petnote/ai/ai_provider_config.dart';
@@ -19,6 +26,13 @@ import 'package:petnote/state/app_settings_controller.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 const double _settingsEntrySpacing = 12;
+const _androidLiquidGlassToggleViewType = 'petnote/android_liquid_glass_toggle';
+const double _androidLiquidGlassToggleSlotWidth = 112;
+const double _androidLiquidGlassToggleSlotHeight = 72;
+const double _androidLiquidGlassToggleHostWidth = 96;
+const double _androidLiquidGlassToggleHostHeight = 64;
+const _androidLiquidGlassToggleCommitDelay = Duration(milliseconds: 220);
+const _androidLiquidGlassTogglePrewarmRetryDelay = Duration(milliseconds: 120);
 const EdgeInsets _settingsEntryPadding =
     EdgeInsets.symmetric(horizontal: 14, vertical: 13);
 
@@ -40,6 +54,7 @@ class MePage extends StatelessWidget {
     this.notificationCapabilities = const NotificationPlatformCapabilities(),
     this.appLogController,
     this.appUpdateChecker = const GitHubAppUpdateChecker(),
+    this.platformNameOverride,
   });
 
   final AppThemePreference themePreference;
@@ -57,6 +72,7 @@ class MePage extends StatelessWidget {
   final DataStorageCoordinator? dataStorageCoordinator;
   final AppVersionInfo appVersionInfo;
   final AppUpdateChecker appUpdateChecker;
+  final String? platformNameOverride;
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +120,7 @@ class MePage extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (context) => _NotificationSettingsPage(
+                    settingsController: settingsController,
                     notificationPermissionState: notificationPermissionState,
                     notificationCapabilities: notificationCapabilities,
                     notificationPushToken: notificationPushToken,
@@ -113,6 +130,7 @@ class MePage extends StatelessWidget {
                     onOpenExactAlarmSettings: onOpenExactAlarmSettings,
                     shouldOpenNotificationSettingsForRequest:
                         shouldOpenNotificationSettingsForRequest,
+                    platformNameOverride: platformNameOverride,
                   ),
                 ),
               ),
@@ -856,6 +874,7 @@ class _SettingsIconBubble extends StatelessWidget {
 
 class _NotificationSettingsPage extends StatelessWidget {
   const _NotificationSettingsPage({
+    required this.settingsController,
     required this.notificationPermissionState,
     required this.notificationCapabilities,
     required this.notificationPushToken,
@@ -863,8 +882,10 @@ class _NotificationSettingsPage extends StatelessWidget {
     required this.onOpenNotificationSettings,
     required this.onOpenExactAlarmSettings,
     this.shouldOpenNotificationSettingsForRequest = false,
+    this.platformNameOverride,
   });
 
+  final AppSettingsController? settingsController;
   final NotificationPermissionState notificationPermissionState;
   final NotificationPlatformCapabilities notificationCapabilities;
   final String? notificationPushToken;
@@ -872,9 +893,13 @@ class _NotificationSettingsPage extends StatelessWidget {
   final Future<void> Function()? onOpenNotificationSettings;
   final Future<void> Function()? onOpenExactAlarmSettings;
   final bool shouldOpenNotificationSettingsForRequest;
+  final String? platformNameOverride;
 
   @override
   Widget build(BuildContext context) {
+    final platformName = platformNameOverride ?? defaultTargetPlatform.name;
+    final shouldShowUpdateReminder =
+        settingsController != null && platformName != 'ohos';
     return Scaffold(
       appBar: AppBar(title: const Text('通知提醒')),
       body: HyperPageBackground(
@@ -890,6 +915,14 @@ class _NotificationSettingsPage extends StatelessWidget {
               key: const ValueKey('notification_settings_section'),
               title: '通知提醒',
               children: [
+                if (shouldShowUpdateReminder) ...[
+                  _UpdateReminderSettingsRow(
+                    enabled: settingsController!.updateReminderEnabled,
+                    platformName: platformName,
+                    onChanged: settingsController!.setUpdateReminderEnabled,
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 ListRow(
                   title: '提醒权限',
                   subtitle:
@@ -959,6 +992,316 @@ class _NotificationSettingsPage extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UpdateReminderSettingsRow extends StatelessWidget {
+  const _UpdateReminderSettingsRow({
+    required this.enabled,
+    required this.platformName,
+    required this.onChanged,
+  });
+
+  final bool enabled;
+  final String platformName;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.petNoteTokens;
+    final toggle = platformName == TargetPlatform.iOS.name
+        ? CupertinoSwitch(
+            key: const ValueKey('notification_update_reminder_toggle'),
+            value: enabled,
+            onChanged: onChanged,
+          )
+        : _AndroidLiquidGlassToggleHost(
+            key: const ValueKey('notification_update_reminder_toggle'),
+            value: enabled,
+            onChanged: onChanged,
+          );
+    return Material(
+      color: tokens.listRowBackground,
+      borderRadius: BorderRadius.circular(18),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          minHeight: _androidLiquidGlassToggleSlotHeight + 16,
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                18,
+                17,
+                _androidLiquidGlassToggleSlotWidth + 18,
+                17,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '更新提醒',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: tokens.primaryText,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '检测到新版时，启动 App 会发送更新通知提醒。',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: tokens.secondaryText,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            PositionedDirectional(
+              top: 8,
+              end: 6,
+              child: _UpdateReminderToggleSlot(
+                child: toggle,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UpdateReminderToggleSlot extends StatelessWidget {
+  const _UpdateReminderToggleSlot({
+    required this.child,
+  });
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: _androidLiquidGlassToggleSlotWidth,
+      height: _androidLiquidGlassToggleSlotHeight,
+      child: RepaintBoundary(
+        child: Center(child: child),
+      ),
+    );
+  }
+}
+
+class _AndroidLiquidGlassToggleHost extends StatefulWidget {
+  const _AndroidLiquidGlassToggleHost({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  State<_AndroidLiquidGlassToggleHost> createState() =>
+      _AndroidLiquidGlassToggleHostState();
+}
+
+class _AndroidLiquidGlassToggleHostState
+    extends State<_AndroidLiquidGlassToggleHost> {
+  MethodChannel? _channel;
+  Timer? _pendingSelectionCommit;
+  bool _hasRequestedFirstInteractionPrewarm = false;
+  int _firstInteractionPrewarmEpoch = 0;
+
+  @override
+  void didUpdateWidget(covariant _AndroidLiquidGlassToggleHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      _syncSelected();
+    }
+    _syncBrightness();
+    _syncBackdropColor();
+  }
+
+  @override
+  void dispose() {
+    _pendingSelectionCommit?.cancel();
+    _channel?.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return _AndroidLiquidGlassToggleTestHandle(
+        value: widget.value,
+        onChanged: widget.onChanged,
+      );
+    }
+    final tokens = context.petNoteTokens;
+    final brightness = Theme.of(context).brightness;
+    return SizedBox(
+      width: _androidLiquidGlassToggleHostWidth,
+      height: _androidLiquidGlassToggleHostHeight,
+      child: PlatformViewLink(
+        viewType: _androidLiquidGlassToggleViewType,
+        surfaceFactory: (
+          BuildContext context,
+          PlatformViewController controller,
+        ) {
+          return AndroidViewSurface(
+            controller: controller as AndroidViewController,
+            hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+            gestureRecognizers: {
+              Factory<OneSequenceGestureRecognizer>(
+                EagerGestureRecognizer.new,
+              ),
+            },
+          );
+        },
+        onCreatePlatformView: (PlatformViewCreationParams params) {
+          final controller = PlatformViewsService.initSurfaceAndroidView(
+            id: params.id,
+            viewType: params.viewType,
+            layoutDirection: Directionality.of(context),
+            creationParams: {
+              'selected': widget.value,
+              'brightness': brightness.name,
+              'backdropColor': tokens.listRowBackground.toARGB32(),
+              'shouldPrewarmFirstInteraction': true,
+            },
+            creationParamsCodec: const StandardMessageCodec(),
+            onFocus: () => params.onFocusChanged(true),
+          );
+          controller.addOnPlatformViewCreatedListener((int viewId) {
+            params.onPlatformViewCreated(viewId);
+            _onPlatformViewCreated(viewId);
+          });
+          controller.create();
+          return controller;
+        },
+      ),
+    );
+  }
+
+  void _onPlatformViewCreated(int viewId) {
+    final channel = MethodChannel(
+      'petnote/android_liquid_glass_toggle_$viewId',
+    );
+    _channel = channel;
+    channel.setMethodCallHandler(_handleMethodCall);
+    _syncSelected();
+    _syncBrightness();
+    _syncBackdropColor();
+    _maybeRequestFirstInteractionPrewarm();
+  }
+
+  Future<void> _handleMethodCall(MethodCall call) async {
+    if (call.method == 'selectedChanged') {
+      final selected = call.arguments == true;
+      _pendingSelectionCommit?.cancel();
+      if (selected != widget.value) {
+        _pendingSelectionCommit = Timer(
+          _androidLiquidGlassToggleCommitDelay,
+          () {
+            if (!mounted || selected == widget.value) {
+              return;
+            }
+            widget.onChanged(selected);
+          },
+        );
+      }
+    }
+  }
+
+  Future<void> _syncSelected() async {
+    try {
+      await _channel?.invokeMethod<void>('setSelected', widget.value);
+    } on PlatformException {
+      // 忽略原生视图初始化早期的瞬时同步失败。
+    }
+  }
+
+  Future<void> _syncBrightness() async {
+    if (!mounted) {
+      return;
+    }
+    try {
+      await _channel?.invokeMethod<void>(
+        'setBrightness',
+        Theme.of(context).brightness.name,
+      );
+    } on PlatformException {
+      // 忽略原生视图初始化早期的瞬时同步失败。
+    }
+  }
+
+  Future<void> _syncBackdropColor() async {
+    if (!mounted) {
+      return;
+    }
+    try {
+      await _channel?.invokeMethod<void>(
+        'setBackdropColor',
+        context.petNoteTokens.listRowBackground.toARGB32(),
+      );
+    } on PlatformException {
+      // 忽略原生视图初始化早期的瞬时同步失败。
+    }
+  }
+
+  Future<void> _maybeRequestFirstInteractionPrewarm() async {
+    final channel = _channel;
+    if (channel == null || _hasRequestedFirstInteractionPrewarm) {
+      return;
+    }
+    try {
+      await channel.invokeMethod<void>('prewarmFirstInteraction');
+      _hasRequestedFirstInteractionPrewarm = true;
+    } on PlatformException {
+      _scheduleFirstInteractionPrewarmRetry();
+    }
+  }
+
+  void _scheduleFirstInteractionPrewarmRetry() {
+    final retryEpoch = ++_firstInteractionPrewarmEpoch;
+    Future<void>.delayed(
+      _androidLiquidGlassTogglePrewarmRetryDelay,
+      () {
+        if (!mounted || retryEpoch != _firstInteractionPrewarmEpoch) {
+          return;
+        }
+        _maybeRequestFirstInteractionPrewarm();
+      },
+    );
+  }
+}
+
+class _AndroidLiquidGlassToggleTestHandle extends StatelessWidget {
+  const _AndroidLiquidGlassToggleTestHandle({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      toggled: value,
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onChanged(!value),
+        child: const SizedBox(
+          width: _androidLiquidGlassToggleHostWidth,
+          height: _androidLiquidGlassToggleHostHeight,
         ),
       ),
     );

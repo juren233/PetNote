@@ -152,6 +152,28 @@ class MethodChannelNotificationPlatformAdapter
   }
 
   @override
+  Future<void> showUpdateNotification({
+    required String title,
+    required String body,
+    required Uri releaseUrl,
+  }) async {
+    try {
+      await _channel.invokeMethod<void>('showUpdateNotification', {
+        'title': title,
+        'body': body,
+        'releaseUrl': releaseUrl.toString(),
+      });
+      appLogController?.info(
+        category: AppLogCategory.nativeBridge,
+        title: '发送更新通知',
+        message: '新版发布通知已提交给原生侧。',
+      );
+    } on MissingPluginException {
+      // 不支持通知桥接的平台跳过更新提醒。
+    }
+  }
+
+  @override
   Future<NotificationLaunchIntent?> getInitialLaunchIntent() async {
     try {
       final result = await _channel.invokeMapMethod<Object?, Object?>(

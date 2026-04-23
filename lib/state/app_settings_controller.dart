@@ -12,21 +12,27 @@ class AppSettingsController extends ChangeNotifier {
   AppSettingsController._({
     required SharedPreferences? preferences,
     AppThemePreference themePreference = AppThemePreference.system,
+    bool updateReminderEnabled = true,
   })  : _preferences = preferences,
-        _themePreference = themePreference;
+        _themePreference = themePreference,
+        _updateReminderEnabled = updateReminderEnabled;
 
   static const String themeModeStorageKey = 'app_theme_mode_v1';
   static const String aiProviderConfigsStorageKey = 'ai_provider_configs_v1';
   static const String activeAiProviderConfigIdStorageKey =
       'active_ai_provider_config_id_v1';
+  static const String updateReminderEnabledStorageKey =
+      'update_reminder_enabled_v1';
   static const Duration _preferencesLoadTimeout = Duration(seconds: 2);
 
   final SharedPreferences? _preferences;
   AppThemePreference _themePreference;
+  bool _updateReminderEnabled;
   final List<AiProviderConfig> _aiProviderConfigs = <AiProviderConfig>[];
   String? _activeAiProviderConfigId;
 
   AppThemePreference get themePreference => _themePreference;
+  bool get updateReminderEnabled => _updateReminderEnabled;
   String? get activeAiProviderConfigId => _activeAiProviderConfigId;
   List<AiProviderConfig> get aiProviderConfigs =>
       List<AiProviderConfig>.unmodifiable(_aiProviderConfigs);
@@ -61,6 +67,8 @@ class AppSettingsController extends ChangeNotifier {
     return AppSettingsController._(
       preferences: preferences,
       themePreference: _themePreferenceFromName(storedTheme),
+      updateReminderEnabled:
+          preferences?.getBool(updateReminderEnabledStorageKey) ?? true,
     ).._restoreAiProviderConfigs(storedConfigs, activeConfigId);
   }
 
@@ -70,6 +78,15 @@ class AppSettingsController extends ChangeNotifier {
     }
     _themePreference = value;
     await _preferences?.setString(themeModeStorageKey, value.name);
+    notifyListeners();
+  }
+
+  Future<void> setUpdateReminderEnabled(bool value) async {
+    if (_updateReminderEnabled == value) {
+      return;
+    }
+    _updateReminderEnabled = value;
+    await _preferences?.setBool(updateReminderEnabledStorageKey, value);
     notifyListeners();
   }
 
@@ -137,7 +154,8 @@ class AppSettingsController extends ChangeNotifier {
   PetNoteSettingsState exportNonSensitiveSettings() {
     return PetNoteSettingsState(
       themePreferenceName: _themePreference.name,
-      aiProviderConfigs: List<AiProviderConfig>.unmodifiable(_aiProviderConfigs),
+      aiProviderConfigs:
+          List<AiProviderConfig>.unmodifiable(_aiProviderConfigs),
       activeAiProviderConfigId: _activeAiProviderConfigId,
     );
   }
@@ -156,9 +174,11 @@ class AppSettingsController extends ChangeNotifier {
 
   Future<void> resetNonSensitiveSettings() async {
     _themePreference = AppThemePreference.system;
+    _updateReminderEnabled = true;
     _aiProviderConfigs.clear();
     _activeAiProviderConfigId = null;
     await _preferences?.setString(themeModeStorageKey, _themePreference.name);
+    await _preferences?.setBool(updateReminderEnabledStorageKey, true);
     await _saveAiProviderState();
     notifyListeners();
   }

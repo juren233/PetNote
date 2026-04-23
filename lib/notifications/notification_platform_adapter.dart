@@ -19,6 +19,12 @@ abstract class NotificationPlatformAdapter {
 
   Future<void> resetScheduledNotifications();
 
+  Future<void> showUpdateNotification({
+    required String title,
+    required String body,
+    required Uri releaseUrl,
+  });
+
   Future<NotificationLaunchIntent?> getInitialLaunchIntent();
 
   Future<NotificationLaunchIntent?> consumeForegroundTap();

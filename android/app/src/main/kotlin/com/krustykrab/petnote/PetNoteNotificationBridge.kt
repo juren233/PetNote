@@ -5,13 +5,16 @@ import android.app.Activity
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
@@ -31,6 +34,7 @@ class PetNoteNotificationBridge(
         const val EXTRA_NOTIFICATION_TITLE = "petnote_notification_title"
         const val EXTRA_NOTIFICATION_BODY = "petnote_notification_body"
         const val EXTRA_NOTIFICATION_PAYLOAD = "petnote_notification_payload"
+        private const val LOG_TAG = "PetNoteNotification"
     }
 
     private val context: Context = activity.applicationContext
@@ -61,6 +65,10 @@ class PetNoteNotificationBridge(
             }
             "cancelNotification" -> {
                 cancelNotification(call.arguments as? String)
+                result.success(null)
+            }
+            "showUpdateNotification" -> {
+                showUpdateNotification(call.arguments as? Map<*, *>)
                 result.success(null)
             }
             "getInitialLaunchIntent" -> {
@@ -200,6 +208,47 @@ class PetNoteNotificationBridge(
                 payloadJson = payloadJson,
             ),
         )
+    }
+
+    private fun showUpdateNotification(arguments: Map<*, *>?) {
+        if (permissionState() != "authorized") {
+            return
+        }
+        val safeArguments = arguments ?: return
+        val title = safeArguments["title"] as? String ?: return
+        val body = safeArguments["body"] as? String ?: ""
+        val releaseUrl = safeArguments["releaseUrl"] as? String ?: return
+        val releaseIntent = Intent(Intent.ACTION_VIEW, Uri.parse(releaseUrl)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            releaseUrl.hashCode(),
+            releaseIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(
+            context,
+            CHANNEL_ID,
+        )
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(contentIntent)
+            .build()
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        try {
+            manager.notify(releaseUrl.hashCode(), notification)
+        } catch (error: SecurityException) {
+            Log.e(LOG_TAG, "Failed to post update notification because permission was rejected.", error)
+        } catch (error: Throwable) {
+            Log.e(LOG_TAG, "Failed to post update notification.", error)
+        }
     }
 
     private fun cancelNotification(key: String?) {

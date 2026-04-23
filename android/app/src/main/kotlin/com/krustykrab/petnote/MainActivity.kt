@@ -30,6 +30,13 @@ class MainActivity : FlutterFragmentActivity() {
                 "petnote/android_liquid_glass_dock",
                 AndroidLiquidGlassDockFactory(flutterEngine.dartExecutor.binaryMessenger),
             )
+        flutterEngine
+            .platformViewsController
+            .registry
+            .registerViewFactory(
+                "petnote/android_liquid_glass_toggle",
+                AndroidLiquidGlassToggleFactory(flutterEngine.dartExecutor.binaryMessenger),
+            )
         notificationBridge = PetNoteNotificationBridge(
             activity = this,
             messenger = flutterEngine.dartExecutor.binaryMessenger,

@@ -202,6 +202,17 @@ class NotificationCoordinator extends ChangeNotifier {
     return _adapter.consumeForegroundTap();
   }
 
+  Future<void> showUpdateNotification({
+    required String versionLabel,
+    required Uri releaseUrl,
+  }) {
+    return _adapter.showUpdateNotification(
+      title: '宠记App新版$versionLabel已发布',
+      body: '点击查看更新内容',
+      releaseUrl: releaseUrl,
+    );
+  }
+
   Future<NotificationSettingsOpenResult> openNotificationSettings() {
     appLogController?.info(
       category: AppLogCategory.notifications,
@@ -449,7 +460,8 @@ class NotificationCoordinator extends ChangeNotifier {
 
   Future<SharedPreferences?> _loadPreferences() async {
     try {
-      return await SharedPreferences.getInstance().timeout(_preferencesLoadTimeout);
+      return await SharedPreferences.getInstance()
+          .timeout(_preferencesLoadTimeout);
     } on TimeoutException catch (error) {
       appLogController?.warning(
         category: AppLogCategory.notifications,

@@ -1378,6 +1378,8 @@ final class PetNoteNotificationPlugin: NSObject, FlutterPlugin, UNUserNotificati
       requestPermission(result: result)
     case "scheduleLocalNotification":
       scheduleLocalNotification(arguments: call.arguments as? [String: Any], result: result)
+    case "showUpdateNotification":
+      showUpdateNotification(arguments: call.arguments as? [String: Any], result: result)
     case "cancelNotification":
       cancelNotification(key: call.arguments as? String)
       result(nil)
@@ -1478,6 +1480,36 @@ final class PetNoteNotificationPlugin: NSObject, FlutterPlugin, UNUserNotificati
     }
   }
 
+  private func showUpdateNotification(arguments: [String: Any]?, result: @escaping FlutterResult) {
+    guard
+      let arguments,
+      let title = arguments["title"] as? String,
+      let releaseUrl = arguments["releaseUrl"] as? String
+    else {
+      result(nil)
+      return
+    }
+
+    let content = UNMutableNotificationContent()
+    content.title = title
+    content.body = arguments["body"] as? String ?? ""
+    content.sound = .default
+    content.userInfo = ["releaseUrl": releaseUrl]
+
+    let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+    let request = UNNotificationRequest(
+      identifier: "update-release-\(releaseUrl.hashValue)",
+      content: content,
+      trigger: trigger
+    )
+
+    UNUserNotificationCenter.current().add(request) { error in
+      DispatchQueue.main.async {
+        result(error == nil ? nil : FlutterError(code: "show_update_failed", message: error?.localizedDescription, details: nil))
+      }
+    }
+  }
+
   private func cancelNotification(key: String?) {
     guard let key else {
       return
@@ -1555,6 +1587,14 @@ final class PetNoteNotificationPlugin: NSObject, FlutterPlugin, UNUserNotificati
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
+    if let releaseUrl = response.notification.request.content.userInfo["releaseUrl"] as? String,
+       let url = URL(string: releaseUrl) {
+      UIApplication.shared.open(url, options: [:]) { _ in
+        completionHandler()
+      }
+      return
+    }
+
     let payload = intentMap(
       userInfo: response.notification.request.content.userInfo,
       fromForeground: UIApplication.shared.applicationState == .active
