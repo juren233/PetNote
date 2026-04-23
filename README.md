@@ -523,6 +523,15 @@ open -a "DevEco Studio" .
 - 应该对照 upstream 的 hvigor 插件变更，再同步更新 [tooling/ohos-hvigor-plugin](./tooling/ohos-hvigor-plugin)。
 - 提交前确认 [`.flutter_ohos_sdk_gitcode`](./.flutter_ohos_sdk_gitcode) 没有本地脏改动。
 
+Harmony / ArkTS 运行时问题警醒：
+
+- 如果安装后启动闪退，且栈落在 `ohos/oh_modules` 下的 `@ohos/flutter_ohos/src/main/ets/view/FlutterView.ets`，不要先把问题归因到新业务插件或用户环境。先按栈行号读取实际生成文件上下文，再回查负责改写该文件的仓库自管逻辑，通常应优先检查 [tooling/ohos-hvigor-plugin](./tooling/ohos-hvigor-plugin)。
+- `ohos/oh_modules` 和 `ohos/entry/build` 都是本地生成物，不要直接把修复写进生成物后结束。正确做法是修改仓库内自管补丁或源码入口，重新跑 Harmony 构建，再反查生成物确认补丁确实进入实际打包链路。
+- ArkTS / Harmony 原生对象不能按普通 TypeScript 动态对象随意整体替换。处理 `window.AvoidArea`、`window.Rect` 等系统对象时，先显式克隆成稳定结构；如果只是清零 `bottomRect`，优先逐字段更新 `left`、`top`、`width`、`height`，不要把 `bottomRect` 整体赋成对象字面量，否则可能触发 `Obj is not a Valid object` 一类运行时崩溃。
+- ArkTS 语法比 TypeScript 更严格。写 `.ets` 时不要使用 `in` 操作符、动态对象布局、隐式 `any` 思路或运行时追加字段；需要跨 Flutter MethodChannel 返回结构化数据时，优先使用明确的 class、interface 或受支持的 Map / Record 结构，并用 Harmony 构建验证。
+- 新增 Harmony 原生插件文件时，必须同时确认注册文件和文件跟踪状态。尤其是 [ohos/entry/src/main/ets/plugins](./ohos/entry/src/main/ets/plugins) 下新增文件可能被忽略规则命中，本地构建能找到文件不代表仓库会提交它；提交前要用 `git status --untracked-files=all` 和 `git check-ignore -v <file>` 确认，不要留下“注册引用已提交、插件实现没提交”的断链状态。
+- 这类问题的最低闭环验证不是“能编译就算完”。至少要跑一次 [scripts/flutter-ohos.ps1](./scripts/flutter-ohos.ps1) 对应构建，确认 HAP 产出；如果修的是 hvigor 对 FlutterView 的补丁，还要反查 `ohos/oh_modules` 中实际生成的 `FlutterView.ets`，确认危险写法已经消失。
+
 ## 提交规范
 
 建议提交：
@@ -558,6 +567,10 @@ open -a "DevEco Studio" .
 - 如果 [`.flutter_ohos_sdk_gitcode`](./.flutter_ohos_sdk_gitcode) 在主仓库里显示为 `dirty`，先清掉子模块内部的本地改动再提主仓库。
 - 根目录 [pubspec.lock](./pubspec.lock) 提交前应保持“官方 Flutter 默认状态”。
 - 如果需要改 DevEco 直跑逻辑，请优先改 [tooling/ohos-hvigor-plugin](./tooling/ohos-hvigor-plugin)，不要去改子模块里的 upstream hvigor 插件源码。
+- 如果 Harmony 运行时错误栈落在 `@ohos/flutter_ohos/.../FlutterView.ets`、`MethodChannel`、`StandardMessageCodec` 等 SDK / 桥接层，不要先入为主地怀疑业务插件本身；先检查 [tooling/ohos-hvigor-plugin](./tooling/ohos-hvigor-plugin) 对 upstream FlutterView 的补丁是否仍然成立，再决定是否要改业务代码。
+- ArkTS 不是完整 TypeScript。写 Harmony 原生插件时，不要使用 `in`、`for..in`、依赖动态对象结构的写法，也不要假设 TS 风格对象探测在 ArkTS 下仍然可用；优先用显式类型、`typeof`、`instanceof` 和固定字段结构。
+- Harmony / ArkUI / 系统 API 返回的对象，尤其是 `window.AvoidArea`、`window.Rect` 这类原生对象，不要把嵌套字段整体替换成对象字面量；要么先克隆成普通对象再使用，要么只更新标量字段。把原生对象的子对象整体改写成字面量，可能在运行时触发 `Obj is not a Valid object` 这类崩溃。
+- 新增 Harmony 原生插件实现文件前，先检查它是否会被仓库忽略规则拦住。当前 `ohos/entry/src/main/ets/plugins/*` 可能出现“本地文件存在、构建能过、但 Git 默认不跟踪”的情况；新增插件时必须同时确认 [ohos/entry/src/main/ets/plugins/ProjectPluginRegistrant.ets](./ohos/entry/src/main/ets/plugins/ProjectPluginRegistrant.ets) 和对应实现文件都已经进入版本控制。
 - 如果确实需要共享 Harmony 签名辅助脚本，不要放在 `ohos/sign/` 下，应放到 [scripts](./scripts) 或其他受控源码目录，并在 README 中说明用途和验证方式。
 - 如果 diff 里出现 [ohos/build-profile.json5](./ohos/build-profile.json5)，先肉眼检查是否只改了 `storePassword` / `keyPassword` 或签名文件路径；这类改动默认不该提交，除非你正在做一次经过验证的共享签名基线升级。
 - 不要把“本机能在 DevEco 里点运行”当成 [ohos/build-profile.json5](./ohos/build-profile.json5) 可提交的依据；必须以脚本构建通过为准，再决定是否允许进入评审。
@@ -593,6 +606,8 @@ open -a "DevEco Studio" .
   因为 hvigor 插件会在构建前自动备份共享状态、切换到 OHOS Flutter、必要时刷新 `package_config`，构建后再恢复。
 - “为什么 DevEco 运行前有时仍然建议先跑一次 Harmony 脚本？”
   因为脚本会顺手完成子模块初始化、本机 `ohos/local.properties` 校正、签名修复和 hvigor 补丁兜底，适合首次拉仓库或本地环境刚变化之后使用。
+- “为什么我只加了一个 Harmony 原生插件，结果先是 ArkTS 编译报错、再是安装后启动闪退？”
+  因为这类问题常常不是单点 bug，而是三层约束一起踩中：一是 ArkTS 对 TypeScript 动态语法支持更严格，像 `in` 这类写法会直接编译失败；二是 Harmony / ArkUI 的原生对象不能随意用对象字面量整体替换嵌套字段，否则可能在 `FlutterView.ets` 这类桥接层触发 `Obj is not a Valid object`；三是新增原生插件文件如果被 Git 忽略，本地虽能编过，协作者和 CI 却可能拿不到实现文件。排查时应按“ArkTS 语法兼容性 → FlutterView / hvigor 补丁链路 → Git 跟踪状态”这个顺序逐层确认。
 - “为什么 `GeneratedPluginRegistrant.ets` 偶发报 `Cannot find module 'url_launcher_harmonyos'`？”
   这通常是 DevEco / hvigor daemon 或 ArkTS / OHPM 增量缓存还在使用旧依赖图。先在 [ohos](./ohos) 下执行 `./hvigorw.bat --stop-daemon` 后重试；如果仍失败，再删除本地生成的 `ohos/.hvigor`、`ohos/entry/build`、`ohos/oh_modules` 后重新执行 `./hvigorw.bat assembleHap --stacktrace`。这些目录都是本地生成物，不要提交。
 - “为什么我只改了 `ohos/build-profile.json5` 里的密文，自己机器能跑，别人却在 `SignHap` 报 `Signature material verification failed`？”

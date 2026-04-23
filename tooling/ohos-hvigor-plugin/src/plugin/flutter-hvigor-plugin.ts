@@ -455,11 +455,11 @@ function patchFlutterOhosFlutterViewAvoidAreaHandling(
 
   content = content.replace(
     "      case window.AvoidAreaType.TYPE_KEYBOARD:\n        if (this.getKeyboardHeight() > 0) {\n          this.keyboardAvoidArea = data.area;\n        } else {\n          this.keyboardAvoidArea.bottomRect = { left: 0, top: 0, width: 0, height: 0 };\n        }\n        break;\n",
-    "      case window.AvoidAreaType.TYPE_KEYBOARD:\n        if (this.getKeyboardHeight() > 0) {\n          this.keyboardAvoidArea = this.cloneAvoidArea(data.area);\n        } else {\n          this.keyboardAvoidArea.bottomRect = { left: 0, top: 0, width: 0, height: 0 };\n        }\n        break;\n",
+    "      case window.AvoidAreaType.TYPE_KEYBOARD:\n        if (this.getKeyboardHeight() > 0) {\n          this.keyboardAvoidArea = this.cloneAvoidArea(data.area);\n        } else if (this.keyboardAvoidArea) {\n          this.keyboardAvoidArea.bottomRect.left = 0;\n          this.keyboardAvoidArea.bottomRect.top = 0;\n          this.keyboardAvoidArea.bottomRect.width = 0;\n          this.keyboardAvoidArea.bottomRect.height = 0;\n        }\n        break;\n",
   )
   content = content.replace(
     "      case window.AvoidAreaType.TYPE_KEYBOARD:\n        this.keyboardAvoidArea = data.area;\n        this.keyboardHeight = data.area?.bottomRect?.height ?? 0;\n        break;\n",
-    "      case window.AvoidAreaType.TYPE_KEYBOARD:\n        if (this.getKeyboardHeight() > 0) {\n          this.keyboardAvoidArea = this.cloneAvoidArea(data.area);\n        } else {\n          this.keyboardAvoidArea.bottomRect = { left: 0, top: 0, width: 0, height: 0 };\n        }\n        break;\n",
+    "      case window.AvoidAreaType.TYPE_KEYBOARD:\n        if (this.getKeyboardHeight() > 0) {\n          this.keyboardAvoidArea = this.cloneAvoidArea(data.area);\n        } else if (this.keyboardAvoidArea) {\n          this.keyboardAvoidArea.bottomRect.left = 0;\n          this.keyboardAvoidArea.bottomRect.top = 0;\n          this.keyboardAvoidArea.bottomRect.width = 0;\n          this.keyboardAvoidArea.bottomRect.height = 0;\n        }\n        break;\n",
   )
 
   content = content.replace(

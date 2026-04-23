@@ -134,6 +134,11 @@
 - 任何同时包含“本地立即可得信息”和“远端异步检查”的场景，必须优先保证本地信息首帧直接显示；远端检查只能作为异步补充，不得阻塞、覆盖或串联本地信息的即时展示。
 - 任何版本信息相关改动，必须先分别确认 `version`、`buildNumber`、内部比较口径与用户可见展示口径的职责边界，禁止把内部判断字段直接当成用户展示字段使用。
 - 任何一次改动只要同时触及数据来源、比较逻辑、展示文案三层，就必须先逐项写清楚“哪一层允许变、哪一层禁止变、哪一层需要确认后才能变”，确认边界后再动手修改代码。
+- 任何 Harmony / ArkTS 原生插件改动，必须先按 ArkTS 而不是 TypeScript 判断语法和类型可行性。禁止使用 `in`、`for..in`、动态对象布局、运行时追加字段、隐式 `any` 思路或未验证的对象探测写法；跨 MethodChannel 返回复杂结构时，必须使用明确字段结构，并用 Harmony 构建验证。
+- 任何安装后启动闪退且栈落在 `@ohos/flutter_ohos`、`FlutterView.ets`、`MethodChannel`、`StandardMessageCodec` 等桥接层的位置时，禁止直接归因到新业务插件或用户环境。必须先读取生成物中的实际栈行号上下文，再回查 [tooling/ohos-hvigor-plugin](./tooling/ohos-hvigor-plugin)、[ohos/hvigorfile.ts](./ohos/hvigorfile.ts)、[ohos/hvigorconfig.ts](./ohos/hvigorconfig.ts) 等仓库自管补丁链路。
+- 任何涉及 Harmony / ArkUI 系统对象的改动，都必须区分“普通 ArkTS 对象”和“系统原生对象”。对 `window.AvoidArea`、`window.Rect` 等对象，不得随意把嵌套字段整体替换成对象字面量；需要清零或调整时优先逐字段更新标量值，或先克隆成稳定普通结构后再使用，避免触发 `Obj is not a Valid object` 一类运行时崩溃。
+- 任何新增 Harmony 原生插件实现文件时，不能只看本地构建是否通过。必须同时确认注册文件和实现文件都能进入版本控制，尤其要检查 [ohos/entry/src/main/ets/plugins](./ohos/entry/src/main/ets/plugins) 下新增文件是否被 `.gitignore` 命中，避免出现“注册引用已提交、插件实现未提交”的断链。
+- 任何修复 `ohos/oh_modules`、`ohos/entry/build` 等生成物里暴露的问题时，不得直接修改生成物后汇报完成。必须把修复落到仓库受控源码、脚本或自管补丁中，重新跑 README 约定的 Harmony 构建，并反查生成物确认危险写法已经消失。
 
 ## 10. 推荐工作流
 
