@@ -38,6 +38,9 @@ import UserNotifications
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IosNativeOverviewRangeButtonPlugin") {
       IosNativeOverviewRangeButtonPlugin.register(with: registrar)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IosNativeUpdateReminderSwitchPlugin") {
+      IosNativeUpdateReminderSwitchPlugin.register(with: registrar)
+    }
     if #available(iOS 14.0, *),
       let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PetNoteNativePetPhotoPickerPlugin")
     {
@@ -992,6 +995,103 @@ final class IosNativeOverviewRangeButtonPlatformView: NSObject, FlutterPlatformV
 
   @objc private func handlePress() {
     channel.invokeMethod("pressed", arguments: nil)
+  }
+}
+
+final class IosNativeUpdateReminderSwitchPlugin: NSObject, FlutterPlugin {
+  static func register(with registrar: FlutterPluginRegistrar) {
+    let factory = IosNativeUpdateReminderSwitchViewFactory(messenger: registrar.messenger())
+    registrar.register(factory, withId: "petnote/ios_update_reminder_switch")
+  }
+}
+
+final class IosNativeUpdateReminderSwitchViewFactory: NSObject, FlutterPlatformViewFactory {
+  private let messenger: FlutterBinaryMessenger
+
+  init(messenger: FlutterBinaryMessenger) {
+    self.messenger = messenger
+    super.init()
+  }
+
+  func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
+    FlutterStandardMessageCodec.sharedInstance()
+  }
+
+  func create(
+    withFrame frame: CGRect,
+    viewIdentifier viewId: Int64,
+    arguments args: Any?
+  ) -> FlutterPlatformView {
+    IosNativeUpdateReminderSwitchPlatformView(
+      frame: frame,
+      viewId: viewId,
+      args: args as? [String: Any],
+      messenger: messenger
+    )
+  }
+}
+
+final class IosNativeUpdateReminderSwitchPlatformView: NSObject, FlutterPlatformView {
+  private let containerView = UIView()
+  private let updateSwitch = UISwitch()
+  private let channel: FlutterMethodChannel
+
+  init(
+    frame: CGRect,
+    viewId: Int64,
+    args: [String: Any]?,
+    messenger: FlutterBinaryMessenger
+  ) {
+    channel = FlutterMethodChannel(
+      name: "petnote/ios_update_reminder_switch_\(viewId)",
+      binaryMessenger: messenger
+    )
+    super.init()
+    configureSwitch()
+    configureChannel()
+    updateState(with: args)
+  }
+
+  func view() -> UIView {
+    containerView
+  }
+
+  private func configureSwitch() {
+    containerView.backgroundColor = .clear
+    updateSwitch.translatesAutoresizingMaskIntoConstraints = false
+    updateSwitch.addTarget(self, action: #selector(handleValueChanged), for: .valueChanged)
+    containerView.addSubview(updateSwitch)
+    NSLayoutConstraint.activate([
+      updateSwitch.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+      updateSwitch.centerYAnchor.constraint(equalTo: containerView.centerYAnchor)
+    ])
+  }
+
+  private func configureChannel() {
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(nil)
+        return
+      }
+      switch call.method {
+      case "updateState":
+        self.updateState(with: call.arguments as? [String: Any])
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  private func updateState(with args: [String: Any]?) {
+    let value = (args?["value"] as? Bool) ?? false
+    if updateSwitch.isOn != value {
+      updateSwitch.setOn(value, animated: false)
+    }
+  }
+
+  @objc private func handleValueChanged() {
+    channel.invokeMethod("changed", arguments: updateSwitch.isOn)
   }
 }
 

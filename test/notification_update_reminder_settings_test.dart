@@ -53,6 +53,11 @@ void main() {
       find.byKey(const ValueKey('notification_update_reminder_toggle')),
       findsOneWidget,
     );
+    final platformView = tester.widget<UiKitView>(find.byType(UiKitView));
+    expect(platformView.viewType, 'petnote/ios_update_reminder_switch');
+    final creationParams =
+        platformView.creationParams! as Map<Object?, Object?>;
+    expect(creationParams['value'], isTrue);
   });
 
   testWidgets('Harmony 通知设置页不显示更新提醒开关', (tester) async {

@@ -297,6 +297,7 @@ base64 < "$HOME/.petnote-signing/pet-release.jks" | tr -d '\n'
 
 GitHub Actions 的发布配置由根目录 [release.yml](./release.yml) 控制：
 
+- `enabled=false` 且 `build_if_not_enabled=true` 时只构建 APK / IPA 并上传 Actions artifacts，不创建 GitHub Release
 - `android.enabled=true` 时会按 `android.artifacts` 声明的 ABI 构建 Android APK
 - `ios.enabled=true` 且 `ios.artifacts` 包含 `unsigned-ipa` 时，会在 macOS 26 runner 上执行 `flutter build ios --release --no-codesign` 并打包未签名 IPA
 - iOS 图标使用 Xcode Icon Composer 的 `PetNote.icon`，GitHub Actions 也必须使用支持该格式的 Xcode 26+ 环境，不能为了 CI 兼容性改回传统 `AppIcon.appiconset`

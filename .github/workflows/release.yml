@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       enabled: ${{ steps.finalize.outputs.enabled }}
+      build_if_not_enabled: ${{ steps.finalize.outputs.build_if_not_enabled }}
       branch_name: ${{ steps.parse.outputs.branch_name }}
       publish_mode: ${{ steps.parse.outputs.publish_mode }}
       should_build: ${{ steps.finalize.outputs.should_build }}
@@ -42,6 +43,7 @@ jobs:
             raise SystemExit("Missing release.yml at repository root.")
 
           enabled = False
+          build_if_not_enabled = False
           tag = ""
           android_section_found = False
           android_enabled = None
@@ -73,6 +75,8 @@ jobs:
               in_artifacts = False
               if stripped.startswith("enabled:"):
                 enabled = stripped.split(":", 1)[1].strip().lower() == "true"
+              elif stripped.startswith("build_if_not_enabled:"):
+                build_if_not_enabled = stripped.split(":", 1)[1].strip().lower() == "true"
               elif stripped.startswith("tag:"):
                 value = stripped.split(":", 1)[1].strip()
                 if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
@@ -142,13 +146,16 @@ jobs:
             "x86_64": "x64",
           }
 
-          if enabled:
+          should_build = (enabled or build_if_not_enabled) and (android_enabled or ios_enabled)
+          should_publish_release = enabled and should_build and publish_mode in {"release", "pre-release"}
+
+          if enabled or build_if_not_enabled:
             if not android_enabled and not ios_enabled:
-              raise SystemExit("Release automation is enabled, but neither android.enabled nor ios.enabled is true.")
+              raise SystemExit("Release build automation is enabled, but neither android.enabled nor ios.enabled is true.")
 
             if android_enabled:
               if not abis:
-                raise SystemExit("Android release automation is enabled, but no Android artifacts are configured.")
+                raise SystemExit("Android release build automation is enabled, but no Android artifacts are configured.")
 
               invalid_abis = [abi for abi in abis if abi not in abi_map]
               if invalid_abis:
@@ -156,9 +163,9 @@ jobs:
 
             if ios_enabled:
               if not ios_section_found:
-                raise SystemExit("iOS release automation is enabled, but release.yml does not contain an ios section.")
+                raise SystemExit("iOS release build automation is enabled, but release.yml does not contain an ios section.")
               if not ios_artifacts:
-                raise SystemExit("iOS release automation is enabled, but no iOS artifacts are configured.")
+                raise SystemExit("iOS release build automation is enabled, but no iOS artifacts are configured.")
               invalid_ios_artifacts = [artifact for artifact in ios_artifacts if artifact != "unsigned-ipa"]
               if invalid_ios_artifacts:
                 raise SystemExit(f"Unsupported iOS artifact values: {', '.join(invalid_ios_artifacts)}")
@@ -167,9 +174,6 @@ jobs:
               abis = []
             if not abis:
               abis = []
-
-          should_build = enabled and (android_enabled or ios_enabled)
-          should_publish_release = should_build and publish_mode in {"release", "pre-release"}
 
           if should_publish_release:
             if not tag:
@@ -184,6 +188,7 @@ jobs:
 
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
             handle.write(f"enabled={'true' if enabled else 'false'}\n")
+            handle.write(f"build_if_not_enabled={'true' if build_if_not_enabled else 'false'}\n")
             handle.write(f"branch_name={branch_name}\n")
             handle.write(f"publish_mode={publish_mode}\n")
             handle.write(f"tag={tag}\n")
@@ -242,6 +247,7 @@ jobs:
         shell: bash
         run: |
           enabled="${{ steps.parse.outputs.enabled }}"
+          build_if_not_enabled="${{ steps.parse.outputs.build_if_not_enabled }}"
           should_build="${{ steps.parse.outputs.should_build }}"
           should_publish_release="${{ steps.parse.outputs.should_publish_release }}"
           release_exists="${{ steps.duplicate.outputs.exists }}"
@@ -252,6 +258,7 @@ jobs:
           fi
 
           echo "enabled=${enabled}" >> "${GITHUB_OUTPUT}"
+          echo "build_if_not_enabled=${build_if_not_enabled}" >> "${GITHUB_OUTPUT}"
           echo "should_build=${should_build}" >> "${GITHUB_OUTPUT}"
           echo "should_publish_release=${should_publish_release}" >> "${GITHUB_OUTPUT}"
 
@@ -469,7 +476,7 @@ jobs:
           path: downloaded-artifacts
 
       - name: Build Initial Release Notes
-        if: needs.resolve-release-plan.outputs.publish_mode == 'release' || needs.resolve-release-plan.outputs.publish_mode == 'pre-release'
+        if: needs.resolve-release-plan.outputs.should_publish_release == 'true'
         shell: bash
         run: |
           python <<'PY'
@@ -636,7 +643,7 @@ jobs:
             });
 
       - name: Compute Grouped Artifact Name
-        if: needs.resolve-release-plan.outputs.publish_mode == 'artifacts-only'
+        if: needs.resolve-release-plan.outputs.should_publish_release != 'true'
         id: artifact_name
         shell: bash
         run: |
@@ -647,7 +654,7 @@ jobs:
           echo "name=release-artifacts-${safe_branch}-${GITHUB_SHA::7}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload Grouped Workflow Artifact
-        if: needs.resolve-release-plan.outputs.publish_mode == 'artifacts-only'
+        if: needs.resolve-release-plan.outputs.should_publish_release != 'true'
         uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.artifact_name.outputs.name }}

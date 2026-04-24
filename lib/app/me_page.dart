@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +15,7 @@ import 'package:petnote/app/app_theme.dart';
 import 'package:petnote/app/app_version_info.dart';
 import 'package:petnote/app/common_widgets.dart';
 import 'package:petnote/app/data_storage_page.dart';
+import 'package:petnote/app/ios_native_update_reminder_switch.dart';
 import 'package:petnote/app/layout_metrics.dart';
 import 'package:petnote/app/navigation_palette.dart';
 import 'package:petnote/data/data_storage_coordinator.dart';
@@ -1014,7 +1014,7 @@ class _UpdateReminderSettingsRow extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = context.petNoteTokens;
     final toggle = platformName == TargetPlatform.iOS.name
-        ? CupertinoSwitch(
+        ? IosNativeUpdateReminderSwitchHost(
             key: const ValueKey('notification_update_reminder_toggle'),
             value: enabled,
             onChanged: onChanged,
